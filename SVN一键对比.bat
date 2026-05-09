@@ -1,34 +1,34 @@
 @echo off
 setlocal enabledelayedexpansion
-title SVN Ò»¼ü¶Ô±È¹¤¾ß
+title SVN Ò»ï¿½ï¿½ï¿½Ô±È¹ï¿½ï¿½ï¿½
 
-:: ÓÃ PowerShell »ñÈ¡ÕýÈ·¸ñÊ½µÄ½ñÌìÈÕÆÚ
+:: ï¿½ï¿½ PowerShell ï¿½ï¿½È¡ï¿½ï¿½È·ï¿½ï¿½Ê½ï¿½Ä½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 for /f "delims=" %%d in ('powershell -command "Get-Date -Format 'yyyy-MM-dd'"') do set TODAY=%%d
 
 set WORKSPACE=C:\Users\admin\.qclaw\workspace
 set DEFAULT_OUTPUT=%WORKSPACE%\svn_compare_result.xlsx
 
 echo ============================================
-echo       SVN Ò»¼ü¶Ô±È¹¤¾ß
+echo       SVN Ò»ï¿½ï¿½ï¿½Ô±È¹ï¿½ï¿½ï¿½
 echo ============================================
-echo ËµÃ÷£º²éÑ¯ SVN Ìá½»¼ÇÂ¼ - ²éÕÒÉÏÒ»°æ±¾ - ¶Ô±È²îÒì
-echo Êä³ö¸ñÊ½£ºSheet, ID, SC, SubstituteId, µ±Ç°°æ±¾, ÉÏÒ»°æ±¾, ²Ù×÷ÀàÐÍ
+echo Ëµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¯ SVN ï¿½á½»ï¿½ï¿½Â¼ - ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½æ±¾ - ï¿½Ô±È²ï¿½ï¿½ï¿½
+echo ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ï¿½ï¿½Sheet, ID, SC, SubstituteId, ï¿½ï¿½Ç°ï¿½æ±¾, ï¿½ï¿½Ò»ï¿½æ±¾, ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 echo.
 
-set /p SVN_URL="SVN ²Ö¿âÂ·¾¶»òURL (±ØÌî): "
+set /p SVN_URL="SVN ï¿½Ö¿ï¿½Â·ï¿½ï¿½ï¿½ï¿½URL (ï¿½ï¿½ï¿½ï¿½): "
 if "%SVN_URL%"=="" (
-    echo [´íÎó] ±ØÐëÌá¹© SVN ²Ö¿âÂ·¾¶»òURL£¡
+    echo [ï¿½ï¿½ï¿½ï¿½] ï¿½ï¿½ï¿½ï¿½ï¿½á¹© SVN ï¿½Ö¿ï¿½Â·ï¿½ï¿½ï¿½ï¿½URLï¿½ï¿½
     pause
     exit /b 1
 )
 
-set /p START_DATE="ÇëÊäÈë¿ªÊ¼ÈÕÆÚ (¸ñÊ½: YYYY-MM-DD£¬Áô¿ÕÄ¬ÈÏ2024-01-01): "
-set /p END_DATE="ÇëÊäÈë½áÊøÈÕÆÚ (¸ñÊ½: YYYY-MM-DD£¬Áô¿ÕÄ¬ÈÏ½ñÌì): "
-set /p KEYWORDS="ÇëÊäÈë¹Ø¼ü´Ê (¶à¸öÓÃ¿Õ¸ñ·Ö¸ô£¬Áô¿ÕÔòÏÔÊ¾È«²¿): "
-set /p AUTHOR="ÇëÊäÈëÌá½»Õß¹ýÂË (Áô¿ÕÔò²»ÏÞÖÆ): "
-set /p OUTPUT_FILE="Êä³öÎÄ¼þÂ·¾¶ (Áô¿ÕÄ¬ÈÏ %DEFAULT_OUTPUT%): "
-set /p WORKERS="ÏÂÔØ²¢·¢Êý (Áô¿ÕÄ¬ÈÏ 6): "
-set /p PARSE_WORKERS="½âÎö²¢·¢Êý (Áô¿ÕÄ¬ÈÏ 8): "
+set /p START_DATE="ï¿½ï¿½ï¿½ï¿½ï¿½ë¿ªÊ¼ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½Ê½: YYYY-MM-DDï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¬ï¿½ï¿½2024-01-01): "
+set /p END_DATE="ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½Ê½: YYYY-MM-DDï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¬ï¿½Ï½ï¿½ï¿½ï¿½): "
+set /p KEYWORDS="ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø¼ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½Ã¿Õ¸ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¾È«ï¿½ï¿½): "
+set /p AUTHOR="ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½á½»ï¿½ß¹ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½): "
+set /p OUTPUT_FILE="ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½Â·ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½Ä¬ï¿½ï¿½ %DEFAULT_OUTPUT%): "
+set /p WORKERS="ï¿½ï¿½ï¿½Ø²ï¿½ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½Ä¬ï¿½ï¿½ 6): "
+set /p PARSE_WORKERS="ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½Ä¬ï¿½ï¿½ 8): "
 
 if "%START_DATE%"=="" set START_DATE=2024-01-01
 if "%END_DATE%"=="" set END_DATE=%TODAY%
@@ -37,7 +37,7 @@ if "%WORKERS%"=="" set WORKERS=6
 if "%PARSE_WORKERS%"=="" set PARSE_WORKERS=8
 
 echo.
-echo ÕýÔÚÖ´ÐÐ£¬ÇëÉÔºò...
+echo ï¿½ï¿½ï¿½ï¿½Ö´ï¿½Ð£ï¿½ï¿½ï¿½ï¿½Ôºï¿½...
 echo ============================================
 
 set PYTHON=python
@@ -52,22 +52,22 @@ if errorlevel 1 (
     )
 )
 
-REM ¹¹½¨¹Ø¼ü´Ê²ÎÊý
+REM ï¿½ï¿½ï¿½ï¿½ï¿½Ø¼ï¿½ï¿½Ê²ï¿½ï¿½ï¿½
 set KEY_PARAMS=
 if not "%KEYWORDS%"=="" (
     for %%k in (%KEYWORDS%) do set KEY_PARAMS=!KEY_PARAMS! -k %%k
 )
 
-REM ¹¹½¨ÍêÕûÃüÁî
+REM ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 set "CMD=%PYTHON% "%WORKSPACE%\svn_oneclick_compare.py" -u "%SVN_URL%" -s "%START_DATE%" -e "%END_DATE%" %KEY_PARAMS%"
 
 if not "%AUTHOR%"=="" set "CMD=%CMD% --author %AUTHOR%"
 set "CMD=%CMD% -o "%OUTPUT_FILE%" -w %WORKERS% -p %PARSE_WORKERS%"
 
-REM Ö´ÐÐ
+REM Ö´ï¿½ï¿½
 %CMD%
 
 echo.
 echo ============================================
-echo Íê³É£¡°´ÈÎÒâ¼üÍË³ö...
+echo ï¿½ï¿½É£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë³ï¿½...
 pause >nul

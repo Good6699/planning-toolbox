@@ -1,2 +1,2 @@
 @echo off
-powershell -ExecutionPolicy Bypass -File "%~dp0SVN¹¤¾ßÏä.ps1"
+powershell -ExecutionPolicy Bypass -File "%~dp0SVNï¿½ï¿½ï¿½ï¿½ï¿½ï¿½.ps1"

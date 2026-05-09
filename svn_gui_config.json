@@ -1,0 +1,303 @@
+{
+  "svn_urls": [
+    "http://192.168.1.41:8080/svn/D3/branches/20230105_KR/Client",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Data2/道具相关.xlsm",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/tools"
+  ],
+  "workers": "10",
+  "parse_workers": "10",
+  "cmp_file_presets": [
+    "Texts"
+  ],
+  "exclude_dirs": "BinData, GenerateData, Language,config,.ExcelTool2,ExportTxt,Code,Code_Lua,GenerateMsg",
+  "cmp_title_rows": "3",
+  "cmp_id_col": "2",
+  "cmp_output_cols": "",
+  "cmp_file_settings": {
+    "Texts": {
+      "cmp_title_rows": "1",
+      "cmp_id_col": "1",
+      "cmp_global_id_col": "::ID::",
+      "cmp_output_cols": "::ID::,::SC::,SubstituteId"
+    }
+  },
+  "global_cmp_id_col": "::ID::",
+  "cmp_global_id_col": "",
+  "src_dir_history": [
+    "C:\\Users\\admin\\.qclaw\\workspace\\输出\\导出",
+    "C:\\Users\\admin\\.qclaw\\workspace\\输出\\导出\\Assets",
+    "C:/Users/admin/.qclaw/workspace/输出/导出/branches/20230105_KR/Client"
+  ],
+  "tgt_dir_history": [
+    "G:/D3_JP/Client",
+    "G:/D3_KR2/Client",
+    "G:\\D3_KR2\\gameData",
+    "G:\\D3_KR2"
+  ],
+  "workflows": [
+    {
+      "name": "KR2打开文字表",
+      "steps": [
+        {
+          "type": "open_tables",
+          "name": "1",
+          "file_paths": [
+            "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "KR2导出Text",
+      "sub_workflows": [
+        {
+          "name": "导出Text后端",
+          "input_files": [
+            "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
+          ],
+          "tool_path": "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat",
+          "ext_filter": "",
+          "depth_limit": 30,
+          "timeout_min": 30,
+          "monitor_dir": "G:/D3_KR2/gameData"
+        },
+        {
+          "name": "导出Text前端",
+          "input_files": [
+            "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
+          ],
+          "tool_path": "G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
+          "ext_filter": "",
+          "depth_limit": 20,
+          "timeout_min": 30,
+          "monitor_dir": "G:\\D3_KR2\\Client\\Assets\\StreamingAssets"
+        }
+      ],
+      "steps": [
+        {
+          "type": "lock_svn",
+          "name": "3",
+          "target_path": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
+          "lock_msg": "锁定中，请勿修改",
+          "update_dirs": [
+            "G:\\D3_KR2\\gameData",
+            "G:\\D3_KR2\\Client\\Assets\\StreamingAssets"
+          ]
+        },
+        {
+          "type": "export_text",
+          "name": "1",
+          "input_file": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
+          "tools": [
+            "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat",
+            "G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
+          ]
+        },
+        {
+          "type": "upload_svn",
+          "name": "2",
+          "dirs": [
+            "G:\\D3_KR2\\gameData",
+            "G:\\D3_KR2\\Client\\Assets\\StreamingAssets"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "KR2合并翻译",
+      "steps": [
+        {
+          "type": "lock_svn",
+          "name": "2",
+          "target_path": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
+          "lock_msg": "锁定中，请勿修改"
+        },
+        {
+          "type": "merge_translation",
+          "name": "1",
+          "input_file": "C:/Users/admin/.qclaw/workspace/输出/翻译_翻译模版_KR.xlsx",
+          "original_file": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
+          "sheet_name": ""
+        }
+      ]
+    },
+    {
+      "name": "KR2导出错误码",
+      "steps": [
+        {
+          "type": "export_error_code",
+          "name": "1",
+          "root_dir": "G:\\D3_KR2\\gameData",
+          "lang_codes": "ZH_CN,KO_KR"
+        },
+        {
+          "type": "upload_svn",
+          "name": "gameData&StreamingAssets",
+          "dirs": [
+            "G:\\D3_KR2\\gameData",
+            "G:\\D3_KR2\\Client\\Assets\\StreamingAssets"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Asia操作",
+      "steps": [
+        {
+          "type": "merge_table",
+          "name": "Data",
+          "input_paths": [
+            "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\裂隙\\道具相关.xlsm"
+          ],
+          "target_dir": "G:\\D3_Asia\\gameData",
+          "merge_prefixes": [
+            "新增_"
+          ],
+          "title_rows": "3",
+          "id_col": "2"
+        },
+        {
+          "type": "merge_table",
+          "name": "Text",
+          "input_paths": [
+            "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\裂隙\\Text\\Texts.xlsm"
+          ],
+          "target_dir": "G:/D3_Asia/gameData",
+          "merge_prefixes": [
+            "新增_"
+          ],
+          "title_rows": "1"
+        },
+        {
+          "type": "export_text",
+          "name": "Text",
+          "input_file": "G:\\D3_Asia\\gameData\\Text\\Texts.xlsm",
+          "tools": [
+            "G:\\D3_Asia\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
+            "G:\\D3_Asia\\gameData\\Text\\服务器文字表导出_替换文本引用.bat"
+          ]
+        },
+        {
+          "type": "export_error_code",
+          "name": "5",
+          "root_dir": "G:\\D3_Asia\\gameData\\Language",
+          "lang_codes": "TH_TH,ZH_CN,ZH_TW,MS_MY,IN_ID"
+        },
+        {
+          "type": "upload_svn",
+          "name": "gameData&StreamingAssets",
+          "dirs": [
+            "G:\\D3_Asia\\gameData",
+            "G:\\D3_Asia\\Client\\Assets\\StreamingAssets"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "JP导出Text",
+      "steps": [
+        {
+          "type": "lock_svn",
+          "name": "4",
+          "target_path": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
+          "lock_msg": "锁定中，请勿修改",
+          "update_dirs": [
+            "G:\\D3_JP\\gameData",
+            "G:\\D3_JP\\Client\\Assets\\StreamingAssets"
+          ]
+        },
+        {
+          "type": "merge_table",
+          "name": "1",
+          "input_paths": [
+            "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\职业\\Texts.xlsm"
+          ],
+          "target_dir": "G:\\D3_JP\\gameData\\Text",
+          "merge_prefixes": [],
+          "title_rows": "1",
+          "id_col": "1"
+        },
+        {
+          "type": "export_text",
+          "name": "2",
+          "input_file": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
+          "tools": [
+            "G:\\D3_JP\\gameData\\Text\\服务器文字表导出_替换文本引用.bat",
+            "G:\\D3_JP\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
+          ]
+        },
+        {
+          "type": "upload_svn",
+          "name": "3",
+          "dirs": [
+            "G:\\D3_JP\\gameData",
+            "G:\\D3_JP\\Client\\Assets\\StreamingAssets"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "测试",
+      "steps": [
+        {
+          "type": "upload_svn",
+          "name": "gameData&StreamingAssets",
+          "dirs": [
+            "G:\\D3_Asia\\gameData",
+            "G:\\D3_Asia\\Client\\Assets\\StreamingAssets"
+          ]
+        },
+        {
+          "type": "export_error_code",
+          "name": "5",
+          "root_dir": "G:\\D3_Asia\\gameData\\Language",
+          "lang_codes": "TH_TH,ZH_CN,ZH_TW,MS_MY,IN_ID"
+        },
+        {
+          "type": "merge_table",
+          "name": "Text",
+          "input_paths": [
+            "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\裂隙\\Text\\Texts.xlsm"
+          ],
+          "target_dir": "G:/D3_Asia/gameData",
+          "merge_prefixes": [
+            "新增_"
+          ],
+          "title_rows": "1"
+        },
+        {
+          "type": "merge_table",
+          "name": "Data",
+          "input_paths": [
+            "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\裂隙\\道具相关.xlsm"
+          ],
+          "target_dir": "G:\\D3_Asia\\gameData",
+          "merge_prefixes": [
+            "新增_"
+          ],
+          "title_rows": "3",
+          "id_col": "2"
+        }
+      ]
+    }
+  ],
+  "output_dir_export": "C:\\Users\\admin\\.qclaw\\workspace\\输出\\导出",
+  "window_geometry": "992x800+-1063+178",
+  "tr_src_history": [
+    "C:\\Users\\admin\\.qclaw\\workspace\\输出\\翻译模版.xlsx"
+  ],
+  "tr_api_url": "https://api.deepseek.com/v1/chat/completions",
+  "tr_api_key": "sk-16f0f54f19ff4c8daa59ca6325dbaac3",
+  "tr_model": "deepseek-v4-flash",
+  "tr_out_dir": "C:\\Users\\admin\\.qclaw\\workspace\\输出",
+  "tr_prompt": "你是一个游戏翻译专家。请将以下文本从{src_lang}翻译为{tgt_lang}。只返回翻译结果，不要有任何额外内容。\n如果参考文件中有对应条目，请优先使用参考翻译。",
+  "tr_batch_size": 300,
+  "tr_saved_src_lang": "::SC::",
+  "tr_saved_tgt_langs": [
+    "::KR::"
+  ]
+}

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>头像替换工具</title>
+<style>
+body { font-family: sans-serif; padding: 20px; background: #1a1a2e; color: #fff; }
+.container { display: flex; gap: 20px; flex-wrap: wrap; }
+.canvas-wrap { text-align: center; }
+canvas { border: 1px solid #444; background: #000; }
+label { display: block; margin: 5px 0; }
+input[type=range] { width: 150px; }
+button { padding: 8px 16px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; background: #e94560; color: #fff; font-size: 14px; }
+button:hover { background: #c73e54; }
+#controls { margin: 15px 0; padding: 15px; background: #16213e; border-radius: 8px; }
+.section { margin-bottom: 10px; }
+h3 { margin: 5px 0; color: #e94560; }
+</style>
+</head>
+<body>
+<h2>🎭 头像替换工具</h2>
+<div class="container">
+  <div class="canvas-wrap">
+    <h3>图1 - 源头像</h3>
+    <canvas id="c1" width="400" height="400"></canvas>
+  </div>
+  <div class="canvas-wrap">
+    <h3>图2 - 目标图</h3>
+    <canvas id="c2" width="400" height="400"></canvas>
+  </div>
+</div>
+<div class="container" style="margin-top:15px">
+  <div class="canvas-wrap">
+    <h3>预览结果</h3>
+    <canvas id="c3" width="400" height="400"></canvas>
+    <br><br>
+    <button onclick="saveResult()">💾 保存结果</button>
+  </div>
+</div>
+<div id="controls">
+  <div class="section">
+    <h3>📌 图1 - 头像裁剪区域（点击图1设置）</h3>
+    <label>X: <span id="s1x">0</span>px</label><input type="range" id="r1x" min="0" max="400" value="0">
+    <label>Y: <span id="s1y">0</span>px</label><input type="range" id="r1y" min="0" max="400" value="0">
+    <label>半径: <span id="s1r">50</span>px</label><input type="range" id="r1r" min="10" max="200" value="50">
+  </div>
+  <div class="section">
+    <h3>📌 图2 - 头像放置位置（点击图2设置）</h3>
+    <label>X: <span id="s2x">200</span>px</label><input type="range" id="r2x" min="0" max="400" value="200">
+    <label>Y: <span id="s2y">100</span>px</label><input type="range" id="r2y" min="0" max="400" value="100">
+    <label>半径: <span id="s2r">50</span>px</label><input type="range" id="r2r" min="10" max="200" value="50">
+  </div>
+</div>
+<script>
+const c1 = document.getElementById('c1'), ctx1 = c1.getContext('2d');
+const c2 = document.getElementById('c2'), ctx2 = c2.getContext('2d');
+const c3 = document.getElementById('c3'), ctx3 = c3.getContext('2d');
+let img1, img2;
+const vars = {};
+
+function loadImages() {
+  const a1 = new Image(), a2 = new Image();
+  a1.onload = () => { img1 = a1; fitCanvas(c1, a1); draw1(); };
+  a2.onload = () => { img2 = a2; fitCanvas(c2, a2); draw2(); };
+  a1.src = 'file:///E:/桌面/其它/1.png';
+  a2.src = 'file:///E:/桌面/其它/2.png';
+}
+
+function fitCanvas(cv, img) {
+  const s = Math.min(400/img.width, 400/img.height, 1);
+  cv.width = img.width * s;
+  cv.height = img.height * s;
+  cv.dataset.scale = s;
+  const rx = document.getElementById('r1x'), ry = document.getElementById('r1y'), rr = document.getElementById('r1r');
+  const rx2 = document.getElementById('r2x'), ry2 = document.getElementById('r2y'), rr2 = document.getElementById('r2r');
+  [rx,ry,rr,rx2,ry2,rr2].forEach(r => { r.max = Math.max(cv.width, cv.height); });
+}
+
+function draw1() {
+  if(!img1) return;
+  ctx1.clearRect(0,0,c1.width,c1.height);
+  ctx1.drawImage(img1,0,0,c1.width,c1.height);
+  const x=+document.getElementById('r1x').value, y=+document.getElementById('r1y').value, r=+document.getElementById('r1r').value;
+  ctx1.strokeStyle='#e94560'; ctx1.lineWidth=2;
+  ctx1.beginPath(); ctx1.arc(x,y,r,0,Math.PI*2); ctx1.stroke();
+  ctx1.fillStyle='rgba(233,69,96,0.15)';
+  ctx1.beginPath(); ctx1.arc(x,y,r,0,Math.PI*2); ctx1.fill();
+}
+
+function draw2() {
+  if(!img2) return;
+  ctx2.clearRect(0,0,c2.width,c2.height);
+  ctx2.drawImage(img2,0,0,c2.width,c2.height);
+  const x=+document.getElementById('r2x').value, y=+document.getElementById('r2y').value, r=+document.getElementById('r2r').value;
+  ctx2.strokeStyle='#00ff88'; ctx2.lineWidth=2;
+  ctx2.beginPath(); ctx2.arc(x,y,r,0,Math.PI*2); ctx2.stroke();
+  ctx2.fillStyle='rgba(0,255,136,0.15)';
+  ctx2.beginPath(); ctx2.arc(x,y,r,0,Math.PI*2); ctx2.fill();
+}
+
+function updatePreview() {
+  if(!img1||!img2) return;
+  const s = parseFloat(c2.dataset.scale);
+  const sx=+document.getElementById('r1x').value, sy=+document.getElementById('r1y').value, sr=+document.getElementById('r1r').value;
+  const dx=+document.getElementById('r2x').value, dy=+document.getElementById('r2y').value, dr=+document.getElementById('r2r').value;
+  c3.width = c2.width; c3.height = c2.height;
+  ctx3.drawImage(img2,0,0,c3.width,c3.height);
+  ctx3.save();
+  ctx3.beginPath();
+  ctx3.arc(dx, dy, dr, 0, Math.PI*2);
+  ctx3.clip();
+  ctx3.drawImage(c1, sx-sr, sy-sr, sr*2, sr*2, dx-dr, dy-dr, dr*2, dr*2);
+  ctx3.restore();
+  draw1(); draw2();
+}
+
+document.querySelectorAll('#controls input').forEach(inp => {
+  inp.addEventListener('input', () => {
+    document.getElementById('s'+inp.id[1]).textContent = inp.value;
+    updatePreview();
+  });
+});
+
+c1.addEventListener('click', e => {
+  const r = c1.getBoundingClientRect();
+  document.getElementById('r1x').value = e.clientX - r.left;
+  document.getElementById('r1y').value = e.clientY - r.top;
+  document.getElementById('s1x').textContent = document.getElementById('r1x').value;
+  document.getElementById('s1y').textContent = document.getElementById('r1y').value;
+  updatePreview();
+});
+
+c2.addEventListener('click', e => {
+  const r = c2.getBoundingClientRect();
+  document.getElementById('r2x').value = e.clientX - r.left;
+  document.getElementById('r2y').value = e.clientY - r.top;
+  document.getElementById('s2x').textContent = document.getElementById('r2x').value;
+  document.getElementById('s2y').textContent = document.getElementById('r2y').value;
+  updatePreview();
+});
+
+function saveResult() {
+  const link = document.createElement('a');
+  link.download = 'avatar_replace_result.png';
+  link.href = c3.toDataURL('image/png');
+  link.click();
+}
+
+loadImages();
+</script>
+</body>
+</html>

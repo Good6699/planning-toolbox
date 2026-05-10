@@ -40,3 +40,39 @@
 - **修改代码时，不改变原有的逻辑和表现。** 只改用户指定的部分，其他保持原样。不要"顺手优化"或"顺便重构"。
 - **修改代码后，检查关联功能是否有影响。** 修改任何函数、方法或属性时，必须搜索整个项目中所有使用该名称的地方，确保命名一致、调用方式正确。
 - **边界判定问题先确认。** 遇到日期范围、临界值、逻辑可能有歧义的问题时，先与用户确认再修复，不要自行假设。
+- **每次修改文件后必须跑这3步，不跳步**：①改代码 → ②node语法检查 → ③graphify update。2026-05-10因漏跑graphify导致知识图谱落后于代码，教训：复杂重构时注意力集中在逻辑上容易跳过收尾步骤，必须用原子化流程防遗漏。
+- **解决问题前先查网络和Skill**：接到技术问题后，先用WebSearch查网上有没有更好的方案、库、工具，再用Skill工具查看是否有匹配的技能可用，最后综合外部信息+项目现有代码给出方案。不要闭门造车。
+
+## 2026-05-10 自动化答题+学习脚本开发
+
+### 网站
+`https://scit-adult-study.whxunw.com` 四川工业科技学院成人教育管理平台（Vue.js + Element UI）
+
+### 答题脚本 (`自动学习/auto_exam.js`)
+两阶段策略：
+1. **Phase 1**: 遍历"开始作业"/"继续作业" → 空提交 → 全部变为"查看作业"
+2. **Phase 2**: 按固定索引取"查看作业" → 从 HTML 正则提取 `试题答案:<span>X</span>` → 回列表按同索引取"重做" → DOM click radio → 提交
+
+关键经验：
+- **WeakSet 不可用于去重 DOM**：`querySelectorAll` 每次返回新引用，`has()` 永远 false。改用索引计数或 `nthBtn(text, n)`
+- **Element UI radio 需逐一点击**：间隔 150-300ms，不能 forEach 一次性全点
+- **`vm.submit()` 不可靠**：应通过 DOM 按钮 `button.innerText === '提交'` 触发
+- **全对判断**：`!q.answered || answerSelectedIndex===undefined` 任一未答即不算全对
+- **脚本位置**：`自动学习/auto_exam.js`
+
+### 学习脚本 (`自动学习/auto_learn_pip_loop.js`)
+去掉了画中画并行播放，改为纯顺序播放。核心逻辑：
+```
+while (true):
+  todo = getUncompleted()
+  取 todo[0] → 点击 → mute → 等 isComplete
+  防死循环: 连续3轮无进展退出
+  无视频: 主动标记 selectedLesson.isComplete = true
+```
+- 脚本位置：`自动学习/auto_learn_pip_loop.js`
+- 入口：课程列表页 Console 粘贴，点击按钮启动
+
+### 通用教训
+- **不要相信 Vue data/methods**，用 DOM 操作模拟真实用户行为
+- **两阶段比混合循环稳定**：先全部空提交，再统一处理查看→重做
+- **每次修改后必须 graphify update**

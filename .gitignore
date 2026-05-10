@@ -1,0 +1,106 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE / Trae
+.workbuddy/
+.openclaw/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Cache
+__ss_cache/
+__byte_cache/
+__parse_cache/
+.proto_cache/
+graphify-out/
+_env_cache.json
+
+# Graphify generated
+.graphify_*
+graphify-in/
+py_modules/
+
+# Temp / Log
+*.log
+gui_err.txt
+gui_out.txt
+debug.log
+_gfx_err.txt
+vbs_debug.txt
+svn_combo_out.txt
+svn_out_test.txt
+
+# Scratch / temp scripts
+_*.py
+_*.ps1
+_install_log.txt
+_push_result.txt
+test_*.py
+test_env.vbs
+test_*.xlsm
+auto_study.py
+browser_control.py
+setup_checker.py
+browser_page_output.json
+ErrorMessage_Readable.txt
+.app.js
+.explore_log.txt
+.page_html.txt
+.pw_log.txt
+.script_output.txt
+.snapshot_login_error.json
+.tmp_our.bin
+
+# Export / Output
+输出/
+正确文件/
+正确文件_可读对比/
+excel导出数据/
+
+# Backups
+*.bak
+*.bak2
+*.bak3
+backup_toolbox_20260509/
+策划工具箱_分发包.zip
+
+# Generated reports / task docs
+artifact_*.md
+task-*.md
+task-summary*/
+svn-compare-*.md
+svn_*.md
+svn_compare_*.xlsx
+svn_compare_debug.xlsx
+svn_compare_result.xlsx
+svn_compare_test.xlsx
+test_*.xlsx
+test_design_doc.xlsx
+
+# Test files
+test_file/
+test_folder/
+test_parent/
+
+# Sessions
+sessions/
+
+# Memory
+memory/
+
+# Secrets
+*.token
+_git_*
+_check_*
+_create_*

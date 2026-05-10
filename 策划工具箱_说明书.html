@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>策划工具箱 - 用户说明书</title>
+<style>
+  :root {
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --accent: #2c3e50;
+    --primary: #27ae60;
+    --warn: #e67e22;
+    --error: #e74c3c;
+    --text: #333;
+    --text-muted: #666;
+    --border: #dee2e6;
+    --code-bg: #1e1e1e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 0;
+  }
+  .sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0; width: 260px;
+    background: var(--accent); color: #fff; overflow-y: auto; z-index: 100;
+  }
+  .sidebar h2 {
+    font-size: 16px; padding: 20px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.1);
+    letter-spacing: 2px;
+  }
+  .sidebar a {
+    display: block; padding: 10px 16px; color: rgba(255,255,255,0.8);
+    text-decoration: none; font-size: 14px; transition: all 0.2s;
+    border-left: 3px solid transparent;
+  }
+  .sidebar a:hover, .sidebar a.active {
+    background: rgba(255,255,255,0.1); color: #fff;
+    border-left-color: var(--primary);
+  }
+  .sidebar .sub { padding-left: 28px; font-size: 13px; }
+  .content {
+    margin-left: 260px; padding: 40px 48px; max-width: 900px;
+  }
+  h1 {
+    font-size: 28px; margin-bottom: 6px; color: var(--accent);
+  }
+  .subtitle {
+    font-size: 14px; color: var(--text-muted); margin-bottom: 32px;
+    border-bottom: 2px solid var(--border); padding-bottom: 16px;
+  }
+  h2 {
+    font-size: 22px; margin: 40px 0 16px; color: var(--accent);
+    border-left: 4px solid var(--primary); padding-left: 14px;
+  }
+  h3 {
+    font-size: 17px; margin: 28px 0 10px; color: #34495e;
+  }
+  h4 { font-size: 15px; margin: 20px 0 8px; color: #555; }
+  p { margin: 8px 0 12px; }
+  ul, ol { margin: 8px 0 12px 22px; }
+  li { margin: 4px 0; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px 24px; margin: 16px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .tag {
+    display: inline-block; padding: 2px 10px; border-radius: 4px;
+    font-size: 12px; font-weight: 600; margin-right: 6px;
+  }
+  .tag-green { background: #d4edda; color: #155724; }
+  .tag-blue { background: #d1ecf1; color: #0c5460; }
+  .tag-orange { background: #fff3cd; color: #856404; }
+  .tag-red { background: #f8d7da; color: #721c24; }
+  code, pre {
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 13px;
+  }
+  code {
+    background: #e9ecef; padding: 2px 6px; border-radius: 3px;
+    color: #c7254e;
+  }
+  pre {
+    background: var(--code-bg); color: #d4d4d4; padding: 14px 18px;
+    border-radius: 6px; overflow-x: auto; margin: 12px 0;
+    line-height: 1.5;
+  }
+  pre .kw { color: #569cd6; }
+  pre .str { color: #ce9178; }
+  pre .cm { color: #6a9955; }
+  pre .ok { color: #4ec9b0; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 12px 0;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid var(--border); padding: 10px 14px; text-align: left;
+  }
+  th {
+    background: var(--accent); color: #fff; font-weight: 600;
+  }
+  tr:nth-child(even) { background: #f2f2f2; }
+  .flow {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    margin: 16px 0;
+  }
+  .flow-step {
+    background: var(--accent); color: #fff; padding: 8px 16px;
+    border-radius: 20px; font-size: 13px; font-weight: 600;
+  }
+  .flow-arrow { color: var(--primary); font-size: 20px; font-weight: bold; }
+  .tip {
+    background: #e8f5e9; border-left: 4px solid var(--primary);
+    padding: 12px 16px; border-radius: 4px; margin: 12px 0;
+  }
+  .warn {
+    background: #fff8e1; border-left: 4px solid var(--warn);
+    padding: 12px 16px; border-radius: 4px; margin: 12px 0;
+  }
+  .err {
+    background: #ffebee; border-left: 4px solid var(--error);
+    padding: 12px 16px; border-radius: 4px; margin: 12px 0;
+  }
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .content { margin-left: 0; padding: 24px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <h2>目录</h2>
+  <a href="#intro">1. 概述</a>
+  <a href="#startup" class="sub">1.1 启动方式</a>
+  <a href="#env-check" class="sub">1.2 环境检测</a>
+  <a href="#files" class="sub">1.3 文件结构</a>
+  <a href="#quickstart">2. 快速上手指南</a>
+  <a href="#svn-tab">3. SVN记录页签</a>
+  <a href="#svn-url" class="sub">3.1 SVN URL</a>
+  <a href="#svn-mode" class="sub">3.2 三种模式</a>
+  <a href="#svn-date" class="sub">3.3 日期范围</a>
+  <a href="#svn-filter" class="sub">3.4 过滤条件</a>
+  <a href="#svn-advanced" class="sub">3.5 高级选项</a>
+  <a href="#upload-tab">4. 上传SVN页签</a>
+  <a href="#workflow-tab">5. SVN工作流页签</a>
+  <a href="#wf-step-types" class="sub">5.1 步骤类型</a>
+  <a href="#translate-tab">6. 翻译页签</a>
+  <a href="#translate-api" class="sub">6.1 API配置</a>
+  <a href="#translate-lang" class="sub">6.2 语言列</a>
+  <a href="#requirements">7. 运行环境要求</a>
+  <a href="#troubleshoot">8. 常见问题</a>
+</div>
+
+<div class="content">
+
+<h1>策划工具箱 用户说明书</h1>
+<div class="subtitle">版本 1.0 &mdash; SVN 一键对比 / 上传 / 工作流 / 翻译</div>
+
+<!-- ============================================================ -->
+<h2 id="intro">1. 概述</h2>
+
+<p>策划工具箱是针对游戏策划工作流开发的一站式工具集合，集成以下核心功能：</p>
+
+<div class="card">
+  <ul>
+    <li><strong>SVN 记录</strong> &mdash; 查询 SVN 提交记录，对比 Excel 表格不同版本间的差异，导出变更文件，生成修改总结</li>
+    <li><strong>上传 SVN</strong> &mdash; 可视化选择文件并上传至 SVN 服务器</li>
+    <li><strong>SVN 工作流</strong> &mdash; 编排多步骤自动化流程（导出文字表 → 上传SVN → 合并表格等）</li>
+    <li><strong>翻译</strong> &mdash; 对接 AI API（DeepSeek / OpenAI），批量翻译游戏 Excel 表格中的文本</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h3 id="startup">1.1 启动方式</h3>
+
+<p>提供三种启动入口：</p>
+
+<table>
+  <tr><th>方式</th><th>文件</th><th>说明</th></tr>
+  <tr>
+    <td><span class="tag tag-green">推荐</span></td>
+    <td><code>策划工具箱GUI.vbs</code></td>
+    <td>智能启动器。自动检测 Python 位置，首次运行自动触发环境检测，静默启动主界面</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-orange">兜底</span></td>
+    <td><code>环境修复.bat</code></td>
+    <td>当完全没有 Python 环境时使用。会自动下载安装 Python 3.13、SlikSvn，然后启动工具箱</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-blue">直接</span></td>
+    <td><code>svn_launcher.py</code></td>
+    <td>直接启动（需已安装 Python）。双击 .py 文件或命令行运行</td>
+  </tr>
+</table>
+
+<div class="flow">
+  <span class="flow-step">双击 VBS</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">查找 Python</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">环境检测</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">显示窗口</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">加载模块</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step">就绪</span>
+</div>
+
+<h3 id="env-check">1.2 环境检测</h3>
+
+<p>首次启动时，<code>setup_checker.py</code> 会自动执行环境检测，检查以下项目：</p>
+
+<table>
+  <tr><th>检测项</th><th>检查内容</th><th>失败处理</th></tr>
+  <tr><td>Python 版本</td><td>确认 ≥3.10</td><td>提示安装</td></tr>
+  <tr><td>SVN 客户端</td><td>查找 svn.exe 并确认可用</td><td>提示安装 SlikSvn</td></tr>
+  <tr><td>Office / WPS</td><td>注册表检测</td><td>仅警告，不阻塞</td></tr>
+  <tr><td>核心脚本</td><td>检查 10 个必需 .py 文件</td><td>提示文件缺失</td></tr>
+  <tr><td>py_modules</td><td>确认第三方库目录存在</td><td>提示重新解压</td></tr>
+</table>
+
+<p>检测通过后会在 <code>_env_cache.json</code> 缓存 Python 路径，下次启动直接读取，无需重复检测。</p>
+
+<h3 id="files">1.3 文件结构</h3>
+
+<pre>
+策划工具箱/
+├── 策划工具箱GUI.vbs          # 智能启动器（推荐入口）
+├── 环境修复.bat               # 环境修复入口（无 Python 时用）
+├── svn_launcher.py            # 快速启动器（窗口先显示，后台加载）
+├── svn_compare_gui.py         # 主程序入口（GUI 主类）
+├── setup_checker.py           # 环境检测与自动配置
+├── toolbox_config.py          # 配置读写、路径管理
+├── toolbox_platform.py        # 平台工具（拖拽、SVN路径、子进程）
+├── toolbox_tab_svn.py         # SVN记录页签
+├── toolbox_tab_upload.py      # 上传SVN页签
+├── toolbox_tab_workflow.py    # SVN工作流页签
+├── toolbox_tab_translate.py   # 翻译页签
+├── xlsm_zipper.py             # Excel 写入引擎（通过 VBS 操作 COM）
+├── lang_map.txt               # 语言映射表（翻译功能使用）
+├── py_modules/                # 第三方依赖包（打包好的）
+│   ├── openpyxl/              # Excel 读写
+│   ├── requests/              # HTTP 请求（翻译 API）
+│   ├── httpx/                 # HTTP 客户端
+│   ├── certifi/ idna/         # SSL / 域名解析
+│   └── ...
+├── _env_cache.json            # 环境缓存（自动生成）
+└── svn_gui_config.json        # 用户配置（自动生成）
+</pre>
+
+<!-- ============================================================ -->
+<h2 id="quickstart">2. 快速上手指南</h2>
+
+<h3>2.1 各功能一句话说明</h3>
+
+<table>
+  <tr><th>功能</th><th>一句话说明</th></tr>
+  <tr>
+    <td><strong>SVN记录</strong></td>
+    <td>查某段时间内谁改了哪些文件，对比 Excel 前后版本差异，或把修改的文件导出到本地</td>
+  </tr>
+  <tr>
+    <td><strong>上传SVN</strong></td>
+    <td>把本地改好的文件勾选后复制到 SVN 目录，一键调起 TortoiseSVN 提交对话框</td>
+  </tr>
+  <tr>
+    <td><strong>SVN工作流</strong></td>
+    <td>把重复的日常操作（导出文字表→上传SVN→合并表格等）编成流程，一键执行</td>
+  </tr>
+  <tr>
+    <td><strong>翻译</strong></td>
+    <td>选一个 Excel 表格，配好 AI 接口，自动批量翻译文本到多种语言</td>
+  </tr>
+</table>
+
+<h3>2.2 典型使用场景</h3>
+
+<div class="card">
+  <h4>场景：每天看看今天改了啥</h4>
+  <ol>
+    <li>打开工具 → 默认就在「SVN记录」页签</li>
+    <li>顶栏粘贴 SVN 地址（或直接拖拽工作目录进来自动识别）</li>
+    <li>选「总结SVN修改记录」模式 → 点「执行」</li>
+    <li>等几秒，AI 自动生成今天所有人改了什么的可读总结</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h4>场景：修改 Excel 后提交 SVN</h4>
+  <ol>
+    <li>切到「SVN工作流」页签</li>
+    <li>点「+ 新建工作流」→ 添加步骤「合并表格」和「上传SVN」</li>
+    <li>配置好文件路径 → 保存</li>
+    <li>以后每次改完 Excel，点一下执行就行</li>
+  </ol>
+</div>
+
+<div class="card">
+  <h4>场景：翻译多语言 Excel</h4>
+  <ol>
+    <li>切到「翻译」页签</li>
+    <li>选需要翻译的 .xlsm 文件</li>
+    <li>在「API 配置」里填好地址和 Key（首次设置）</li>
+    <li>勾选需要翻译的目标语言列 → 点「开始翻译」</li>
+    <li>程序自动分批发送给 AI，翻译完成后保存到输出目录</li>
+  </ol>
+</div>
+
+<h3>2.3 操作小技巧</h3>
+
+<div class="tip">
+  <strong>拖拽识别 SVN 地址：</strong>在 SVN 记录页签，直接把工作目录中的文件或文件夹拖到 URL 输入框，自动识别 SVN 地址，不用手动粘贴。
+</div>
+
+<div class="tip">
+  <strong>窗口位置记忆：</strong>调整好窗口大小和位置后关闭工具，下次打开自动恢复位置。如果发现窗口不见了，删除 <code>svn_gui_config.json</code> 中的 <code>window_geometry</code> 行即可重置。
+</div>
+
+<div class="tip">
+  <strong>工作流复制：</strong>做类似任务时不用重新创建，右键工作流点「复制」，改改参数就行。
+</div>
+
+<div class="tip">
+  <strong>翻译提速：</strong>「每批条数」默认 20 条，网络好可以调到 50-100 条，翻译速度翻倍。如果报错就调小。
+</div>
+
+<div class="tip">
+  <strong>环境修复：</strong>换了新电脑解压后，如果双击 VBS 没反应，运行「环境修复.bat」自动装 Python 和 SVN。
+</div>
+
+<div class="tip">
+  <strong>筛选今天的提交：</strong>在 SVN 记录页签点「今日」按钮，自动填入当天日期，快速查今日改动。
+</div>
+
+<div class="tip">
+  <strong>清除缓存：</strong>如果觉得工具变慢或异常，点日志区旁边的「清除缓存」按钮。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="svn-tab">3. SVN记录页签</h2>
+
+<p>SVN记录是工具的核心功能，提供三种操作模式。</p>
+
+<h3 id="svn-url">3.1 SVN URL 输入</h3>
+
+<p>在顶部输入框中填写 SVN 仓库地址：</p>
+<ul>
+  <li><strong>手动输入</strong> &mdash; 直接粘贴 SVN 地址（如 <code>http://192.168.1.41:8080/svn/D3/...</code>）</li>
+  <li><strong>拖拽识别</strong> &mdash; 将 SVN 工作副本中的文件或文件夹拖拽到输入框，自动执行 <code>svn info</code> 识别对应 URL</li>
+  <li><strong>历史记录</strong> &mdash; 点击右侧 ▼ 按钮从历史 URL 中选择</li>
+</ul>
+
+<h3 id="svn-mode">3.2 三种模式</h3>
+
+<table>
+  <tr><th>模式</th><th>功能</th><th>输出</th></tr>
+  <tr>
+    <td><span class="tag tag-blue">对比 Excel 修改记录</span></td>
+    <td>查询指定日期范围内的 SVN 提交记录，逐文件对比每个版本间的 Excel 差异，输出新增、修改、删除的行明细</td>
+    <td>Excel 文件（包含 Sheet、ID、变更类型、版本号等内容）</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-orange">导出 SVN 修改文件</span></td>
+    <td>查询指定日期范围内的 SVN 提交记录，将变更的文件导出到本地目录（含修改新增的文件，可排除指定目录）</td>
+    <td>文件夹（按 SVN 目录结构导出）</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-green">总结SVN修改记录</span></td>
+    <td>查询指定日期范围内的 SVN 提交记录，调用 AI API 生成可读的修改日志摘要</td>
+    <td>Markdown / 文本文件</td>
+  </tr>
+</table>
+
+<h3 id="svn-date">3.3 日期范围</h3>
+<p>设置查询的开始/结束日期。点击「今日」按钮快速填入当前日期。</p>
+
+<h3 id="svn-filter">3.4 过滤条件</h3>
+<ul>
+  <li><strong>关键词</strong> &mdash; 按空格分隔多个关键词，筛选出提交日志中包含任一关键词的记录</li>
+  <li><strong>提交者</strong> &mdash; 指定 SVN 提交者用户名，仅查询该用户的提交</li>
+</ul>
+
+<h3 id="svn-advanced">3.5 高级选项</h3>
+<p>点击「⚙ 高级选项」按钮打开高级设置弹窗：</p>
+
+<table>
+  <tr><th>设置项</th><th>说明</th></tr>
+  <tr><td>过滤目录</td><td>导出模式有效，逗号分隔的目录名列表（如 <code>BinData, Language</code>），匹配到的目录不导出</td></tr>
+  <tr><td>文件名（预设）</td><td>对比模式有效，指定只对比某个 .xlsm 文件，可保存为预设</td></tr>
+  <tr><td>标题行数</td><td>对比模式有效，Excel 表格的表头行数（默认 1）</td></tr>
+  <tr><td>对比 ID 列</td><td>对比模式有效，用作行唯一标识的列名（默认 <code>::ID::</code>）</td></tr>
+  <tr><td>全局对比 ID</td><td>对比模式有效，留空则自动查找</td></tr>
+  <tr><td>输出列</td><td>对比模式有效，逗号分隔的列名，留空输出全部列</td></tr>
+  <tr><td>预设管理</td><td>可按文件名保存/删除一套对比参数配置</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="upload-tab">4. 上传SVN页签</h2>
+
+<p>用于将本地文件上传/提交到 SVN 仓库。</p>
+
+<h3>操作流程</h3>
+<ol>
+  <li><strong>选择源目录</strong> &mdash; 输入或浏览选择要上传的文件所在目录（支持拖拽）</li>
+  <li><strong>勾选文件</strong> &mdash; 文件列表自动加载，点击复选框勾选需要上传的文件，可全选/取消全选</li>
+  <li><strong>选择目标目录</strong> &mdash; 输入或浏览选择 SVN 工作副本中的目标目录（支持拖拽）</li>
+  <li><strong>点击「上传SVN」</strong> &mdash; 工具将勾选的文件复制到目标目录，并调用 TortoiseSVN 提交对话框</li>
+</ol>
+
+<div class="tip">
+  <strong>提示：</strong>目标目录必须是 SVN 工作副本（包含 <code>.svn</code> 文件夹）。上传前可通过「清除changelist」按钮移除"本次修改"变更列表。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="workflow-tab">5. SVN工作流页签</h2>
+
+<p>工作流功能允许将多个操作步骤编排为一个可重复执行的流程，大幅减少重复操作。</p>
+
+<h3>工作流管理</h3>
+<ul>
+  <li><strong>新建工作流</strong> &mdash; 命名并创建空工作流</li>
+  <li><strong>复制工作流</strong> &mdash; 复制当前选中的工作流</li>
+  <li><strong>删除工作流</strong> &mdash; 删除选中的工作流</li>
+  <li><strong>拖拽排序</strong> &mdash; 左侧树形列表中可直接拖拽调整步骤顺序</li>
+</ul>
+
+<h3 id="wf-step-types">5.1 七种步骤类型</h3>
+
+<table>
+  <tr><th>步骤类型</th><th>功能说明</th><th>配置参数</th></tr>
+  <tr>
+    <td><span class="tag tag-blue">导出文字表</span></td>
+    <td>从 .xlsm 主文件中导出各语言的文字配置文件（.txt）和 protobuf 数据</td>
+    <td>主文件路径、工具目录、输出目录、语言列表</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-green">上传SVN</span></td>
+    <td>将指定目录的文件复制到目标目录并提交 SVN</td>
+    <td>源目录、目标目录、是否提交 TortoiseSVN</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-orange">合并表格</span></td>
+    <td>将多个 Excel 表格合并为一个，支持按行或列追加</td>
+    <td>输入文件列表、合并方式、输出路径</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-purple" style="background:#e8daef;color:#6c3483;">合并翻译</span></td>
+    <td>将翻译后的 Excel 文件合并回主 .xlsm 文件</td>
+    <td>翻译文件路径、原始文件路径、输出路径</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-red">导出错误码</span></td>
+    <td>从 Excel 中提取错误码定义并导出为配置文件</td>
+    <td>根目录路径、输出目录</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-orange">锁定SVN</span></td>
+    <td>对指定目录下的 .xlsm 文件执行 SVN 锁定（防止冲突）</td>
+    <td>目标目录、文件路径</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-blue">打开表格</span></td>
+    <td>用 Excel 打开指定的文件列表</td>
+    <td>文件路径列表</td>
+  </tr>
+</table>
+
+<h3>执行工作流</h3>
+<ol>
+  <li>在左侧选中一个工作流</li>
+  <li>右侧显示工作流详情和步骤列表</li>
+  <li>点击「▶ 执行工作流」按钮</li>
+  <li>可选择执行全部步骤或指定步骤范围（如 <code>1-3,5</code> 表示执行第 1 到 3 步和第 5 步）</li>
+</ol>
+
+<div class="warn">
+  <strong>注意：</strong>工作流会自动按顺序执行各步骤。执行过程中可在日志区查看进度。耗时较长的步骤建议等待完成再进行其他操作。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="translate-tab">6. 翻译页签</h2>
+
+<p>翻译功能对接 AI API，实现游戏 Excel 表格的批量翻译，支持多目标语言。</p>
+
+<h3>操作流程</h3>
+<ol>
+  <li><strong>选择翻译表格</strong> &mdash; 选择需要翻译的 .xlsm / .xlsx 文件（支持拖拽）</li>
+  <li><strong>选择翻译参考（可选）</strong> &mdash; 提供已有的翻译结果文件作为参考，AI 会优先使用参考中的翻译</li>
+  <li><strong>配置 API</strong> &mdash; 填写 API 地址、Key 和模型名称</li>
+  <li><strong>选择语言列</strong> &mdash; 程序自动识别表头，选择源语言列和需要翻译的目标语言列</li>
+  <li><strong>点击「开始翻译」</strong> &mdash; 逐批发送给 AI API，实时显示进度</li>
+</ol>
+
+<h3 id="translate-api">6.1 API 配置</h3>
+
+<table>
+  <tr><th>参数</th><th>说明</th><th>示例</th></tr>
+  <tr><td>API 地址</td><td>兼容 OpenAI 接口格式的 API 端点</td><td><code>https://api.deepseek.com/v1/chat/completions</code></td></tr>
+  <tr><td>API Key</td><td>认证密钥</td><td><code>sk-xxxxxxxxxxxx</code></td></tr>
+  <tr><td>模型</td><td>使用的模型名称</td><td><code>gpt-4o-mini</code> / <code>deepseek-chat</code></td></tr>
+</table>
+
+<h3 id="translate-lang">6.2 语言列检测与映射</h3>
+
+<p>工具会自动读取 Excel 表头，通过 <code>lang_map.txt</code> 映射表识别每列对应的语言：</p>
+<ul>
+  <li><strong>简体中文</strong> &mdash; 自动识别为源语言</li>
+  <li><strong>繁体中文、英语、日语、韩语、泰语…</strong> &mdash; 自动勾选为目标语言</li>
+  <li>支持通过「编辑语言映射」用记事本自定义映射规则</li>
+</ul>
+
+<p>格式（<code>lang_map.txt</code>）：</p>
+<pre>
+# 关键词=语言名
+ko_kr=韩语
+ja_jp=日语
+th_th=泰语
+id_id=印度尼西亚语
+vi_vn=越南语
+zh_hk=繁体中文
+</pre>
+
+<h3>高级设置</h3>
+<ul>
+  <li><strong>提示词</strong> &mdash; 可自定义发送给 AI 的系统提示词</li>
+  <li><strong>每批条数</strong> &mdash; 每次 API 调用发送的文本行数（默认 20，增大可提升翻译速度但可能降低质量）</li>
+  <li><strong>输出路径</strong> &mdash; 翻译结果保存位置</li>
+</ul>
+
+<div class="tip">
+  <strong>提示：</strong>API 调用是异步并发的，多个目标语言同时翻译。如果遇到限流，可减小每批条数。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="requirements">7. 运行环境要求</h2>
+
+<table>
+  <tr><th>依赖</th><th>最低版本</th><th>说明</th></tr>
+  <tr>
+    <td>Python</td>
+    <td>3.10</td>
+    <td>推荐 3.13。环境修复.bat 可自动下载安装</td>
+  </tr>
+  <tr>
+    <td>SVN 客户端</td>
+    <td>任意</td>
+    <td>SlikSvn 或 TortoiseSVN 均可。环境修复.bat 可自动安装 SlikSvn</td>
+  </tr>
+  <tr>
+    <td>Office / WPS</td>
+    <td>2007+</td>
+    <td>用于 .xlsm 文件的 COM 操作（写入数据、VB 宏处理）。仅翻译和合并功能需要</td>
+  </tr>
+</table>
+
+<div class="tip">
+  <strong>打包分发：</strong>将 <code>策划工具箱_分发包.zip</code> 解压后直接使用。py_modules 已包含所有第三方依赖，无需 pip install。
+</div>
+
+<!-- ============================================================ -->
+<h2 id="troubleshoot">8. 常见问题</h2>
+
+<div class="card">
+  <h4>双击 VBS 没有反应</h4>
+  <ul>
+    <li>尝试右键 → 用「Microsoft (R) Console Based Script Host」打开</li>
+    <li>运行同目录下的 <code>环境修复.bat</code> 检查并修复环境</li>
+    <li>确认 Python 3.10+ 已安装且路径正确</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h4>SVN 功能报错 "未找到 svn 命令"</h4>
+  <ul>
+    <li>安装 SlikSvn（<a href="https://sliksvn.com/download/" target="_blank">https://sliksvn.com/download/</a>）</li>
+    <li>或安装 TortoiseSVN 并确保安装时勾选了「命令行工具」</li>
+    <li>安装后重启工具箱即可</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h4>翻译时 API 报错</h4>
+  <ul>
+    <li>确认 API 地址和 Key 填写正确</li>
+    <li>确认网络可以访问 API 服务器</li>
+    <li>尝试减小「每批条数」避免超时</li>
+    <li>部分模型需要特定格式的 API 地址，参考模型提供商的文档</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h4>Excel 写入失败</h4>
+  <ul>
+    <li>确认 .xlsm 文件没有被 Excel 或 WPS 打开（会触发文件锁）</li>
+    <li>确认已安装 WPS Office 或 Microsoft Excel</li>
+    <li>如使用 WPS，确认 WPS 安装完整（含 VBA 支持）</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h4>分发包解压后不能用</h4>
+  <ul>
+    <li>确认解压路径不包含中文字符或空格（部分 Python 包对路径敏感）</li>
+    <li>运行 <code>环境修复.bat</code> 自动检测并修复环境问题</li>
+    <li>确认解压时保持了目录结构（不要只解压 .exe 文件）</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h4>如何更新工具箱</h4>
+  <ul>
+    <li>替换所有 .py 脚本文件和 <code>lang_map.txt</code></li>
+    <li>py_modules 目录通常不需要替换，除非有新的第三方依赖</li>
+    <li>删除 <code>_env_cache.json</code> 让程序下次重新检测环境</li>
+    <li>配置文件 <code>svn_gui_config.json</code> 保留不动即可保留设置</li>
+  </ul>
+</div>
+
+<br><br>
+<hr>
+<p style="text-align:center;color:var(--text-muted);font-size:13px;">
+  策划工具箱 &mdash; 如有问题请联系工具维护者
+</p>
+
+</div>
+
+</body>
+</html>

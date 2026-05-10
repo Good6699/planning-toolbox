@@ -286,12 +286,11 @@
     }
   ],
   "output_dir_export": "C:\\Users\\admin\\.qclaw\\workspace\\输出\\导出",
-  "window_geometry": "992x800+-1063+178",
+  "window_geometry": "992x800+245+121",
   "tr_src_history": [
     "C:\\Users\\admin\\.qclaw\\workspace\\输出\\翻译模版.xlsx"
   ],
   "tr_api_url": "https://api.deepseek.com/v1/chat/completions",
-  "tr_api_key": "sk-16f0f54f19ff4c8daa59ca6325dbaac3",
   "tr_model": "deepseek-v4-flash",
   "tr_out_dir": "C:\\Users\\admin\\.qclaw\\workspace\\输出",
   "tr_prompt": "你是一个游戏翻译专家。请将以下文本从{src_lang}翻译为{tgt_lang}。只返回翻译结果，不要有任何额外内容。\n如果参考文件中有对应条目，请优先使用参考翻译。",
@@ -299,5 +298,6 @@
   "tr_saved_src_lang": "::SC::",
   "tr_saved_tgt_langs": [
     "::KR::"
-  ]
+  ],
+  "tr_api_key_enc": "/ZhanvpqNABPoNt3CbrSkfxhsARxEX7yxR/83CnNjAHvkEQ="
 }

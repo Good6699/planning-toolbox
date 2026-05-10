@@ -1,0 +1,495 @@
+(async function() {
+    function delay(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+    function isOnList() { return location.hash.indexOf('myHomework') > -1; }
+    function isOnExam() { return location.hash.indexOf('examination') > -1; }
+
+    function getExamVm() {
+        var el = document.querySelector('.page-content');
+        return el && el.__vue__;
+    }
+
+    function waitFor(fn, sec) {
+        return new Promise(function(res, rej) {
+            if (fn()) { res(); return; }
+            var w = 0, ci = setInterval(function() {
+                w++; if (fn()) { clearInterval(ci); res(); }
+                else if (w >= sec) { clearInterval(ci); rej(new Error('timeout')); }
+            }, 1000);
+        });
+    }
+
+    async function goToList() {
+        if (isOnList()) return;
+        location.hash = '#/main/myHomework';
+        try { await waitFor(isOnList, 15); } catch(e) {}
+        await delay(1500);
+    }
+
+    async function clickConfirm() {
+        for (var i = 0; i < 10; i++) {
+            await delay(500);
+            var btn = document.querySelector('.el-message-box__wrapper .el-button--primary');
+            if (!btn) btn = document.querySelector('.el-message-box__btns .el-button--primary');
+            if (!btn) btn = document.querySelector('.el-dialog__wrapper .el-button--primary');
+            if (btn) { btn.click(); return; }
+        }
+    }
+
+    async function doSubmit() {
+        var vm = getExamVm();
+        try { vm && vm.submit && vm.submit(); } catch(e) {}
+        await clickConfirm();
+    }
+
+    function findBtn(type) {
+        var btn = null;
+        document.querySelectorAll('.el-button--text').forEach(function(b) {
+            if (b.innerText.trim() === type) btn = b;
+        });
+        return btn;
+    }
+
+    async function enterAndWait() {
+        try { await waitFor(isOnExam, 15); } catch(e) { return false; }
+        await delay(4000);
+        var vm = getExamVm();
+        if (!vm || !vm.questionsList || vm.questionsList.length === 0) return false;
+        console.log(' (' + vm.questionsList.length + '题)');
+        return vm;
+    }
+
+    // 从查看页的 DOM "试题答案: X" 提取正确答案
+    function extractFromDom() {
+        var answers = {};
+        var html = document.body.innerHTML;
+        var re = /试题答案:<span[^>]*>(\w+)<\/span>/g;
+        var match;
+        var idx = 0;
+        var vm = getExamVm();
+        while ((match = re.exec(html)) !== null) {
+            var letter = match[1];
+            var questionNo = null;
+            if (vm && vm.questionsList && vm.questionsList[idx]) {
+                questionNo = vm.questionsList[idx].no;
+            }
+            if (questionNo) {
+                var numIdx = {'A':0,'B':1,'C':2,'D':3,'E':4,'F':5};
+                answers[questionNo] = numIdx[letter] !== undefined ? numIdx[letter] : 0;
+            }
+            idx++;
+        }
+        console.log(' 答案:' + Object.keys(answers).length + '题');
+        return answers;
+    }
+
+    // 用DOM点击选radio
+    function clickRadios(answerMap) {
+        var vm = getExamVm();
+        var groups = document.querySelectorAll('.el-radio-group');
+        var done = 0;
+        groups.forEach(function(g, gi) {
+            var q = vm && vm.questionsList && vm.questionsList[gi];
+            if (!q) return;
+            var correctIdx = answerMap[q.no];
+            if (correctIdx === undefined) return;
+            var radios = g.querySelectorAll('.el-radio');
+            if (radios[correctIdx]) {
+                radios[correctIdx].click();
+                var inp = radios[correctIdx].querySelector('.el-radio__original');
+                if (inp) inp.checked = true;
+                if (vm && q.bodyGroups && q.bodyGroups[0]) {
+                    q.bodyGroups[0].answerSelectedIndex = correctIdx;
+                    q.bodyGroups[0].options.forEach(function(o) { o.checked = (o.optionIndex === correctIdx); });
+                    q.answered = true;
+                }
+                done++;
+            }
+        });
+        console.log(' 选中:' + done + '题');
+        return done;
+    }
+
+    console.log('='.repeat(50));
+    console.log('🤖 自动答题 v6');
+    console.log('='.repeat(50));
+
+    await goToList();
+
+    var total = 0;
+    var done = 0;
+    var round = 0;
+
+    while (true) {
+        await goToList();
+        await delay(800);
+        round++;
+
+        var viewBtn = findBtn('查看作业');
+        var startBtn = findBtn('开始作业') || findBtn('继续作业');
+
+        if (!viewBtn && !startBtn) break;
+
+        var action = viewBtn ? '查看作业' : (startBtn.innerText.trim());
+        var btn = viewBtn || startBtn;
+
+        console.log('\n[' + round + '] ' + action);
+
+        if (viewBtn) {
+            // 先统计总数
+            if (total === 0) {
+                document.querySelectorAll('.el-button--text').forEach(function(b) {
+                    var t = b.innerText.trim();
+                    if (t === '开始作业' || t === '继续作业' || t === '查看作业') total++;
+                });
+                console.log('共' + total + '个作业');
+            }
+
+            viewBtn.click();
+            var vm = await enterAndWait();
+            if (!vm) { console.log(' 加载失败'); continue; }
+
+            var answers = extractFromDom();
+            if (Object.keys(answers).length === 0) { console.log(' 无答案'); continue; }
+
+            await goToList();
+            await delay(800);
+
+            var redoBtn = findBtn('重做');
+            if (!redoBtn) { console.log(' 无重做'); break; }
+
+            redoBtn.click();
+            await clickConfirm();
+            var vm2 = await enterAndWait();
+            if (!vm2) { console.log(' 重做加载失败'); continue; }
+
+            var filled = clickRadios(answers);
+            await delay(1000);
+
+            await doSubmit();
+            done++;
+
+            await delay(2000);
+            try { await waitFor(isOnList, 15); } catch(e) {}
+            console.log(' 完成! (' + done + '/' + total + ')');
+        } else {
+            btn.click();
+            var vm = await enterAndWait();
+            if (!vm) { console.log(' 加载失败'); continue; }
+
+            await doSubmit();
+
+            await delay(2000);
+            try { await waitFor(isOnList, 15); } catch(e) {}
+        }
+    }
+
+    console.log('\n🏆 完成! ' + done + '个');
+})();
+
+VM3188:113 ==================================================
+VM3188:114 🤖 自动答题 v6
+VM3188:115 ==================================================
+Promise {<pending>}
+VM3188:136 
+[1] 查看作业
+VM3188:145 共29个作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+
+VM3188:174  完成! (1/29)
+VM3188:136 
+[2] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (2/29)
+VM3188:136 
+[3] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (3/29)
+VM3188:136 
+[4] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (4/29)
+VM3188:136 
+[5] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (5/29)
+VM3188:136 
+[6] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (6/29)
+VM3188:136 
+[7] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (7/29)
+VM3188:136 
+[8] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (8/29)
+VM3188:136 
+[9] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (9/29)
+VM3188:136 
+[10] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (10/29)
+VM3188:136 
+[11] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (11/29)
+VM3188:136 
+[12] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (12/29)
+VM3188:136 
+[13] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (13/29)
+VM3188:136 
+[14] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (14/29)
+VM3188:136 
+[15] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (15/29)
+VM3188:136 
+[16] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (16/29)
+VM3188:136 
+[17] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (17/29)
+VM3188:136 
+[18] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+index.js:12 {data: {…}, status: 200, statusText: '', headers: {…}, config: {…}, …}
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (18/29)
+VM3188:136 
+[19] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (19/29)
+VM3188:136 
+[20] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (20/29)
+VM3188:136 
+[21] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (21/29)
+VM3188:136 
+[22] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (22/29)
+VM3188:136 
+[23] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (23/29)
+VM3188:136 
+[24] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (24/29)
+VM3188:136 
+[25] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (25/29)
+VM3188:136 
+[26] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (26/29)
+VM3188:136 
+[27] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (27/29)
+VM3188:136 
+[28] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (28/29)
+VM3188:136 
+[29] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题
+VM3188:174  完成! (29/29)
+VM3188:136 
+[30] 查看作业
+VM3188:58  (10题)
+VM3188:82  答案:10题
+VM3188:58  (10题)
+VM3188:109  选中:10题

@@ -1,0 +1,350 @@
+(async function() {
+  const r = {};
+  console.log('='.repeat(60));
+  console.log('🔍 答题页面全面诊断');
+  console.log('='.repeat(60));
+
+  // ===== 1. 页面基本信息 =====
+  r.url = location.href;
+  r.hash = location.hash;
+  r.title = document.title;
+  console.log('\n📌 [1] 页面信息');
+  console.log('  URL:', r.url);
+  console.log('  Hash:', r.hash);
+  console.log('  Title:', r.title);
+
+  // ===== 2. 页面全局文本关键词 =====
+  const bodyText = document.body.innerText;
+  const keywords = ['考题','题目','答题','考试','试卷','练习','作业','提交','下一题','交卷','单选','多选','判断','正确答案','分数','得分','成绩','question','exam','quiz','answer'];
+  console.log('\n📌 [2] 页面文本关键字检测');
+  keywords.forEach(k => {
+    if (bodyText.includes(k)) console.log('  ✅ 发现: "' + k + '"');
+  });
+
+  // ===== 3. 查 Vue 实例 =====
+  console.log('\n📌 [3] Vue 实例探查');
+  const vueNodes = [];
+  document.querySelectorAll('[data-v-], [__vue__]').forEach(()=>{});
+  
+  function findVue(el, depth) {
+    if (!el || depth > 15) return null;
+    if (el.__vue__) return el.__vue__;
+    if (el.parentElement) return findVue(el.parentElement, depth + 1);
+    return null;
+  }
+
+  // 尝试多种入口找 Vue
+  const entrySelectors = [
+    '.el-radio', '.el-checkbox', '.el-button', '.exam', '.question',
+    '.paper', '.answer', '.option', '.topic', '.test', '.subject',
+    'input[type="radio"]', 'input[type="checkbox"]',
+    'form', '.content', '.main', '[class*=exam]', '[class*=question]',
+    '[class*=paper]', '[class*=test]', '[class*=quiz]'
+  ];
+
+  let vm = null;
+  for (const sel of entrySelectors) {
+    const el = document.querySelector(sel);
+    if (el) {
+      vm = findVue(el, 0);
+      if (vm) {
+        console.log('  找到 Vue 实例，入口选择器:', sel);
+        break;
+      }
+    }
+  }
+
+  if (!vm) {
+    // 兜底：root 元素
+    const root = document.querySelector('#app, .app, [data-app]');
+    if (root && root.__vue__) vm = root.__vue__;
+  }
+  if (!vm) {
+    const body = document.body.children[0];
+    if (body && body.__vue__) vm = body.__vue__;
+  }
+
+  if (vm) {
+    const keys = Object.keys(vm).filter(k => !k.startsWith('_') && !k.startsWith('$'));
+    console.log('  Vue 顶层 keys:', keys.slice(0, 30));
+    
+    // 展示非函数、非对象的简单值
+    const simpleVals = {};
+    keys.forEach(k => {
+      const v = vm[k];
+      if (v === null || v === undefined) return;
+      if (typeof v === 'object' && !Array.isArray(v)) {
+        simpleVals[k] = '{' + Object.keys(v).slice(0, 10).join(',') + '}';
+      } else if (Array.isArray(v)) {
+        simpleVals[k] = '[' + v.length + ' items]';
+      } else if (typeof v !== 'function') {
+        simpleVals[k] = v;
+      }
+    });
+    console.log('  Vue data:', JSON.stringify(simpleVals, null, 2));
+
+    // 深入看 $data
+    if (vm.$data) {
+      const dataKeys = Object.keys(vm.$data);
+      console.log('  $data keys:', dataKeys);
+    }
+
+    r.vmKeys = keys;
+    r.vmFound = true;
+  } else {
+    console.log('  ❌ 未找到 Vue 实例');
+    r.vmFound = false;
+  }
+
+  // ===== 4. 页面 DOM 结构总览 =====
+  console.log('\n📌 [4] DOM 结构');
+
+  // 4a. 所有的 class 包含特定关键词的元素
+  const classPatterns = ['question', 'exam', 'paper', 'answer', 'option', 'topic', 'test', 'quiz', 'radio', 'checkbox', 'submit', 'next', 'prev', 'correct', 'wrong', 'score'];
+  const foundClasses = {};
+  classPatterns.forEach(p => {
+    const els = document.querySelectorAll('[class*="' + p + '" i]');
+    if (els.length > 0) {
+      const texts = Array.from(els).slice(0, 5).map(e => ({
+        tag: e.tagName,
+        class: e.className.slice(0, 80),
+        text: (e.innerText || '').slice(0, 60)
+      }));
+      foundClasses[p] = { count: els.length, samples: texts };
+    }
+  });
+  console.log('  关联 class 分析:', JSON.stringify(foundClasses, null, 2));
+
+  // 4b. 所有 input/select
+  const inputs = document.querySelectorAll('input, select, textarea');
+  console.log('  input/select/textarea 数量:', inputs.length);
+  inputs.forEach((inp, i) => {
+    if (i >= 20) return;
+    console.log('    [' + i + ']', inp.tagName, 'type=' + inp.type,
+      'name=' + inp.name, 'class=' + (inp.className || '').slice(0, 40),
+      'placeholder=' + (inp.placeholder || ''));
+  });
+
+  // 4c. 所有 button
+  const buttons = document.querySelectorAll('button, .el-button, [role="button"]');
+  console.log('\n  Button 数量:', buttons.length);
+  buttons.forEach((btn, i) => {
+    if (i >= 15) return;
+    console.log('    [' + i + ']', btn.tagName,
+      'text="' + (btn.innerText || '').trim().slice(0, 40) + '"',
+      'class=' + (btn.className || '').slice(0, 60));
+  });
+
+  // 4d. 页面整体文本分段
+  console.log('\n  页面纯文本前500字:');
+  console.log('  ' + bodyText.replace(/\s+/g, ' ').slice(0, 500));
+
+  // ===== 5. 监控网络请求 =====
+  console.log('\n📌 [5] API 请求监控（接下来30秒内的请求）');
+  const origFetch = window.fetch;
+  const captured = [];
+  window.fetch = function(...args) {
+    const url = typeof args[0] === 'string' ? args[0] : args[0].url;
+    captured.push({ url: url, method: args[1]?.method || 'GET', time: new Date().toISOString() });
+    return origFetch.apply(this, args).then(async resp => {
+      const clone = resp.clone();
+      const entry = captured.find(e => e.url === url);
+      if (entry) {
+        entry.status = resp.status;
+        try { entry.body = (await clone.text()).slice(0, 300); } catch(e) {}
+      }
+      return resp;
+    });
+  };
+
+  // 也给 XHR 挂监控
+  const origXHROpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url) {
+    captured.push({ url: url, method: method, time: new Date().toISOString(), type: 'xhr' });
+    this.addEventListener('load', function() {
+      const entry = captured.find(e => e.url === url && !e.status);
+      if (entry) {
+        entry.status = this.status;
+        try { entry.body = this.responseText.slice(0, 300); } catch(e) {}
+      }
+    });
+    return origXHROpen.apply(this, arguments);
+  };
+
+  // ===== 6. 全局变量扫描 =====
+  console.log('\n📌 [6] window 上可疑的全局变量');
+  const suspiciousKeys = [];
+  for (const k of Object.keys(window)) {
+    const lk = k.toLowerCase();
+    if (lk.includes('exam') || lk.includes('question') || lk.includes('answer') ||
+        lk.includes('paper') || lk.includes('quiz') || lk.includes('test') ||
+        lk.includes('score') || lk.includes('correct')) {
+      suspiciousKeys.push(k);
+    }
+  }
+  console.log('  可疑全局变量:', suspiciousKeys);
+
+  // ===== 7. localStorage / sessionStorage =====
+  console.log('\n📌 [7] Storage');
+  console.log('  sessionStorage keys:', Object.keys(sessionStorage));
+  console.log('  localStorage keys:', Object.keys(localStorage));
+
+  // ===== 等待并输出网络结果 =====
+  console.log('\n⏳ 等待15秒收集请求...');
+  await new Promise(r => setTimeout(r, 15000));
+
+  console.log('\n📌 [8] 收集到的网络请求 (' + captured.length + ' 条)');
+  captured.forEach((c, i) => {
+    console.log('  [' + i + '] ' + c.method + ' ' + c.url + ' → ' + (c.status || 'pending'));
+    if (c.body) console.log('       body: ' + c.body);
+  });
+
+  // ===== 恢复 =====
+  window.fetch = origFetch;
+
+  console.log('\n' + '='.repeat(60));
+  console.log('✅ 诊断完成');
+  console.log('r =', r);
+  console.log('captured =', captured);
+  console.log('='.repeat(60));
+})();
+VM1617:3 ============================================================
+VM1617:4 🔍 答题页面全面诊断
+VM1617:5 ============================================================
+VM1617:11 
+📌 [1] 页面信息
+VM1617:12   URL: https://scit-adult-study.whxunw.com/#/main/examination?id=243606&studentId=11469&schoolId=23&admissionBatchId=47&studyYearId=8&termEffDetailId=300&courseId=4178&learningStyle=COURSEWARE&courseStudyId=3163&chapterId=1&hourId=51004&specialtyId=425&homeworkId=6099&paperNo=20260428111052934&paperName=%E9%A9%AC%E5%85%8B%E6%80%9D%E4%B8%BB%E4%B9%89%E5%9F%BA%E6%9C%AC%E5%8E%9F%E7%90%86-%E7%AC%AC%E4%B8%80%E8%8A%82%20%E9%A9%AC%E5%85%8B%E6%80%9D%E4%B8%BB%E4%B9%89%E7%9A%84%E5%88%9B%E7%AB%8B%E4%B8%8E%E5%8F%91%E5%B1%95&paperTotalScore=20&questionCount=10&endTime=2026-06-30%2000%3A00%3A00&examNo=202605092055022197092D99A6BA446EABC417135FD37A9C6&factStartTime=2026-05-09%2020%3A55%3A02&factEndTime=2026-05-09%2020%3A55%3A02&status=STARTED&sign=false&examNoAndUserId=202605092055022197092D99A6BA446EABC417135FD37A9C6%40%40%4011469&statusName=%E8%BF%9B%E8%A1%8C%E4%B8%AD&learningStyleName=%E8%AF%BE%E4%BB%B6&paperType=HOMEWORK&pushType=MYHOMEWORK
+VM1617:13   Hash: #/main/examination?id=243606&studentId=11469&schoolId=23&admissionBatchId=47&studyYearId=8&termEffDetailId=300&courseId=4178&learningStyle=COURSEWARE&courseStudyId=3163&chapterId=1&hourId=51004&specialtyId=425&homeworkId=6099&paperNo=20260428111052934&paperName=%E9%A9%AC%E5%85%8B%E6%80%9D%E4%B8%BB%E4%B9%89%E5%9F%BA%E6%9C%AC%E5%8E%9F%E7%90%86-%E7%AC%AC%E4%B8%80%E8%8A%82%20%E9%A9%AC%E5%85%8B%E6%80%9D%E4%B8%BB%E4%B9%89%E7%9A%84%E5%88%9B%E7%AB%8B%E4%B8%8E%E5%8F%91%E5%B1%95&paperTotalScore=20&questionCount=10&endTime=2026-06-30%2000%3A00%3A00&examNo=202605092055022197092D99A6BA446EABC417135FD37A9C6&factStartTime=2026-05-09%2020%3A55%3A02&factEndTime=2026-05-09%2020%3A55%3A02&status=STARTED&sign=false&examNoAndUserId=202605092055022197092D99A6BA446EABC417135FD37A9C6%40%40%4011469&statusName=%E8%BF%9B%E8%A1%8C%E4%B8%AD&learningStyleName=%E8%AF%BE%E4%BB%B6&paperType=HOMEWORK&pushType=MYHOMEWORK
+VM1617:14   Title: 四川工业科技学院
+VM1617:19 
+📌 [2] 页面文本关键字检测
+VM1617:21   ✅ 发现: "答题"
+VM1617:21   ✅ 发现: "考试"
+VM1617:21   ✅ 发现: "作业"
+VM1617:21   ✅ 发现: "提交"
+VM1617:21   ✅ 发现: "单选"
+VM1617:21   ✅ 发现: "成绩"
+VM1617:25 
+📌 [3] Vue 实例探查
+VM1617:51   找到 Vue 实例，入口选择器: .el-radio
+VM1617:69   Vue 顶层 keys: (6) ['elForm', 'elFormItem', 'dispatch', 'broadcast', 'handleChange', 'focus']
+VM1617:84   Vue data: {
+  "elForm": "",
+  "elFormItem": "",
+  "focus": false
+}
+VM1617:89   $data keys: ['focus']
+VM1617:100 
+📌 [4] DOM 结构
+VM1617:116   关联 class 分析: {
+  "radio": {
+    "count": 210,
+    "samples": [
+      {
+        "tag": "DIV",
+        "class": "el-radio-group multiple",
+        "text": "A .\n自然经济的基本规律\nB .\n商品经济的基本规律\nC .\n资本主义经济的基本规律\nD .\n社会主义经济的基本规律"
+      },
+      {
+        "tag": "LABEL",
+        "class": "el-radio",
+        "text": "A .\n自然经济的基本规律"
+      },
+      {
+        "tag": "SPAN",
+        "class": "el-radio__input",
+        "text": ""
+      },
+      {
+        "tag": "SPAN",
+        "class": "el-radio__inner",
+        "text": ""
+      },
+      {
+        "tag": "INPUT",
+        "class": "el-radio__original",
+        "text": ""
+      }
+    ]
+  }
+}
+VM1617:120   input/select/textarea 数量: 41
+VM1617:123     [0] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [1] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [2] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [3] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [4] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [5] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [6] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [7] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [8] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [9] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [10] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [11] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [12] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [13] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [14] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [15] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [16] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [17] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [18] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:123     [19] INPUT type=radio name= class=el-radio__original placeholder=
+VM1617:130 
+  Button 数量: 4
+VM1617:133     [0] BUTTON text="徐甜" class=btn dropdown-toggle btn-btn-link
+VM1617:133     [1] BUTTON text="提交" class=el-button el-button--primary el-button--mini
+VM1617:133     [2] BUTTON text="" class=el-dialog__headerbtn
+VM1617:133     [3] BUTTON text="发送" class=el-button el-button--primary
+VM1617:139 
+  页面纯文本前500字:
+VM1617:140   徐甜 我的首页 我的缴费 教学计划 我的课程 非专业课 我的作业 我的考试 重修申请 毕业设计 毕业论文 论文答辩 我的成绩 课程免考 我的毕业 学位申请 优秀毕业生 学籍变更 个人资料 我的作业 第一节 马克思主义的创立与发展 总分：20 第1题 单选题 (2分) 价值规律是 答题区 A . 自然经济的基本规律 B . 商品经济的基本规律 C . 资本主义经济的基本规律 D . 社会主义经济的基本规律 第2题 单选题 (2分) 承认世界的统一性的哲学都属于 答题区 A . 一元论 B . 二元论 C . 唯物论 D . 唯心论 第3题 单选题 (2分) 作为马克思恩格斯一生最重要的理论发现，使社会主义从空想变成科学的是 答题区 A . 唯物论和辩证法学说 B . 唯物论和劳动价值学说 C . 唯物史观和剩余价值学说 D . 唯物史观和阶级斗争学说 第4题 单选题 (2分) 产业资本循环中为生产剩余价值准备条件的阶段是 答题区 A . 购买阶段 B . 生产阶段 C . 销售阶段 D . 流通阶段 第5题 单选题 (2分) 在上层建筑的各种要素中，居于主导地位的是 答题区 A . 艺术
+VM1617:143 
+📌 [5] API 请求监控（接下来30秒内的请求）
+VM1617:175 
+📌 [6] window 上可疑的全局变量
+VM1617:185   可疑全局变量: []
+VM1617:188 
+📌 [7] Storage
+VM1617:189   sessionStorage keys: (5) ['token', '__al_auto', 'vuex', 'refresh_token', 'basicAuth']
+VM1617:190   localStorage keys: ['polyvPlayerStorage']
+VM1617:193 
+⏳ 等待15秒收集请求...
+Promise {<pending>}
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+Blocked aria-hidden on an element because its descendant retained focus. The focus must not be hidden from assistive technology users. Avoid using aria-hidden on a focused element or its ancestor. Consider using the inert attribute instead, which will also prevent focus. For more details, see the aria-hidden section of the WAI-ARIA specification at <URL>.
+Element with focus: <input.el-radio__original>
+Ancestor with aria-hidden: <input.el-radio__original>
+
+VM1617:196 
+📌 [8] 收集到的网络请求 (4 条)
+VM1617:198   [0] PUT /api/adult/student/exam/202605092055022197092D99A6BA446EABC417135FD37A9C6/submit → 200
+VM1617:199        body: {"no":"202605092055022197092D99A6BA446EABC417135FD37A9C6","paperNo":"20260428111052934","paperName":"第一节 马克思主义的创立与发展","paperTotalScore":20.0,"paperDuration":0,"userId":11469,"userName":"513701199307274427","startTime":"2026-05-09 20:55:02","submitTime":"2026-05-10 14:16:58","totalScore":2.0,"status"
+VM1617:198   [1] GET /api/adult/student/info → 200
+VM1617:199        body: [{"termEffDetailId":300,"registerinfoId":10597,"studentId":11469,"idCardNumber":"513701199307274427","name":"徐甜","studentNumber":"202561020140","admissionBatchId":47,"annual":"2026","season":"春季","schoolId":23,"schoolCode":"13816","schoolName":"四川工业科技学院","teachPointId":48,"teachPointCode":"13816-001
+VM1617:198   [2] GET /api/adult/student/study/term → 200
+VM1617:199        body: [{"id":300,"createdBy":26264,"createdTime":"2026-04-01 15:47:20","lastModifiedBy":26264,"lastModifiedTime":"2026-04-01 16:16:00","admissionBatchId":47,"endTime":"2026-06-30","name":"第一学期","num":1,"schoolId":23,"startTime":"2026-03-01","studyYearId":8,"termEffectId":65,"studyEndTime":"2026-06-30 00:0
+VM1617:198   [3] GET /api/adult/student/study/homeworklist?isIndex=0&termEffDetailId=300 → 200
+VM1617:199        body: [{"studyRecordId":187136,"courseId":4178,"courseCode":"235011","courseName":"马克思主义基本原理","courseScore":3.0,"studentId":11469,"sumDuration":379,"duration":303,"score":0.8,"termEffDetailId":300,"courseStudyId":3163,"learningStyle":"COURSEWARE","studyEndTime":"2026-06-30 00:00:00","doneHomeworkNum":1,"c
+VM1617:205 
+============================================================
+VM1617:206 ✅ 诊断完成
+VM1617:207 r = {url: 'https://scit-adult-study.whxunw.com/#/main/examina…E%E4%BB%B6&paperType=HOMEWORK&pushType=MYHOMEWORK', hash: '#/main/examination?id=243606&studentId=11469&schoo…E%E4%BB%B6&paperType=HOMEWORK&pushType=MYHOMEWORK', title: '四川工业科技学院', vmKeys: Array(6), vmFound: true}
+VM1617:208 captured = (4) [{…}, {…}, {…}, {…}]
+VM1617:209 ============================================================

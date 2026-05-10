@@ -1,4 +1,4 @@
-import os, argparse, json
+import os, argparse, json, hashlib, base64
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir", type=str, default=None,
@@ -16,6 +16,32 @@ MAIN_SCRIPT = os.path.join(SCRIPT_DIR, "svn_oneclick_compare.py")
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "svn_gui_config.json")
 DEFAULT_OUTPUT_DIR = os.path.join(SCRIPT_DIR, "输出")  # GUI 同级输出文件夹
 
+# ── API Key 加密 ─────────────────────────────────────────
+def _obfuscation_key():
+    """固定混淆密钥，确保配置在任意机器上都能解密。阻止直接文本窥探，不阻止逆向"""
+    return hashlib.sha256(b"CeHuaToolBox_Obfs_Key_v1").digest()
+
+def encrypt_key(plaintext):
+    """混淆加密 API Key，返回 base64 字符串"""
+    if not plaintext:
+        return ""
+    key = _obfuscation_key()
+    data = plaintext.encode("utf-8")
+    encrypted = bytes(data[i] ^ key[i % len(key)] for i in range(len(data)))
+    return base64.b64encode(encrypted).decode("ascii")
+
+def decrypt_key(ciphertext):
+    """解密 API Key，返回原文。失败返回空字符串"""
+    if not ciphertext:
+        return ""
+    try:
+        key = _obfuscation_key()
+        encrypted = base64.b64decode(ciphertext.encode("ascii"))
+        decrypted = bytes(encrypted[i] ^ key[i % len(key)] for i in range(len(encrypted)))
+        return decrypted.decode("utf-8")
+    except Exception:
+        return ""
+
 # ── 配置读写 ──────────────────────────────────────────────
 def load_config():
     default = {
@@ -32,9 +58,12 @@ def load_config():
                 for k, v in default.items():
                     if k not in data:
                         data[k] = v
+                # 自动解密 API Key（混淆存储，防窥探）
+                enc = data.pop("tr_api_key_enc", "")
+                if enc:
+                    data["tr_api_key"] = decrypt_key(enc)
                 return data
         except json.JSONDecodeError:
-            # 配置文件损坏，返回默认值
             print("⚠️ 配置文件损坏，使用默认配置")
             return default
         except Exception as e:
@@ -44,10 +73,14 @@ def load_config():
 
 def save_config(config):
     try:
-        # 确保配置目录存在
+        data = dict(config)
+        # 自动加密 API Key，不写入明文
+        plain = data.pop("tr_api_key", "")
+        if plain:
+            data["tr_api_key_enc"] = encrypt_key(plain)
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"⚠️ 保存配置失败: {e}")
 

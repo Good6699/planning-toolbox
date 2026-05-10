@@ -30,7 +30,7 @@ class SVNCompareGUI(SvnTabMixin, UploadTabMixin, WorkflowTabMixin, TranslateTabM
 
         self.config = load_config()
         saved_geom = self.config.get("window_geometry", "")
-        if saved_geom:
+        if saved_geom and self._validate_geometry(saved_geom):
             self.root.geometry(saved_geom)
         else:
             self.root.geometry("776x800+78+78")
@@ -48,6 +48,20 @@ class SVNCompareGUI(SvnTabMixin, UploadTabMixin, WorkflowTabMixin, TranslateTabM
         self._geom_timer = None
         self.root.bind("<Configure>", self._on_window_configure)
 
+    def _validate_geometry(self, geom):
+        """验证保存的窗口位置是否合理（无负尺寸、不过小）"""
+        if not geom or "x" not in geom or "+" not in geom:
+            return False
+        try:
+            size_part = geom.split("+")[0]
+            w, h = size_part.split("x")
+            w, h = int(w), int(h)
+            if w < 300 or h < 200:
+                return False
+            return True
+        except (ValueError, IndexError):
+            return False
+
     def _on_window_configure(self, event):
         if event.widget != self.root:
             return
@@ -58,7 +72,7 @@ class SVNCompareGUI(SvnTabMixin, UploadTabMixin, WorkflowTabMixin, TranslateTabM
     def _save_window_geometry(self):
         try:
             geom = self.root.geometry()
-            if geom:
+            if geom and self._validate_geometry(geom):
                 self.config["window_geometry"] = geom
                 save_config(self.config)
                 self.config = load_config()

@@ -11,6 +11,7 @@ SVN 一键对比工具
 """
 
 import argparse
+import io
 import os
 import queue
 import subprocess
@@ -19,7 +20,9 @@ import threading
 import time
 import re
 import tempfile
+import pickle
 import multiprocessing
+import zipfile
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
@@ -132,10 +135,13 @@ if sys.platform == "win32":
 # ═══════════════════════════════════════════════════════════════════════════════
 _diff_cache: Dict[Tuple[int, int], bool] = {}  # (cur, prv) → 是否有差异
 _parsed_cache: Dict[str, dict] = {}  # 解析结果缓存（内存）
+_parse_cache_lock = threading.RLock()
 _cache_hits: int = 0
 _cache_misses: int = 0
 _byte_cache_hits: int = 0
 _byte_cache_misses: int = 0
+_ss_values_cache: Dict[str, list] = {}  # SS XML hash → 值列表
+_ss_values_lock = threading.Lock()
 
 _CACHE_EXPIRY = 7 * 24 * 3600
 _MAX_PARSED_CACHE_SIZE = 30
@@ -179,10 +185,11 @@ def _save_shared_strings(crc: int, data: List[str]):
 
 def _trim_cache():
     global _parsed_cache
-    if len(_parsed_cache) > _MAX_PARSED_CACHE_SIZE:
-        keys_to_remove = list(_parsed_cache.keys())[:-(_MAX_PARSED_CACHE_SIZE//2)]
-        for key in keys_to_remove:
-            del _parsed_cache[key]
+    with _parse_cache_lock:
+        if len(_parsed_cache) > _MAX_PARSED_CACHE_SIZE:
+            keys_to_remove = list(_parsed_cache.keys())[:-(_MAX_PARSED_CACHE_SIZE//2)]
+            for key in keys_to_remove:
+                del _parsed_cache[key]
 
 # ── per-file 配置 ─────────────────────────────────────────────────────────────
 _CMP_FILE_SETTINGS: Dict[str, dict] = {}
@@ -211,6 +218,10 @@ _ROW_TAG = "{%s}row" % _XML_NS
 _CELL_TAG = "{%s}c" % _XML_NS
 _V_TAG = "{%s}v" % _XML_NS
 _COL_RE = re.compile(r'^([A-Za-z]+)')
+_SHEET_ENTRY_RE = re.compile(r'sheet(\d+)\.xml$')
+_TS_ATTR_RE = re.compile(rb't="s"')
+_SS_V_RE = re.compile(rb't="s"[^>]*><v>(\d+)</v>')
+_SS_TEXT_RE = re.compile(rb'<t[^>]*>(.*?)</t>', re.DOTALL)
 
 
 def _load_cmp_file_settings() -> None:
@@ -251,7 +262,6 @@ def _load_cmp_file_settings() -> None:
             "cmp_global_id_col": "",
             "cmp_output_cols": ""
         }
-
 
 def _get_cmp_config(fname: str) -> Tuple[int, str, Optional[List[str]]]:
     """
@@ -410,14 +420,16 @@ def warm_parse_cache() -> int:
         for fname in os.listdir(cache_dir):
             if not fname.endswith(".pkl"):
                 continue
-            if len(_parsed_cache) >= max_warm:
-                break
+            with _parse_cache_lock:
+                if len(_parsed_cache) >= max_warm:
+                    break
             fpath = os.path.join(cache_dir, fname)
             try:
                 with open(fpath, "rb") as f:
                     data = pickle.load(f)
                 cache_key = fname[:-4]  # 去掉 .pkl
-                _parsed_cache[cache_key] = data
+                with _parse_cache_lock:
+                    _parsed_cache[cache_key] = data
                 count += 1
             except Exception:
                 pass
@@ -894,7 +906,8 @@ def _col_str(cell_ref: str) -> str:
 def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                        title_rows: int = 1,
                        id_col: str = "ID",
-                       output_cols: Optional[List[str]] = None) -> Optional[dict]:
+                       output_cols: Optional[List[str]] = None,
+                       only_sheets: Optional[set] = None) -> Optional[dict]:
     """
     v8 lxml 解析引擎（后备方案）。
     """
@@ -1005,6 +1018,10 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
     header_row = title_rows
 
     for target, sheet_name in wb_map.items():
+        if only_sheets is not None:
+            m = _SHEET_ENTRY_RE.search(target)
+            if not m or f"sheet{m.group(1)}" not in only_sheets:
+                continue
         if not target.endswith(".xml"):
             target = target + ".xml"
         if not target.startswith("xl/"):
@@ -1687,7 +1704,8 @@ def _parse_excel_with_cache(raw_bytes: bytes, rev: int,
                               id_col: str = "ID",
                               output_cols: Optional[List[str]] = None,
                               fname: str = "",
-                              _return_cache_key: bool = False
+                              _return_cache_key: bool = False,
+                              only_sheets: Optional[set] = None
                               ) -> Tuple[Optional[dict], Optional[str]]:
     """
     带缓存的 Excel 解析。优先级：内存缓存 > 文件缓存 > 解析。
@@ -1699,31 +1717,38 @@ def _parse_excel_with_cache(raw_bytes: bytes, rev: int,
     if not raw_bytes:
         return (None, None) if _return_cache_key else None
 
-    # 计算内容哈希（只取前 16KB 加速），缓存 key 加入 title_rows/id_col 以区分不同参数解析结果
+    # 计算内容哈希（只取前 16KB 加速），缓存 key 加入 title_rows/id_col/only_sheets 以区分不同参数解析结果
     content_hash = _content_hash(raw_bytes)
     cache_key = _safe_cache_key(f"{content_hash}_{title_rows}_{id_col}")
+    if only_sheets is not None:
+        cache_key = _safe_cache_key(f"{cache_key}_sheets:{','.join(sorted(only_sheets))}")
 
     # 1. 查内存缓存
-    if cache_key in _parsed_cache:
-        _cache_hits += 1
-        return (_parsed_cache[cache_key], cache_key) if _return_cache_key else _parsed_cache[cache_key]
+    with _parse_cache_lock:
+        if cache_key in _parsed_cache:
+            _cache_hits += 1
+            result = _parsed_cache[cache_key]
+            return (result, cache_key) if _return_cache_key else result
 
     # 2. 查文件缓存
     disk_result = _load_parse_from_disk(cache_key)
     if disk_result is not None:
-        _cache_hits += 1
-        _parsed_cache[cache_key] = disk_result
+        with _parse_cache_lock:
+            _cache_hits += 1
+            _parsed_cache[cache_key] = disk_result
         return (disk_result, cache_key) if _return_cache_key else disk_result
 
     # 3. 未命中，解析（使用 v8 lxml 引擎，最稳定快速）
-    _cache_misses += 1
-    result = _parse_excel_lxml(raw_bytes, rev, title_rows, id_col, output_cols)
+    with _parse_cache_lock:
+        _cache_misses += 1
+    result = _parse_excel_lxml(raw_bytes, rev, title_rows, id_col, output_cols, only_sheets=only_sheets)
 
     # 写入内存缓存 + 磁盘缓存
     if result is not None:
-        _parsed_cache[cache_key] = result
+        with _parse_cache_lock:
+            _parsed_cache[cache_key] = result
+            _trim_cache()
         _save_parse_to_disk(cache_key, result)
-        _trim_cache()
 
     return (result, cache_key) if _return_cache_key else result
 
@@ -1889,6 +1914,146 @@ def _batch_check_changed_pairs(
     return results
 
 
+def _zip_get_changed_sheets(cur_bytes: bytes, prv_bytes: bytes) -> tuple:
+    try:
+        with zipfile.ZipFile(io.BytesIO(cur_bytes)) as z1, \
+             zipfile.ZipFile(io.BytesIO(prv_bytes)) as z2:
+            cur_entries = {}
+            prv_entries = {}
+
+            for info in z1.infolist():
+                if not info.is_dir():
+                    cur_entries[info.filename] = info.file_size
+
+            for info in z2.infolist():
+                if not info.is_dir():
+                    prv_entries[info.filename] = info.file_size
+
+            cur_ss = cur_entries.get('xl/sharedStrings.xml', -1)
+            prv_ss = prv_entries.get('xl/sharedStrings.xml', -1)
+            ss_changed = (cur_ss != prv_ss)
+
+            cur_ss_values = None
+            prv_ss_values = None
+
+            changed = set()
+            all_entries = set(cur_entries.keys()) | set(prv_entries.keys())
+            for entry_name in all_entries:
+                m = _SHEET_ENTRY_RE.search(entry_name)
+                if not m:
+                    continue
+                sheet_id = f"sheet{m.group(1)}"
+                cur_size = cur_entries.get(entry_name, -1)
+                prv_size = prv_entries.get(entry_name, -1)
+
+                if cur_size != prv_size:
+                    try:
+                        cur_raw = z1.read(entry_name)
+                        prv_raw = z2.read(entry_name)
+                    except KeyError:
+                        changed.add(sheet_id)
+                        continue
+                    if cur_raw != prv_raw:
+                        changed.add(sheet_id)
+                elif ss_changed:
+                    try:
+                        cur_raw = z1.read(entry_name)
+                    except KeyError:
+                        continue
+                    m2 = _TS_ATTR_RE.search(cur_raw)
+                    if not m2:
+                        continue
+                    if cur_ss_values is None and ss_changed:
+                        try:
+                            cur_ss_values = _parse_ss_values(z1)
+                            prv_ss_values = _parse_ss_values(z2)
+                        except Exception:
+                            cur_ss_values = None
+                            prv_ss_values = None
+                    if cur_ss_values is not None and prv_ss_values is not None:
+                        try:
+                            prv_raw = z2.read(entry_name)
+                        except KeyError:
+                            changed.add(sheet_id)
+                            continue
+                        if _ss_fingerprint(cur_raw, cur_ss_values) != _ss_fingerprint(prv_raw, prv_ss_values):
+                            changed.add(sheet_id)
+                    else:
+                        changed.add(sheet_id)
+
+            return changed, ss_changed
+    except Exception:
+        return set(), False
+
+
+def _parse_ss_values(zf) -> list:
+    ss_xml = zf.read("xl/sharedStrings.xml")
+    import hashlib
+    ss_hash = hashlib.md5(ss_xml).hexdigest()
+    cached = _ss_values_cache.get(ss_hash)
+    if cached is not None:
+        return cached
+    with _ss_values_lock:
+        cached = _ss_values_cache.get(ss_hash)
+        if cached is not None:
+            return cached
+        result = []
+        idx = 0
+        while idx < len(ss_xml):
+            si_end = ss_xml.find(b"</si>", idx)
+            if si_end == -1:
+                break
+            si_chunk = ss_xml[idx:si_end + 5]
+            m = _SS_TEXT_RE.search(si_chunk)
+            result.append(m.group(1).decode("utf-8", errors="replace") if m else "")
+            idx = si_end + 5
+        _ss_values_cache[ss_hash] = result
+        return result
+
+
+def _ss_fingerprint(sheet_raw: bytes, ss_values: list) -> str:
+    indices = [int(m.group(1)) for m in _SS_V_RE.finditer(sheet_raw)]
+    resolved = [ss_values[i] if i < len(ss_values) else "" for i in indices]
+    import hashlib
+    return hashlib.md5("|".join(resolved).encode()).hexdigest()
+
+
+def _cmp_task_proc(args: tuple) -> tuple:
+    cur_b, prv_b, cur, prv, fname, tr, id_col, output_cols = args
+    try:
+        if cur_b is None or prv_b is None:
+            return cur, prv, fname, [], tr, id_col, None, []
+
+        changed_sheets, ss_changed = _zip_get_changed_sheets(cur_b, prv_b)
+        if not changed_sheets and not ss_changed:
+            return cur, prv, fname, [], tr, id_col, None, []
+
+        if changed_sheets:
+            parse_only = changed_sheets
+        else:
+            parse_only = None
+
+        cur_parsed = _parse_excel_lxml(cur_b, cur, tr, id_col, output_cols, only_sheets=parse_only)
+        prv_parsed = _parse_excel_lxml(prv_b, prv, tr, id_col, output_cols, only_sheets=parse_only)
+
+        if not cur_parsed or not prv_parsed:
+            return cur, prv, fname, [], tr, id_col, None, []
+
+        diff_rows = _compare_pair(cur, prv, cur_parsed, prv_parsed, tr, id_col, output_cols)
+        hdr = cur_parsed.get("_header_data")
+        so = cur_parsed.get("_sheet_order", [])
+        return cur, prv, fname, diff_rows, tr, id_col, hdr, so
+    except BaseException as e:
+        try:
+            sys.stderr.write(f"[subprocess] {fname} r{cur}->{prv}: {type(e).__name__}: {e}\n")
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            sys.stderr.flush()
+        except Exception:
+            pass
+        return cur, prv, fname, [], tr, id_col, None, []
+
+
 def step3_download_and_compare(svn_url: str,
                                 workers: int = 6, parse_workers: int = 0,
                                 file_pairs: Optional[Dict[str, List[Tuple[int, int]]]] = None,
@@ -1908,9 +2073,7 @@ def step3_download_and_compare(svn_url: str,
 
     svn_path = _get_svn_path()
 
-    # 预声明 all_pairs_data，避免嵌套函数 _on_version_ready 导致 Python
-    # 将其视为局部变量（UnboundLocalError）
-    all_pairs_data: List[Tuple[int, int, str]] = []   # [(cur, prv, fname), ...]
+    all_pairs_data: List[Tuple[int, int, str]] = []
 
     if not file_pairs:
         _log("[警告] file_pairs 为空，无对比任务")
@@ -1963,15 +2126,13 @@ def step3_download_and_compare(svn_url: str,
     total_pairs = len(all_pair_list)
     _log(f"       共 {total_pairs} 个版本对，{len(all_revs)} 个版本")
 
-    # ── v9 流水线：Pool 启动与下载并行，pair 就绪即提交 ──────────────
+    # ── 根据系统资源动态调整线程数 ─────────────────────────────────────
+    workers = workers if workers > 0 else 6
     parse_w = parse_workers if parse_workers > 0 else cpu_count()
-    # 根据系统资源动态调整线程数，最大限制但避免内存溢出
     try:
         import psutil
-        available_memory = psutil.virtual_memory().available / (1024 * 1024 * 1024)  # GB
+        available_memory = psutil.virtual_memory().available / (1024 * 1024 * 1024)
         cpu_cores = psutil.cpu_count(logical=True)
-        
-        # 内存保护：根据可用内存限制并发数（v3阈值，基于无byte_cache后的低内存占用）
         if available_memory < 2:
             parse_w = 1
             workers = 1
@@ -1984,263 +2145,267 @@ def step3_download_and_compare(svn_url: str,
         else:
             parse_w = min(cpu_cores, 8)
             workers = min(cpu_cores, 10)
-        
-        _log(f"▶ 下载 + Pool 解析+对比（v10 进程隔离，{parse_w} 进程 + {workers} 下载线程）...")
+        _log(f"▶ 下载 + 解析+对比（{parse_w} 解析线程 + {workers} 下载线程）...")
         _log(f"       系统资源: {cpu_cores} 核心, {available_memory:.1f}GB 可用内存")
     except ImportError:
         cpu = cpu_count()
         parse_w = max(2, min(cpu, 6))
         workers = max(3, min(cpu, 8))
-        _log(f"▶ 下载 + Pool 解析+对比（v10 进程隔离，{parse_w} 进程 + {workers} 下载线程）...")
+        _log(f"▶ 下载 + 解析+对比（{parse_w} 解析线程 + {workers} 下载线程）...")
         _log(f"       系统资源: {cpu} 核心, 内存检测不可用")
     start_time = time.time()
 
     # 构建 fname → URL 映射
     fname_url_map: Dict[str, str] = {fname: url for fname, url in excel_file_list}
 
-    # ── 构建 pair 跟踪结构 ──
-    pair_queue = queue.Queue()           # 就绪的 pair 任务
-    dl_ready: Dict[Tuple[int, str], str] = {}  # (rev, fname) → 临时文件路径
-    dl_lock = threading.Lock()
-    rev_to_pairs: Dict[int, List[Tuple[int, int]]] = defaultdict(list)
-    pair_submitted = set()
-
-    # ── 构建任务列表 ──
+    # 填充 all_pairs_data
     for fname, pair_list in file_pairs.items():
         if not pair_list:
-            # 新增文件：跳过对比，后续单独处理
-            _log(f"  跳过新增文件: {fname}")
             continue
-        _log(f"  处理文件: {fname}，版本对数量: {len(pair_list)}")
         for cur, prv in pair_list:
-            _log(f"    版本对: {cur} -> {prv}")
-            idx = len(all_pairs_data)
             all_pairs_data.append((cur, prv, fname))
-            rev_to_pairs[cur].append((idx, prv))
-            rev_to_pairs[prv].append((idx, cur))
 
     expected_pairs = len(all_pairs_data)
     _log(f"       共 {expected_pairs} 个对比任务")
-    if all_pairs_data:
 
-        def _on_version_ready(rev, fname):
-            """版本下载完成后，检查关联 pair 是否就绪"""
-            with dl_lock:
-                submitted_before = len(pair_submitted)
-                _log(f"  版本 {rev} 下载完成，文件名: {fname}", level='DEBUG')
-                for idx, other_rev in rev_to_pairs.get(rev, []):
-                    if idx in pair_submitted:
-                        _log(f"  跳过已提交的任务: {idx}", level='DEBUG')
-                        continue
-                    _, _, f = all_pairs_data[idx]
-                    # pair 中的 fname 必须与当前下载的 fname 一致
-                    if f != fname:
-                        _log(f"  跳过文件名不匹配的任务: {f} != {fname}", level='DEBUG')
-                        continue
-                    other_path = dl_ready.get((other_rev, f))
-                    if other_path is None:
-                        _log(f"  跳过另一个版本未就绪的任务: {other_rev}", level='DEBUG')
-                        continue
-                    pair_submitted.add(idx)
-                    cur, prv, fname2 = all_pairs_data[idx]
-                    tr, ic, oc = _get_cmp_config(fname2)
-                    # 直接使用已保存的临时文件路径
-                    cur_path = dl_ready.get((cur, fname2))
-                    prv_path = dl_ready.get((prv, fname2))
-                    
-                    # 验证临时文件路径是否存在
-                    if not cur_path:
-                        _log(f"  提交任务失败：当前版本临时文件路径不存在: {cur}, {fname2}", level='ERROR')
-                        continue
-                    if not prv_path:
-                        _log(f"  提交任务失败：先前版本临时文件路径不存在: {prv}, {fname2}", level='ERROR')
-                        continue
-                    
-                    # 验证临时文件是否存在
-                    if not os.path.exists(cur_path):
-                        _log(f"  提交任务失败：当前版本临时文件不存在: {cur_path}", level='ERROR')
-                        continue
-                    if not os.path.exists(prv_path):
-                        _log(f"  提交任务失败：先前版本临时文件不存在: {prv_path}", level='ERROR')
-                        continue
-                    
-                    pair_queue.put((idx, cur, prv, cur_path, prv_path, tr, ic, oc, fname2))
-                    _log(f"  提交任务: {idx}, 版本对: {cur} -> {prv}, 文件名: {fname2}", level='DEBUG')
+    import hashlib as _hashlib
+    import subprocess as sp
 
-                if len(pair_submitted) == submitted_before:
-                    _log(f"  无新任务可提交", level='DEBUG')
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # Phase 1+2 流水线: 下载与解析并行
+    # ═══════════════════════════════════════════════════════════════════════════════
+    all_file_results: Dict[str, List[dict]] = {fname: [] for fname, _ in excel_file_list}
+    file_max_rev: Dict[str, int] = defaultdict(int)
+    file_header_data: Dict[str, dict] = {}
+    file_sheet_order: Dict[str, list] = {}
+    full_sheet_order: Dict[str, list] = {}
 
+    _log(f"  Phase 1+2: 下载与解析并行 (下载 {workers} 线程 + 解析 {os.cpu_count()} 子进程)...")
 
-        def _download_and_enqueue():
-            """下载线程：按 (rev, fname) 下载版本并在就绪时提交 pair 到队列"""
-            # 收集所有需要下载的 (rev, fname) 组合（去重）
-            dl_tasks_set: set = set()
-            for idx2, (cur, prv, fname2) in enumerate(all_pairs_data):
-                dl_tasks_set.add((cur, fname2))
-                dl_tasks_set.add((prv, fname2))
-            dl_tasks = sorted(dl_tasks_set)
-            dl_done = 0
-            dl_total = len(dl_tasks)
+    worker_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_cmp_worker.py")
 
-            # 字节缓存命中计数（跨线程累加需加锁）
-            byte_cache_hits = [0]
-            byte_cache_lock = threading.Lock()
+    # 构建 dl_tasks（去重版本列表）
+    dl_tasks_set: set = set()
+    for cur, prv, fname in all_pairs_data:
+        dl_tasks_set.add((cur, fname))
+        dl_tasks_set.add((prv, fname))
+    dl_tasks = sorted(dl_tasks_set)
+    dl_total = len(dl_tasks)
 
-            def _dl(rev, fname):
-                # ── 字节缓存优先：命中则跳过 SVN 下载 ──────────────────────────
-                import hashlib
-                safe_fname = hashlib.md5(fname.encode()).hexdigest()[:12]
+    # 构建 pair_index: {(rev, fname) -> [(pair_idx, cur, prv, fname), ...]}
+    pair_index: Dict[Tuple[int, str], list] = {}
+    for pi, (cur, prv, fname) in enumerate(all_pairs_data):
+        for task_key in [(cur, fname), (prv, fname)]:
+            pair_index.setdefault(task_key, []).append((pi, cur, prv, fname))
+
+    # 下载缓存路径映射: {(rev, fname) -> cache_file_path} + 完成标记
+    dl_cache_path: Dict[Tuple[int, str], str] = {}
+    dl_done_set: set = set()
+    dl_failed_count = 0
+    pending_pairs: list = []  # 已就绪等待提交的版本对
+    pending_lock = threading.Lock()
+
+    max_procs = os.cpu_count()
+    running: Dict[sp.Popen, tuple] = {}
+    done_count = 0
+    total_pairs = len(all_pairs_data)
+
+    def _get_cache_path(rev: int, fname: str) -> str:
+        safe_fname = _hashlib.md5(fname.encode()).hexdigest()[:12]
+        return os.path.join(_get_byte_cache_dir(), f"{safe_fname}_{rev}.bin")
+
+    # 由 pair_index 找到版本对，核对是否两方都已下载就绪
+    def _check_pairs(rev: int, fname: str):
+        nonlocal dl_failed_count
+        entries = pair_index.get((rev, fname), [])
+        if not entries:
+            return
+        cur_path = dl_cache_path.get((rev, fname), "")
+        success = os.path.exists(cur_path) and os.path.getsize(cur_path) > 0
+        if not success:
+            dl_failed_count += 1
+            return
+        with pending_lock:
+            for pi, cur, prv, fname_p in entries:
+                cur_rev_path = dl_cache_path.get((cur, fname_p), "")
+                prv_rev_path = dl_cache_path.get((prv, fname_p), "")
+                if cur_rev_path and os.path.exists(cur_rev_path) and os.path.getsize(cur_rev_path) > 0 \
+                   and prv_rev_path and os.path.exists(prv_rev_path) and os.path.getsize(prv_rev_path) > 0:
+                    pending_pairs.append((cur, prv, fname_p, cur_rev_path, prv_rev_path))
+
+    def _dl_task(rev: int, fname: str):
+        cache_file = _get_cache_path(rev, fname)
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "rb") as f:
+                    data = f.read()
+                return rev, fname, cache_file, data is not None
+            except Exception:
+                pass
+
+        base = fname_url_map.get(fname, svn_url)
+        if base.endswith("/" + fname) or base.endswith(fname):
+            url = base
+        else:
+            url = base.rstrip("/") + "/" + fname
+
+        _, data = _download_worker((svn_path, url, rev, svn_user, svn_pass))
+        if data:
+            try:
                 cache_dir = _get_byte_cache_dir()
-                cache_file = os.path.join(cache_dir, f"{safe_fname}_{rev}.bin")
-                if os.path.exists(cache_file):
-                    with byte_cache_lock:
-                        byte_cache_hits[0] += 1
-                    _log(f"  字节缓存命中: {cache_file}", level='DEBUG')
-                    return rev, cache_file, fname, ""
-                base = fname_url_map.get(fname, base_url_fallback)
-                if base.endswith("/" + fname) or base.endswith(fname):
-                    url = base
-                else:
-                    url = base.rstrip("/") + "/" + fname
-                r, data = _download_worker((svn_path, url, rev, svn_user, svn_pass))
-                if data:
-                    _save_byte_to_cache(fname, rev, data)
-                    if os.path.exists(cache_file):
-                        return rev, cache_file, fname, url
-                    _log(f"  下载成功但缓存文件不存在: {cache_file}", level='ERROR')
-                    return rev, None, fname, url
-                else:
-                    return rev, None, fname, url
+                os.makedirs(cache_dir, exist_ok=True)
+                with open(cache_file, "wb") as f:
+                    f.write(data)
+            except Exception:
+                pass
+        return rev, fname, cache_file, data is not None
 
-            # fallback URL（用于 fname_url_map 中找不到的情况）
-            # 如果 excel_file_list[0] 的 URL 末尾已含文件名（直接文件 URL），
-            # 则去掉文件名得到目录 URL，以免拼接时产生 fname/fname
-            if excel_file_list:
-                first_url = excel_file_list[0][1]
-                first_fname = excel_file_list[0][0]
-                if first_url.endswith("/" + first_fname) or first_url.endswith(first_fname):
-                    base_url_fallback = first_url[:first_url.rfind("/") + 1]
-                else:
-                    base_url_fallback = first_url
-            else:
-                base_url_fallback = svn_url
+    dl_start_time = time.time()
+    dl_done_count = 0
 
-            _log(f"  开始下载 {dl_total} 个版本...")
-            with ThreadPoolExecutor(max_workers=workers) as ex:
-                futures = {ex.submit(_dl, rev, fname): (rev, fname) for rev, fname in dl_tasks}
-                for future in as_completed(futures):
-                    try:
-                        rev, temp_path, fname, url = future.result()
-                        dl_done += 1
-                        if temp_path:
-                            with dl_lock:
-                                dl_ready[(rev, fname)] = temp_path
-                            _on_version_ready(rev, fname)
-                        else:
-                            _log(f"  下载失败: 版本 {rev}, 文件 {fname}", level='WARNING')
+    with ThreadPoolExecutor(max_workers=workers) as dl_ex:
+        dl_futures = {dl_ex.submit(_dl_task, rev, fname): (rev, fname) for rev, fname in dl_tasks}
 
-                        if dl_done % 5 == 0 or dl_done == dl_total:
-                            ready = len(pair_submitted)
-                            hits = byte_cache_hits[0]
-                            cache_hint = f"，字节缓存命中 {hits}" if hits > 0 else ""
-                            _log(f"  下载: {dl_done}/{dl_total}，就绪 pair: {ready}/{expected_pairs}{cache_hint}")
-                    except Exception as e:
-                        _log(f"  下载任务异常: {e}", level='ERROR')
-                        dl_done += 1
-            pair_queue.put(None)  # 哨兵
+        while done_count < total_pairs or dl_done_count < dl_total:
+            # 1) 处理已完成的下载
+            just_done = []
+            for fut in list(dl_futures):
+                if fut.done():
+                    rev, fname, cache_path, ok = fut.result()
+                    dl_cache_path[(rev, fname)] = cache_path
+                    dl_done_count += 1
+                    just_done.append(fut)
+                    if ok:
+                        _check_pairs(rev, fname)
+            for fut in just_done:
+                del dl_futures[fut]
+            if just_done:
+                if dl_done_count % 10 == 0 or dl_done_count == dl_total:
+                    _log(f"    下载进度: {dl_done_count}/{dl_total}")
 
-        def _task_generator():
-            """从 pair_queue 延迟产出任务（Pool 启动时队列为空，等待下载）"""
-            _log("  任务生成器已启动，等待任务...", level='DEBUG')
-            task_count = 0
-            while True:
+            # 2) 启动新子进程（pending_pairs → subprocess）
+            while len(running) < max_procs and pending_pairs:
+                with pending_lock:
+                    if not pending_pairs:
+                        break
+                    cur, prv, fname, cur_path, prv_path = pending_pairs.pop(0)
+
+                # workbook 轻量解析（首次遇到该文件时）
+                if fname not in full_sheet_order:
+                    for path in [cur_path, prv_path]:
+                        try:
+                            with open(path, "rb") as f:
+                                sample_b = f.read()
+                            if sample_b:
+                                with zipfile.ZipFile(io.BytesIO(sample_b)) as zf:
+                                    wb_xml = zf.read("xl/workbook.xml")
+                                    wb_root = etree.fromstring(wb_xml)
+                                    _XML_NS_WB = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                                    sheet_names = []
+                                    for sh in wb_root.iter("{%s}sheet" % _XML_NS_WB):
+                                        nm = sh.get("name", "")
+                                        if nm:
+                                            sheet_names.append(nm)
+                                    full_sheet_order[fname] = sheet_names
+                                    break
+                        except Exception:
+                            pass
+                    if fname in full_sheet_order:
+                        file_sheet_order[fname] = full_sheet_order[fname]
+
+                tr, id_col, output_cols = _get_cmp_config(fname)
+
+                arg_fd, arg_path = tempfile.mkstemp(suffix=".pkl", prefix="cmp_arg_")
+                res_fd, res_path = tempfile.mkstemp(suffix=".pkl", prefix="cmp_res_")
+
+                args_tuple = (cur_path, prv_path, cur, prv, fname, tr, id_col, output_cols)
+                with os.fdopen(arg_fd, "wb") as f:
+                    pickle.dump(args_tuple, f)
+
                 try:
-                    task = pair_queue.get(timeout=60)
-                    if task is None:
-                        _log("  收到哨兵，任务生成器结束", level='DEBUG')
-                        break
-                    task_count += 1
-                    _log(f"  生成任务 {task_count}: {task[0]} - 版本对 {task[1]} -> {task[2]}", level='DEBUG')
-                    yield task
-                except queue.Empty:
-                    _log("  任务队列空，等待中...", level='DEBUG')
-                    # 检查下载线程是否还在运行
-                    if not dl_thread.is_alive():
-                        _log("  下载线程已结束，任务生成器结束", level='DEBUG')
-                        break
+                    proc = sp.Popen(
+                        [sys.executable, worker_script, arg_path, res_path],
+                        stdin=sp.DEVNULL, stdout=sp.DEVNULL, stderr=sp.PIPE
+                    )
+                    os.close(res_fd)
+                    running[proc] = (arg_path, res_path, cur, prv, fname, time.time())
+                except Exception:
+                    os.close(res_fd)
+                    for p in [arg_path, res_path]:
+                        try:
+                            os.unlink(p)
+                        except Exception:
+                            pass
 
-        # ── 启动：下载线程 + Pool 并行 ──
-        dl_thread = threading.Thread(target=_download_and_enqueue, daemon=True)
-        dl_thread.start()
+            # 3) 轮询运行中的子进程
+            to_delete = []
+            for proc in list(running):
+                rc = proc.poll()
+                if rc is None:
+                    if time.time() - running[proc][5] > 120:
+                        proc.kill()
+                        rc = proc.poll()
+                    else:
+                        continue
 
-        all_file_results: Dict[str, List[dict]] = {fname: [] for fname, _ in excel_file_list}
-        done_count = 0
-        # 跟踪每个文件最新版本的 header 数据（用于输出表头）
-        file_max_rev: Dict[str, int] = defaultdict(int)
-        file_header_data: Dict[str, dict] = {}
-        file_sheet_order: Dict[str, list] = {}
+                arg_path, res_path, cur, prv, fname, _ = running[proc]
+                to_delete.append(proc)
 
-        # 监控下载线程状态
-        def monitor_download():
-            while dl_thread.is_alive():
-                import time
-                time.sleep(30)
-                with dl_lock:
-                    ready_pairs = len(pair_submitted)
-                    ready_versions = len(dl_ready)
-                _log(f"  下载线程状态: 活跃，就绪版本: {ready_versions}，就绪任务: {ready_pairs}")
+                try:
+                    if rc == 0 and os.path.getsize(res_path) > 0:
+                        with open(res_path, "rb") as f:
+                            result = pickle.load(f)
+                        _cur, _prv, _fname, diff_rows, tr, id_col, hdr, so = result
+                        all_file_results[_fname].extend(diff_rows)
+                        if hdr and _cur > file_max_rev[_fname]:
+                            file_max_rev[_fname] = _cur
+                            file_header_data[_fname] = hdr
+                        if so and _fname not in full_sheet_order and not file_sheet_order.get(_fname):
+                            file_sheet_order[_fname] = so
+                    else:
+                        stderr_data = proc.stderr.read() if proc.stderr else b""
+                        _log(f"  子进程失败 r{cur}->{prv} {fname}: exit={rc}, stderr={stderr_data[:200]}", level='WARNING')
+                except Exception as e:
+                    _log(f"  收集结果失败 r{cur}->{prv} {fname}: {e}", level='WARNING')
 
-        monitor_thread = threading.Thread(target=monitor_download, daemon=True)
-        monitor_thread.start()
-
-        with Pool(processes=parse_w, maxtasksperchild=50) as pool:
-            for fname, diff_rows, cur_rev, prv_rev, title_rows, id_col, temp_paths, hdr, sheet_order in pool.imap_unordered(
-                _process_pair_bytes_worker, _task_generator(), chunksize=1
-            ):
-                all_file_results[fname].extend(diff_rows)
-                # 跟踪最新版本的表头数据
-                if hdr and cur_rev > file_max_rev[fname]:
-                    file_max_rev[fname] = cur_rev
-                    file_header_data[fname] = hdr
-                if sheet_order and not file_sheet_order.get(fname):
-                    file_sheet_order[fname] = sheet_order
                 done_count += 1
-                if done_count == 1 or done_count % 5 == 0 or done_count == expected_pairs:
-                    _log(f"  对比进度: {done_count}/{expected_pairs}")
-                if done_count % 2 == 0:
-                    import gc
-                    gc.collect()
+                if done_count % 5 == 0 or done_count == total_pairs:
+                    elapsed = time.time() - start_time
+                    _log(f"    对比进度: {done_count}/{total_pairs} (耗时 {elapsed:.0f}s)")
 
-        dl_thread.join()
-        _log("  下载线程已完成")
-        
-        # 释放所有中间数据结构内存
-        global _parsed_cache
-        _parsed_cache.clear()
-        dl_ready.clear()
-        rev_to_pairs.clear()
-        pair_submitted.clear()
-        import gc
-        gc.collect()
-        
-        total_time = time.time() - start_time
-        # 打印解析缓存统计
-        total = _cache_hits + _cache_misses
-        if total > 0:
-            _log(f"       [缓存] 命中 {_cache_hits}/{total}，未命中 {_cache_misses}/{total}")
-        _log(f"       总耗时: {total_time:.1f}s")
+                for p in [arg_path, res_path]:
+                    try:
+                        os.unlink(p)
+                    except Exception:
+                        pass
 
-        # 每个文件的最终汇总 + 去重
-        for fname, file_results in all_file_results.items():
-            # 按ID去重（排序已在 write_excel 中按 sheet+ID数字进行）
-            file_results = _dedupe_by_id(file_results)
-            all_file_results[fname] = file_results
-            if file_results:
-                _log(f"  {fname}: {len(file_results)} 条差异")
-        
+            for proc in to_delete:
+                del running[proc]
 
+            if not just_done and not to_delete and len(running) >= max_procs:
+                time.sleep(0.2)
 
-    # 不处理新增文件，让 main 函数来处理
+        dl_ex.shutdown(wait=False)
+
+    dl_elapsed = time.time() - dl_start_time
+    dl_success = dl_total - dl_failed_count
+    _log(f"  下载完成: {dl_success}/{dl_total} 成功 ({dl_elapsed:.0f}s)")
+
+    total_time = time.time() - start_time
+    _log(f"       总耗时: {total_time:.1f}s")
+
+    for fname, file_results in all_file_results.items():
+        file_results = _dedupe_by_id(file_results)
+        all_file_results[fname] = file_results
+        if file_results:
+            _log(f"  {fname}: {len(file_results)} 条差异")
+
+    global _parsed_cache
+    _parsed_cache.clear()
+    dl_cache_path.clear()
+    import gc
+    gc.collect()
+
     return all_file_results, dict(file_header_data), dict(file_sheet_order)
 
 

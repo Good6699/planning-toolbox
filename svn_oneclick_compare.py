@@ -221,7 +221,6 @@ _COL_RE = re.compile(r'^([A-Za-z]+)')
 _SHEET_ENTRY_RE = re.compile(r'sheet(\d+)\.xml$')
 _TS_ATTR_RE = re.compile(rb't="s"')
 _SS_V_RE = re.compile(rb't="s"[^>]*><v>(\d+)</v>')
-_SS_TEXT_RE = re.compile(rb'<t[^>]*>(.*?)</t>', re.DOTALL)
 
 
 def _load_cmp_file_settings() -> None:
@@ -907,7 +906,8 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                        title_rows: int = 1,
                        id_col: str = "ID",
                        output_cols: Optional[List[str]] = None,
-                       only_sheets: Optional[set] = None) -> Optional[dict]:
+                       only_sheets: Optional[set] = None,
+                       ss_values: Optional[List[str]] = None) -> Optional[dict]:
     """
     v8 lxml 解析引擎（后备方案）。
     """
@@ -932,46 +932,49 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
             _log(f"r{rev} ZIP 解析失败: {e}", level='ERROR')
         return None
 
-    # ── sharedStrings（lxml）──────────────────────────────────────────────────
+    # ── sharedStrings ──────────────────────────────────────────────────────
     shared_strings: List[str] = []
-    try:
-        MAX_SS_SIZE = 50 * 1024 * 1024
-        ss_info = zf.getinfo("xl/sharedStrings.xml")
-        if ss_info.file_size > MAX_SS_SIZE:
-            if LOG_LEVEL <= LOG_LEVELS['WARNING']:
-                _log(f"r{rev} sharedStrings.xml 过大 ({ss_info.file_size/1024/1024:.1f}MB)，跳过解析", level='WARNING')
-            return None
+    if ss_values is not None:
+        shared_strings = ss_values
+    else:
+        try:
+            MAX_SS_SIZE = 50 * 1024 * 1024
+            ss_info = zf.getinfo("xl/sharedStrings.xml")
+            if ss_info.file_size > MAX_SS_SIZE:
+                if LOG_LEVEL <= LOG_LEVELS['WARNING']:
+                    _log(f"r{rev} sharedStrings.xml 过大 ({ss_info.file_size/1024/1024:.1f}MB)，跳过解析", level='WARNING')
+                return None
 
-        ss_crc = ss_info.CRC
-        cached = _load_shared_strings(ss_crc)
-        if cached is not None:
-            shared_strings = cached
+            ss_crc = ss_info.CRC
+            cached = _load_shared_strings(ss_crc)
+            if cached is not None:
+                shared_strings = cached
+                if LOG_LEVEL <= LOG_LEVELS['DEBUG']:
+                    _log(f"r{rev} 共享字符串缓存命中 ({len(shared_strings)} 条)", level='DEBUG')
+            else:
+                ss_xml = zf.read("xl/sharedStrings.xml")
+                ss_root = etree.fromstring(ss_xml)
+                MAX_SHARED_STRINGS = 1000000
+                count = 0
+                for si in ss_root:
+                    if count >= MAX_SHARED_STRINGS:
+                        if LOG_LEVEL <= LOG_LEVELS['WARNING']:
+                            _log(f"r{rev} 共享字符串数量超过限制，跳过解析", level='WARNING')
+                        return None
+                    t_els = si.findall(".//{%s}t" % _XML_NS)
+                    shared_strings.append("".join(t.text or "" for t in t_els))
+                    count += 1
+                _save_shared_strings(ss_crc, shared_strings)
+                if LOG_LEVEL <= LOG_LEVELS['DEBUG']:
+                    _log(f"r{rev} 成功加载 {len(shared_strings)} 个共享字符串", level='DEBUG')
+        except KeyError:
             if LOG_LEVEL <= LOG_LEVELS['DEBUG']:
-                _log(f"r{rev} 共享字符串缓存命中 ({len(shared_strings)} 条)", level='DEBUG')
-        else:
-            ss_xml = zf.read("xl/sharedStrings.xml")
-            ss_root = etree.fromstring(ss_xml)
-            MAX_SHARED_STRINGS = 1000000
-            count = 0
-            for si in ss_root:
-                if count >= MAX_SHARED_STRINGS:
-                    if LOG_LEVEL <= LOG_LEVELS['WARNING']:
-                        _log(f"r{rev} 共享字符串数量超过限制，跳过解析", level='WARNING')
-                    return None
-                t_els = si.findall(".//{%s}t" % _XML_NS)
-                shared_strings.append("".join(t.text or "" for t in t_els))
-                count += 1
-            _save_shared_strings(ss_crc, shared_strings)
-            if LOG_LEVEL <= LOG_LEVELS['DEBUG']:
-                _log(f"r{rev} 成功加载 {len(shared_strings)} 个共享字符串", level='DEBUG')
-    except KeyError:
-        if LOG_LEVEL <= LOG_LEVELS['DEBUG']:
-            _log("r{rev} 没有共享字符串表", level='DEBUG')
-        pass
-    except MemoryError:
-        if LOG_LEVEL <= LOG_LEVELS['WARNING']:
-            _log(f"r{rev} 解析 sharedStrings.xml 内存不足", level='WARNING')
-        return None
+                _log("r{rev} 没有共享字符串表", level='DEBUG')
+            pass
+        except MemoryError:
+            if LOG_LEVEL <= LOG_LEVELS['WARNING']:
+                _log(f"r{rev} 解析 sharedStrings.xml 内存不足", level='WARNING')
+            return None
 
     # ── workbook.xml → sheet id → rId → filename（lxml）────────────────────────
     wb_map: Dict[str, str] = {}
@@ -1981,9 +1984,9 @@ def _zip_get_changed_sheets(cur_bytes: bytes, prv_bytes: bytes) -> tuple:
                     else:
                         changed.add(sheet_id)
 
-            return changed, ss_changed
+            return changed, ss_changed, cur_ss_values, prv_ss_values
     except Exception:
-        return set(), False
+        return set(), False, None, None
 
 
 def _parse_ss_values(zf) -> list:
@@ -1997,16 +2000,11 @@ def _parse_ss_values(zf) -> list:
         cached = _ss_values_cache.get(ss_hash)
         if cached is not None:
             return cached
+        ss_root = etree.fromstring(ss_xml)
         result = []
-        idx = 0
-        while idx < len(ss_xml):
-            si_end = ss_xml.find(b"</si>", idx)
-            if si_end == -1:
-                break
-            si_chunk = ss_xml[idx:si_end + 5]
-            m = _SS_TEXT_RE.search(si_chunk)
-            result.append(m.group(1).decode("utf-8", errors="replace") if m else "")
-            idx = si_end + 5
+        for si in ss_root:
+            t_els = si.findall(".//{%s}t" % _XML_NS)
+            result.append("".join(t.text or "" for t in t_els))
         _ss_values_cache[ss_hash] = result
         return result
 
@@ -2024,7 +2022,7 @@ def _cmp_task_proc(args: tuple) -> tuple:
         if cur_b is None or prv_b is None:
             return cur, prv, fname, [], tr, id_col, None, []
 
-        changed_sheets, ss_changed = _zip_get_changed_sheets(cur_b, prv_b)
+        changed_sheets, ss_changed, cur_ss_values, prv_ss_values = _zip_get_changed_sheets(cur_b, prv_b)
         if not changed_sheets and not ss_changed:
             return cur, prv, fname, [], tr, id_col, None, []
 
@@ -2033,8 +2031,8 @@ def _cmp_task_proc(args: tuple) -> tuple:
         else:
             parse_only = None
 
-        cur_parsed = _parse_excel_lxml(cur_b, cur, tr, id_col, output_cols, only_sheets=parse_only)
-        prv_parsed = _parse_excel_lxml(prv_b, prv, tr, id_col, output_cols, only_sheets=parse_only)
+        cur_parsed = _parse_excel_lxml(cur_b, cur, tr, id_col, output_cols, only_sheets=parse_only, ss_values=cur_ss_values)
+        prv_parsed = _parse_excel_lxml(prv_b, prv, tr, id_col, output_cols, only_sheets=parse_only, ss_values=prv_ss_values)
 
         if not cur_parsed or not prv_parsed:
             return cur, prv, fname, [], tr, id_col, None, []

@@ -22,6 +22,7 @@ Thumbs.db
 __ss_cache/
 __byte_cache/
 __parse_cache/
+__sheet_cache/
 .proto_cache/
 graphify-out/
 _env_cache.json
@@ -40,6 +41,7 @@ _gfx_err.txt
 vbs_debug.txt
 svn_combo_out.txt
 svn_out_test.txt
+临时辅助文件/
 
 # Scratch / temp scripts
 _*.py
@@ -73,6 +75,7 @@ excel导出数据/
 *.bak2
 *.bak3
 backup_toolbox_20260509/
+_github_backup/
 策划工具箱_分发包.zip
 
 # Generated reports / task docs
@@ -104,3 +107,16 @@ memory/
 _git_*
 _check_*
 _create_*
+
+# Web App
+templates/
+web_app.py
+web_launcher.py
+version.txt
+*.last-session.json
+*.bat
+*.exe
+*.js
+*.ps1
+策划工具箱UI设计指导*.txt
+*safe_rm_aliases*

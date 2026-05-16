@@ -650,32 +650,15 @@ class SvnTabMixin:
         ttk.Entry(cmp_frame, textvariable=cmp_title_var, width=40
                  ).grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=3)
 
-        # 对比ID列
-        tk.Label(cmp_frame, text="对比ID列：",
-                 font=("微软雅黑", 9)).grid(row=2, column=0, sticky="w", pady=3)
-        cmp_id_var = tk.StringVar(value=self.config.get("cmp_id_col", "::ID::"))
-        ttk.Entry(cmp_frame, textvariable=cmp_id_var, width=40
-                 ).grid(row=2, column=1, sticky="ew", padx=(8, 0), pady=3)
-
-        # 全局对比ID
-        tk.Label(cmp_frame, text="全局对比ID：",
-                 font=("微软雅黑", 9)).grid(row=3, column=0, sticky="w", pady=3)
-        global_id_var = tk.StringVar(value=self.config.get("cmp_global_id_col", ""))
-        ttk.Entry(cmp_frame, textvariable=global_id_var, width=40
-                 ).grid(row=3, column=1, sticky="ew", padx=(8, 0), pady=3)
-        tk.Label(cmp_frame, text="（留空=自动查找）",
-                 font=("微软雅黑", 8), fg="#888").grid(
-                     row=4, column=1, sticky="w", padx=(8, 0), pady=(0, 2))
-
         # 输出列
         tk.Label(cmp_frame, text="输出列：",
-                 font=("微软雅黑", 9)).grid(row=5, column=0, sticky="w", pady=3)
+                 font=("微软雅黑", 9)).grid(row=2, column=0, sticky="w", pady=3)
         cmp_cols_var = tk.StringVar(value=self.config.get("cmp_output_cols", ""))
         ttk.Entry(cmp_frame, textvariable=cmp_cols_var, width=40
-                 ).grid(row=5, column=1, sticky="ew", padx=(8, 0), pady=3)
+                 ).grid(row=2, column=1, sticky="ew", padx=(8, 0), pady=3)
         tk.Label(cmp_frame, text="（逗号分隔，留空=全部）",
                  font=("微软雅黑", 8), fg="#888").grid(
-                     row=6, column=1, sticky="w", padx=(8, 0), pady=(0, 2))
+                     row=3, column=1, sticky="w", padx=(8, 0), pady=(0, 2))
 
         # ── 切换文件名 → 加载配对字段 ────────────────────
         def _on_cmp_file_changed(*_):
@@ -686,13 +669,9 @@ class SvnTabMixin:
             else:
                 vals = {
                     "cmp_title_rows": self.config.get("cmp_title_rows", "1"),
-                    "cmp_id_col": self.config.get("cmp_id_col", "::ID::"),
-                    "cmp_global_id_col": self.config.get("cmp_global_id_col", ""),
                     "cmp_output_cols": self.config.get("cmp_output_cols", "")
                 }
             cmp_title_var.set(vals["cmp_title_rows"])
-            cmp_id_var.set(vals["cmp_id_col"])
-            global_id_var.set(vals.get("cmp_global_id_col", ""))
             cmp_cols_var.set(vals["cmp_output_cols"])
             _update_del_btn_state()
 
@@ -700,26 +679,19 @@ class SvnTabMixin:
         def _save_preset():
             name = cmp_file_var.get().strip()
             title_rows = cmp_title_var.get().strip() or "1"
-            id_col = cmp_id_var.get().strip() or "::ID::"
-            global_id = global_id_var.get().strip()
             output_cols = cmp_cols_var.get().strip()
             # 写全局
             self.config["cmp_title_rows"] = title_rows
-            self.config["cmp_id_col"] = id_col
             self.config["cmp_output_cols"] = output_cols
-            # 只有在选择了文件名时，才保存全局对比ID到该文件名的预设
             if name:
                 pres = self.config.get("cmp_file_presets", [])
                 sett = dict(self.config.get("cmp_file_settings", {}))
-                sett[name] = {"cmp_title_rows": title_rows, "cmp_id_col": id_col, "cmp_global_id_col": global_id, "cmp_output_cols": output_cols}
+                sett[name] = {"cmp_title_rows": title_rows, "cmp_output_cols": output_cols}
                 if name not in pres:
                     pres.insert(0, name)
                 self.config["cmp_file_presets"] = pres[:50]
                 self.config["cmp_file_settings"] = {k: sett[k] for k in list(sett)[:50]}
                 cmp_file_cmb["values"] = [""] + self.config["cmp_file_presets"]
-            else:
-                # 没有选择文件名时，保存全局对比ID为全局默认值
-                self.config["cmp_global_id_col"] = global_id
             save_config(self.config)
             self.config = load_config()
             self._log(f"✅ 已保存预设 [{name}]" if name else "✅ 全局默认值已保存", "ok")
@@ -740,8 +712,6 @@ class SvnTabMixin:
             cmp_file_cmb["values"] = [""] + pres
             cmp_file_var.set("")
             cmp_title_var.set("1")
-            cmp_id_var.set("::ID::")
-            global_id_var.set("")
             cmp_cols_var.set("")
             save_config(self.config)
             self.config = load_config()
@@ -792,8 +762,6 @@ class SvnTabMixin:
                 sett = dict(self.config.get("cmp_file_settings", {}))
                 sett[cmp_file] = {
                     "cmp_title_rows": cmp_title_var.get().strip() or "1",
-                    "cmp_id_col": cmp_id_var.get().strip() or "::ID::",
-                    "cmp_global_id_col": global_id_var.get().strip(),
                     "cmp_output_cols": cmp_cols_var.get().strip()
                 }
                 self.config["cmp_file_settings"] = sett
@@ -801,8 +769,6 @@ class SvnTabMixin:
                 if "cmp_file" in self.config:
                     del self.config["cmp_file"]
                 self.config["cmp_title_rows"] = cmp_title_var.get().strip() or "1"
-                self.config["cmp_id_col"] = cmp_id_var.get().strip() or "::ID::"
-                self.config["cmp_global_id_col"] = global_id_var.get().strip()
                 self.config["cmp_output_cols"] = cmp_cols_var.get().strip()
             save_config(self.config)
             self.config = load_config()
@@ -948,11 +914,6 @@ class SvnTabMixin:
                     cmd.extend(["--keyword", keyword])
                 if author:
                     cmd.extend(["--author", author])
-                
-                # 添加全局对比ID参数
-                global_id = self.config.get("cmp_global_id_col", "").strip()
-                if global_id:
-                    cmd.extend(["--global-cmp-id", global_id])
                 
                 # 添加SVN认证参数
                 svn_user = self.config.get("svn_user", "").strip()

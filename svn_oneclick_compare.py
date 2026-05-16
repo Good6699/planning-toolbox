@@ -11,6 +11,8 @@ SVN 一键对比工具
 """
 
 import argparse
+import atexit
+import gc
 import io
 import os
 import queue
@@ -143,6 +145,9 @@ _byte_cache_misses: int = 0
 _ss_values_cache: Dict[str, list] = {}  # SS XML hash → 值列表
 _ss_values_lock = threading.Lock()
 
+_running_subprocesses: list = []  # atexit 清理：运行中的子进程
+_pending_tempfiles: list = []  # atexit 清理：待删除的临时文件
+
 _CACHE_EXPIRY = 7 * 24 * 3600
 _MAX_PARSED_CACHE_SIZE = 30
 
@@ -191,6 +196,26 @@ def _trim_cache():
             for key in keys_to_remove:
                 del _parsed_cache[key]
 
+def _cleanup_on_exit():
+    for proc in _running_subprocesses:
+        try:
+            proc.kill()
+            proc.communicate(timeout=5)
+        except Exception:
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                pass
+    for p in _pending_tempfiles:
+        try:
+            os.unlink(p)
+        except OSError:
+            pass
+    _parsed_cache.clear()
+    gc.collect()
+
+atexit.register(_cleanup_on_exit)
+
 # ── per-file 配置 ─────────────────────────────────────────────────────────────
 _CMP_FILE_SETTINGS: Dict[str, dict] = {}
 
@@ -221,6 +246,29 @@ _COL_RE = re.compile(r'^([A-Za-z]+)')
 _SHEET_ENTRY_RE = re.compile(r'sheet(\d+)\.xml$')
 _TS_ATTR_RE = re.compile(rb't="s"')
 _SS_V_RE = re.compile(rb't="s"[^>]*><v>(\d+)</v>')
+_IS_TAG = "{%s}is" % _XML_NS
+_INLINE_T_TAG = "{%s}t" % _XML_NS
+
+
+def _cell_text(cell, shared_strings):
+    """提取单元格文本，处理 t="s" / t="inlineStr" / 无标记 三种类型"""
+    t_attr = cell.get("t", "")
+    if t_attr == "inlineStr":
+        is_el = cell.find(_IS_TAG)
+        if is_el is not None:
+            t_el = is_el.find(_INLINE_T_TAG)
+            if t_el is not None:
+                return t_el.text or ""
+        return ""
+    v_el = cell.find(_V_TAG)
+    if t_attr == "s" and v_el is not None and v_el.text:
+        try:
+            return shared_strings[int(v_el.text)]
+        except (ValueError, IndexError):
+            return ""
+    if v_el is not None and v_el.text:
+        return v_el.text
+    return ""
 
 
 def _load_cmp_file_settings() -> None:
@@ -902,6 +950,42 @@ def _col_str(cell_ref: str) -> str:
     return m.group(1) if m else ""
 
 
+def _collect_sheet_headers(zf, target: str, sheet_name: str, header_row: int,
+                            shared_strings: list, result: dict) -> None:
+    target_fixed = target if target.endswith(".xml") else target + ".xml"
+    if not target_fixed.startswith("xl/"):
+        target_fixed = "xl/" + target_fixed
+    try:
+        sheet_fh = zf.open(target_fixed)
+    except KeyError:
+        return
+    try:
+        context = etree.iterparse(sheet_fh, events=('end',), tag=_ROW_TAG)
+    except Exception:
+        sheet_fh.close()
+        return
+    if "_header_data" not in result:
+        result["_header_data"] = {}
+    if sheet_name not in result["_header_data"]:
+        result["_header_data"][sheet_name] = {}
+    for ev, row in context:
+        row_num = int(row.get("r", 0))
+        if row_num > header_row + 1:
+            row.clear()
+            break
+        hr_data = {}
+        for cell in row:
+            if cell.tag != _CELL_TAG:
+                continue
+            col = _col_str(cell.get("r", ""))
+            val = _cell_text(cell, shared_strings)
+            if val.strip():
+                hr_data[col] = val
+        result["_header_data"][sheet_name][row_num] = hr_data
+        row.clear()
+    sheet_fh.close()
+
+
 def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                        title_rows: int = 1,
                        id_col: str = "ID",
@@ -1024,6 +1108,7 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
         if only_sheets is not None:
             m = _SHEET_ENTRY_RE.search(target)
             if not m or f"sheet{m.group(1)}" not in only_sheets:
+                _collect_sheet_headers(zf, target, sheet_name, header_row, shared_strings, result)
                 continue
         if not target.endswith(".xml"):
             target = target + ".xml"
@@ -1077,16 +1162,7 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                         found_sc_hdr = global_sc_hdr
                         found_sub_hdr = global_sub_hdr
                         for col, cell in header_cells:
-                            t_attr = cell.get("t", "")
-                            v_el = cell.find(_V_TAG)
-                            val = ""
-                            if t_attr == "s" and v_el is not None and v_el.text:
-                                try:
-                                    val = shared_strings[int(v_el.text)]
-                                except (ValueError, IndexError):
-                                    val = ""
-                            elif v_el is not None and v_el.text:
-                                val = v_el.text
+                            val = _cell_text(cell, shared_strings)
                             if val:
                                 _key = val if val not in _seen_hdrs else f"{val}__{col}"
                                 _seen_hdrs.add(val)
@@ -1097,15 +1173,7 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                             found_id_col = col_index_map[id_col_index]
                             for col, cell in header_cells:
                                 if col == found_id_col:
-                                    t_attr = cell.get("t", "")
-                                    v_el = cell.find(_V_TAG)
-                                    if t_attr == "s" and v_el is not None and v_el.text:
-                                        try:
-                                            val = shared_strings[int(v_el.text)]
-                                        except (ValueError, IndexError):
-                                            val = ""
-                                    elif v_el is not None and v_el.text:
-                                        val = v_el.text
+                                    val = _cell_text(cell, shared_strings)
                                     if val:
                                         found_id_hdr = val
                                         header_to_col[val] = col
@@ -1113,16 +1181,7 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                                     break
                     else:
                         for col, cell in header_cells:
-                            t_attr = cell.get("t", "")
-                            v_el = cell.find(_V_TAG)
-                            val = ""
-                            if t_attr == "s" and v_el is not None and v_el.text:
-                                try:
-                                    val = shared_strings[int(v_el.text)]
-                                except (ValueError, IndexError):
-                                    val = ""
-                            elif v_el is not None and v_el.text:
-                                val = v_el.text
+                            val = _cell_text(cell, shared_strings)
                             if not val:
                                 continue
                             _key = val if val not in _seen_hdrs else f"{val}__{col}"
@@ -1144,6 +1203,20 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                         global_sc_hdr = found_sc_hdr
                         global_sub_hdr = found_sub_hdr
 
+                    # ── 存储标题行原始数据（供输出表头用）── 必须在 break 之前 ──
+                    if "_header_data" not in result:
+                        result["_header_data"] = {}
+                    hr_data = {}
+                    for col, cell in header_cells:
+                        val = _cell_text(cell, shared_strings)
+                        if val.strip():
+                            hr_data[col] = val
+                    if "_header_data" not in result:
+                        result["_header_data"] = {}
+                    if sheet_name not in result["_header_data"]:
+                        result["_header_data"][sheet_name] = {}
+                    result["_header_data"][sheet_name][header_row] = hr_data
+
                     if not found_id_col:
                         row.clear()
                         break  # 找不到 ID 列，跳过本 sheet
@@ -1160,45 +1233,13 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                         for col, cell in header_cells:
                             if col in col_to_hdr:
                                 continue
-                            t_attr = cell.get("t", "")
-                            v_el = cell.find(_V_TAG)
-                            val = ""
-                            if t_attr == "s" and v_el is not None and v_el.text:
-                                try:
-                                    val = shared_strings[int(v_el.text)]
-                                except (ValueError, IndexError):
-                                    val = ""
-                            elif v_el is not None and v_el.text:
-                                val = v_el.text
+                            val = _cell_text(cell, shared_strings)
                             if val:
                                 _key = val if val not in _seen_hdrs else f"{val}__{col}"
                                 _seen_hdrs.add(val)
                                 header_to_col[_key] = col
                                 col_to_hdr[col] = _key
                     sheet_map_setup = True
-                    
-                    # ── 存储标题行原始数据（供输出表头用）────────────────
-                    if "_header_data" not in result:
-                        result["_header_data"] = {}
-                    hr_data = {}
-                    for col, cell in header_cells:
-                        t_attr = cell.get("t", "")
-                        v_el = cell.find(_V_TAG)
-                        val = ""
-                        if t_attr == "s" and v_el is not None and v_el.text:
-                            try:
-                                val = shared_strings[int(v_el.text)]
-                            except (ValueError, IndexError):
-                                val = ""
-                        elif v_el is not None and v_el.text:
-                            val = v_el.text
-                        if val.strip():
-                            hr_data[col] = val
-                    if "_header_data" not in result:
-                        result["_header_data"] = {}
-                    if sheet_name not in result["_header_data"]:
-                        result["_header_data"][sheet_name] = {}
-                    result["_header_data"][sheet_name][header_row] = hr_data
                     
                     row.clear()
                     continue
@@ -1212,16 +1253,7 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                         if cell.tag != _CELL_TAG:
                             continue
                         col = _col_str(cell.get("r", ""))
-                        t_attr = cell.get("t", "")
-                        v_el = cell.find(_V_TAG)
-                        val = ""
-                        if t_attr == "s" and v_el is not None and v_el.text:
-                            try:
-                                val = shared_strings[int(v_el.text)]
-                            except (ValueError, IndexError):
-                                val = ""
-                        elif v_el is not None and v_el.text:
-                            val = v_el.text
+                        val = _cell_text(cell, shared_strings)
                         if val.strip():
                             hr_data[col] = val
                     result["_header_data"][sheet_name][row_num] = hr_data
@@ -1231,29 +1263,20 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                     row.clear()
                     continue
 
-            # ── 标题行的下一行：存储为第二表头 ──────────────────────────
+            # ── header_row + 1 行：存储为表头最后一层（数据类型行）─
             if not sheet_map_setup:
                 row.clear()
                 continue
             if row_num == header_row + 1:
-                hr2_data = {}
+                hr_data = {}
                 for cell in row:
                     if cell.tag != _CELL_TAG:
                         continue
                     col = _col_str(cell.get("r", ""))
-                    t_attr = cell.get("t", "")
-                    v_el = cell.find(_V_TAG)
-                    val = ""
-                    if t_attr == "s" and v_el is not None and v_el.text:
-                        try:
-                            val = shared_strings[int(v_el.text)]
-                        except (ValueError, IndexError):
-                            val = ""
-                    elif v_el is not None and v_el.text:
-                        val = v_el.text
+                    val = _cell_text(cell, shared_strings)
                     if val.strip():
-                        hr2_data[col] = val
-                result["_header_data"][sheet_name][header_row + 1] = hr2_data
+                        hr_data[col] = val
+                result["_header_data"][sheet_name][header_row + 1] = hr_data
                 row.clear()
                 continue
             if row_num <= header_row:
@@ -1269,17 +1292,7 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                 col = _col_str(cell.get("r", ""))
                 if output_cols and col not in needed_col_set:
                     continue
-                t_attr = cell.get("t", "")
-                v_el = cell.find(_V_TAG)
-                if t_attr == "s" and v_el is not None and v_el.text:
-                    try:
-                        val = shared_strings[int(v_el.text)]
-                    except (ValueError, IndexError):
-                        val = ""
-                elif v_el is not None and v_el.text:
-                    val = v_el.text
-                else:
-                    val = ""
+                val = _cell_text(cell, shared_strings)
                 if col == found_id_col:
                     sid = val.strip()
                 hdr = col_to_hdr.get(col, "")
@@ -1384,6 +1397,8 @@ def _download_rev(svn_path: str, excel_url: str, rev: int, svn_user: str = "", s
             _log(f"r{rev} 下载失败，返回码: {process.returncode}, 错误: {stderr_str}", level='WARNING')
         return rev, None
     except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
         if LOG_LEVEL <= LOG_LEVELS['DEBUG']:
             _log(f"r{rev} 下载超时", level='DEBUG')
         return rev, None
@@ -1427,6 +1442,14 @@ def _download_batch(svn_path: str, tasks: List[Tuple[str, int]]) -> Dict[Tuple[s
             for url, rev in tasks:
                 _, data = _download_rev(svn_path, url, rev)
                 result[(url, rev)] = data
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
+        if LOG_LEVEL <= LOG_LEVELS['DEBUG']:
+            _log("批量下载超时，回退到单个文件下载", level='DEBUG')
+        for url, rev in tasks:
+            _, data = _download_rev(svn_path, url, rev)
+            result[(url, rev)] = data
     except Exception as e:
         if LOG_LEVEL <= LOG_LEVELS['WARNING']:
             _log(f"批量下载异常: {e}", level='WARNING')
@@ -2315,6 +2338,8 @@ def step3_download_and_compare(svn_url: str,
 
                 arg_fd, arg_path = tempfile.mkstemp(suffix=".pkl", prefix="cmp_arg_")
                 res_fd, res_path = tempfile.mkstemp(suffix=".pkl", prefix="cmp_res_")
+                _pending_tempfiles.append(arg_path)
+                _pending_tempfiles.append(res_path)
 
                 args_tuple = (cur_path, prv_path, cur, prv, fname, tr, id_col, output_cols)
                 with os.fdopen(arg_fd, "wb") as f:
@@ -2327,12 +2352,17 @@ def step3_download_and_compare(svn_url: str,
                     )
                     os.close(res_fd)
                     running[proc] = (arg_path, res_path, cur, prv, fname, time.time())
+                    _running_subprocesses.append(proc)
                 except Exception:
                     os.close(res_fd)
                     for p in [arg_path, res_path]:
                         try:
                             os.unlink(p)
                         except Exception:
+                            pass
+                        try:
+                            _pending_tempfiles.remove(p)
+                        except ValueError:
                             pass
 
             # 3) 轮询运行中的子进程
@@ -2376,8 +2406,16 @@ def step3_download_and_compare(svn_url: str,
                         os.unlink(p)
                     except Exception:
                         pass
+                    try:
+                        _pending_tempfiles.remove(p)
+                    except ValueError:
+                        pass
 
             for proc in to_delete:
+                try:
+                    _running_subprocesses.remove(proc)
+                except ValueError:
+                    pass
                 del running[proc]
 
             if not just_done and not to_delete and len(running) >= max_procs:
@@ -2401,7 +2439,6 @@ def step3_download_and_compare(svn_url: str,
     global _parsed_cache
     _parsed_cache.clear()
     dl_cache_path.clear()
-    import gc
     gc.collect()
 
     return all_file_results, dict(file_header_data), dict(file_sheet_order)
@@ -2837,7 +2874,7 @@ def write_excel(results: List[dict], output_path: str,
                 sheet_groups[sheet_name] = []
             sheet_groups[sheet_name].append(row)
 
-        header_rows = title_rows + 1  # 标题行数：原第1行~第 title_rows+1 行
+        header_rows = title_rows + 1  # 标题行数：原表第1行~第 title_rows+1 行均为表头
 
         for sheet_name in sheet_groups:
             sheet_results = sheet_groups[sheet_name]
@@ -2881,8 +2918,8 @@ def write_excel(results: List[dict], output_path: str,
                 if letter:
                     return (0, _col_letter_to_num(letter))
                 return (1, name)
-            # 只保留有表头的列
-            data_cols_set = {k for k in data_cols_set if k in col_to_letter}
+            if col_to_letter:
+                data_cols_set = {k for k in data_cols_set if k in col_to_letter}
             all_cols.extend(sorted(data_cols_set, key=_col_sort_key))
 
             # ── header_rows 行表头 ─────────────────────────────
@@ -2890,7 +2927,7 @@ def write_excel(results: List[dict], output_path: str,
                 for col_idx, col_name in enumerate(all_cols, 1):
                     if col_idx <= 3:  # 固定列
                         if row_idx == 1:
-                            cell = ws.cell(row=1, column=col_idx, value=col_name)
+                            cell = ws.cell(row=row_idx, column=col_idx, value=col_name)
                         else:
                             cell = ws.cell(row=row_idx, column=col_idx, value="")
                     else:
@@ -2899,13 +2936,15 @@ def write_excel(results: List[dict], output_path: str,
                                 and col_name in col_to_letter):
                             letter = col_to_letter[col_name]
                             val = header_data[sheet_name].get(row_idx, {}).get(letter, "")
+                        elif row_idx == 1:
+                            val = col_name
                         cell = ws.cell(row=row_idx, column=col_idx, value=val)
                     cell.font = header_font
                     cell.fill = header_fill
                     cell.alignment = center
                     cell.border = border
 
-            # ── 数据行（从第 3 行开始）─────────────────────────────
+            # ── 数据行（从 header_rows+1 行开始）─────────────────────
             for row_idx, row_data in enumerate(sheet_results, header_rows + 1):
                 fill = alt_fill if (row_idx - header_rows) % 2 == 0 else None
                 for col_idx, col_name in enumerate(all_cols, 1):

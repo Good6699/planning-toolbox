@@ -354,14 +354,18 @@ class TranslateTabMixin:
             clean_tgts = [_clean(t) for t in tgt_names]
             lang_display = "、".join(clean_tgts)
 
-            batch_prompt = prompt_template.replace("{src_lang}", clean_src).replace("{tgt_lang}", lang_display)
+            # system prompt：只放固定角色定义+任务描述（跨批次不变 → 高缓存命中）
+            system_prompt = prompt_template.replace("{src_lang}", clean_src).replace("{tgt_lang}", lang_display)
+
+            # 动态内容（参考+文本）全部放入 user message
+            user_parts = []
 
             # 注入参考
             if any(r.get("__raw_text__") for r in refs_by_target.values() if r):
                 for tgt in tgt_names:
                     r = refs_by_target.get(tgt, {})
                     if r.get("__raw_text__"):
-                        batch_prompt += f"\n\n参考内容 ({_clean(tgt)}):\n{r['__raw_text__']}"
+                        user_parts.append(f"参考内容 ({_clean(tgt)}):\n{r['__raw_text__']}")
             else:
                 ref_parts = []
                 for tgt in tgt_names:
@@ -370,23 +374,25 @@ class TranslateTabMixin:
                         sample = list(r.items())[:30]
                         ref_parts.append(f"【{_clean(tgt)}】参考:\n" + "\n".join(f"{k} → {v}" for k, v in sample))
                 if ref_parts:
-                    batch_prompt += "\n\n" + "\n".join(ref_parts)
+                    user_parts.append("\n".join(ref_parts))
 
             numbered_lines = []
             for i, t in enumerate(texts, 1):
                 clean_t = t.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
                 numbered_lines.append(f"{i}|{clean_t}")
-            batch_prompt += (
-                f"\n\n请将以下文本从 {clean_src} 一次性翻译为 {lang_display}。"
+            user_parts.append(
+                f"请将以下文本从 {clean_src} 一次性翻译为 {lang_display}。"
                 f"\n严格按照编号和分隔符格式返回，每行一条："
                 f"\n编号|翻译1|翻译2|翻译3..."
                 f"\n不要包含任何额外说明、解释或空行。"
                 f"\n\n待翻译文本：\n" + "\n".join(numbered_lines)
             )
 
+            user_content = "\n\n".join(user_parts)
+
             messages = [
-                {"role": "system", "content": batch_prompt},
-                {"role": "user", "content": f"请翻译以上 {len(texts)} 条文本到 {lang_display}。"}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
             ]
             payload = {
                 "model": model,
@@ -405,6 +411,13 @@ class TranslateTabMixin:
                                          json=payload, timeout=300)
                     if resp.status_code == 200:
                         data = resp.json()
+                        usage = data.get("usage", {})
+                        hit = usage.get("prompt_cache_hit_tokens", 0)
+                        miss = usage.get("prompt_cache_miss_tokens", 0)
+                        total_p = usage.get("prompt_tokens", 0)
+                        if total_p > 0:
+                            rate = hit / total_p * 100
+                            self._tlog(f"缓存命中 {hit}/{total_p} tokens ({rate:.1f}%)")
                         raw = data["choices"][0]["message"]["content"].strip()
                         results = [None] * len(texts)
                         for line in raw.split("\n"):

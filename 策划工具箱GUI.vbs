@@ -1,5 +1,5 @@
-' �߻������� - ����������
-' �Զ���� Python �������״������Զ��޸�·��
+' 策划工具箱 - 启动引导
+' 自动查找 Python 解释器并自动修改路径
 Option Explicit
 
 Dim shell, fso, scriptDir, pythonExe, checker, cmdLine, statusCode
@@ -22,9 +22,16 @@ Else
 End If
 
 If pythonExe = "" Then
-    MsgBox "No Python found. Run �����޸�.bat �Զ���װ.", 48, "Ce Hua Gong Ju Xiang"
-    shell.Run Chr(34) & scriptDir & "\�����޸�.bat" & Chr(34), 1, False
+    MsgBox "No Python found. Run 环境修复.bat 自动安装.", 48, "Ce Hua Gong Ju Xiang"
+    shell.Run Chr(34) & scriptDir & "\环境修复.bat" & Chr(34), 1, False
     WScript.Quit 1
+End If
+
+' Try pythonw.exe for no-console mode
+Dim pythonwExe
+pythonwExe = Replace(pythonExe, "python.exe", "pythonw.exe")
+If fso.FileExists(pythonwExe) Then
+    pythonExe = pythonwExe
 End If
 
 ' ---- Step 2: run setup_checker.py (silent) --------
@@ -40,7 +47,7 @@ If fso.FileExists(checker) Then
 End If
 
 ' ---- Step 3: launch main program --------
-launcher = scriptDir & "\svn_launcher.py"
+launcher = scriptDir & "\web_launcher.py"
 cmdLine = Chr(34) & pythonExe & Chr(34) & " " & Chr(34) & launcher & Chr(34) & " --dir " & Chr(34) & scriptDir & Chr(34)
 shell.Run cmdLine, 0, False
 

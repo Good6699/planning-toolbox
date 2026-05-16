@@ -1,0 +1,79 @@
+
+======================================================================
+fef50d6a947a_334431.bin  (r334431, 6.5MB)
+lxml 解析中 (限 3000 行/sheet, 前 5 sheet)...
+  lxml: 4.12s, 5667 rows, 5 sheets
+calamine 解析中...
+  calamine: 0.65s load, 58 sheets
+  ✅ Cutsence_1_对话表1: 42256 cells, OK
+  ✅ Ingame: 48 cells, OK
+  ✅ Net: 368 cells, OK
+  ❌ Task: 48000 cells, 356 diffs
+
+❌ 356/90672 (0.39%)
+  lxml 缺值: 0
+  calamine 缺值: 0
+  仅空白差异: 0
+  真实值差异: 356
+
+差异示例:
+  [Task] id=RW3211466 col=SubstituteId
+    lxml:     →4837←
+    calamine: →4837.0←
+
+  [Task] id=RW3211467 col=SubstituteId
+    lxml:     →4838←
+    calamine: →4838.0←
+
+  [Task] id=RW3211468 col=SubstituteId
+    lxml:     →4839←
+    calamine: →4839.0←
+
+  [Task] id=RW3211469 col=SubstituteId
+    lxml:     →4840←
+    calamine: →4840.0←
+
+  [Task] id=RW3211470 col=SubstituteId
+    lxml:     →4841←
+    calamine: →4841.0←
+
+  [Task] id=RW3211471 col=SubstituteId
+    lxml:     →4842←
+    calamine: →4842.0←
+
+  [Task] id=RW3211480 col=SubstituteId
+    lxml:     →4935←
+    calamine: →4935.0←
+
+  [Task] id=RW3211487 col=SubstituteId
+    lxml:     →4935←
+    calamine: →4935.0←
+
+  [Task] id=RW3211500 col=SubstituteId
+    lxml:     →4836←
+    calamine: →4836.0←
+
+  [Task] id=ZXRW3211454 col=SubstituteId
+    lxml:     →4937←
+    calamine: →4937.0←
+
+  [Task] id=ZXRW3211480 col=SubstituteId
+    lxml:     →4935←
+    calamine: →4935.0←
+
+  [Task] id=ZXRW3211487 col=SubstituteId
+    lxml:     →4935←
+    calamine: →4935.0←
+
+  [Task] id=RW3211506 col=SubstituteId
+    lxml:     →4837←
+    calamine: →4837.0←
+
+  [Task] id=RW3211507 col=SubstituteId
+    lxml:     →4838←
+    calamine: →4838.0←
+
+  [Task] id=RW3211508 col=SubstituteId
+    lxml:     →4839←
+    calamine: →4839.0←
+

@@ -1,0 +1,21 @@
+# graphify 扫描排除规则 (gitignore 语法)
+# 排除依赖库，只分析核心项目代码
+
+py_modules/
+正确文件/
+graphify-out/
+__pycache__/
+*.pyc
+.cursor/
+.trae/
+*.egg-info/
+
+# 二进制 / 日志 / 临时输出
+**/*.exe
+**/*.dll
+**/*.pyd
+*.xlsm
+*.xlsx
+*.zip
+*.7z
+*.log

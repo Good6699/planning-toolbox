@@ -1,0 +1,16 @@
+- [x] _download_rev 超时时调用了 process.kill() + communicate()
+- [x] _download_batch 超时时调用了 process.kill() + communicate()
+- [x] svn_oneclick_compare.py 注册了 atexit 回调，退出时 kill 所有子进程
+- [x] svn_oneclick_compare.py 退出时清理所有 cmp_arg_*.pkl / cmp_res_*.pkl 临时文件
+- [x] svn_oneclick_compare.py 退出时清空 _parsed_cache 并调用 gc.collect()
+- [x] step3_download_and_compare 返回前清空 dl_cache_path
+- [x] web_app.py 注册了 SIGTERM 和 SIGINT signal handler
+- [x] web_app.py signal handler 中终止所有 _active_subprocesses 子进程
+- [x] web_app.py signal handler 中清空 _log_queues
+- [x] web_app.py 所有子进程启动处注册到 _active_subprocesses
+- [x] web_app.py 子进程结束后从 _active_subprocesses 移除
+- [x] POST /api/task/cancel 端点存在且功能正确
+- [x] /api/task/cancel 能根据 task_id 找到并 kill 子进程
+- [x] /api/task/cancel 清理 _log_queues 中对应 task 条目
+- [x] /api/task/cancel 推送取消消息到 SSE 流
+- [x] 端到端：py_compile 全部通过，代码审查确认实现到位

@@ -1,4 +1,4 @@
-import os, argparse, json, hashlib, base64
+import os, sys, argparse, json, hashlib, base64
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir", type=str, default=None,
@@ -12,8 +12,15 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if args.dir and os.path.isdir(args.dir):
     SCRIPT_DIR = args.dir
 
+def _get_config_dir():
+    if getattr(sys, 'frozen', False):
+        d = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'planning-toolbox')
+        os.makedirs(d, exist_ok=True)
+        return d
+    return SCRIPT_DIR
+
 MAIN_SCRIPT = os.path.join(SCRIPT_DIR, "svn_oneclick_compare.py")
-CONFIG_FILE = os.path.join(SCRIPT_DIR, "svn_gui_config.json")
+CONFIG_FILE = os.path.join(_get_config_dir(), "svn_gui_config.json")
 DEFAULT_OUTPUT_DIR = os.path.join(SCRIPT_DIR, "输出")  # GUI 同级输出文件夹
 
 # ── API Key 加密 ─────────────────────────────────────────

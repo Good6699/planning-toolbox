@@ -98,7 +98,7 @@ You MUST:
 - Prefer long-term maintainability over temporary shortcuts
 - Prioritize real user experience over developer self-indulgence
 
-Your goal is NOT merely to “complete tasks.”
+Your goal is NOT merely to "complete tasks."
 
 Your goal is to build products that are:
 - Production-grade
@@ -107,6 +107,51 @@ Your goal is to build products that are:
 - Beautifully designed
 - User-centered
 - Architecturally sound
+
+## 从根源解决问题（硬性要求）
+
+绝对禁止"先放到错误位置再纠正"的修复模式。
+
+识别标准：
+- 解决方案中是否包含"先 A → 发现不对 → 再 B"的时序？
+- 解决方案中是否有"补救"、"修正"、"延迟后再调整"的语义？
+- 是否可以在创建/初始化时就传入正确的值，而非事后修改？
+
+正确做法：
+- 找到问题的**产生点**（不是表现点），在产生点就给出正确的输入
+- 窗口位置在 `create_window` 时就应该正确，不应通过 `PostMessage` / `SetWindowPos` 事后修正
+- 数据在写入时就应该是正确的，不要先写脏数据再清洗
+- 配置在加载时就应该是正确的，不要先加载默认值再覆盖
+
+违反后果：多轮修复、竞态条件、不可预测的行为。用户明确要求必须遵守。
+
+## 模拟真实用户操作（硬性要求）
+
+**所有解决方案优先按照模拟用户真实操作来制定。**
+
+当需要让程序执行某个行为时（如取消窗口贴边、关闭窗口、切换焦点等），思考用户会怎样操作：
+
+- 用户会移动鼠标到某位置 → 代码模拟鼠标移动+悬停
+- 用户会点击某按钮 → 代码模拟点击
+- 用户会拖动窗口 → 代码模拟拖动
+- 用户会按快捷键 → 代码发送快捷键
+- 用户会激活窗口 → 代码模拟激活
+- 用户会最小化/恢复 → 代码模拟最小化/恢复
+
+**禁止直接调用内部函数或修改内部状态来"跳过"操作步骤。** 直接调内部函数相当于替代了用户的操作，而不是模拟它，会导致：
+- 绕过用户操作路径中的中间状态（如动画、鼠标进出事件）
+- 破坏操作链的完整性（如拖动前需要 mouse_down → mouse_move → mouse_up）
+- 未来修改内部逻辑时，这些直接调用会静默失效
+
+正确做法是让系统的现有机制自然衔接，保证与真实用户操作走的路径完全一致。
+
+### 选择优先级
+
+```
+模拟用户真实操作 > 内部函数调用 > 轮询/定时器
+```
+
+只有当模拟用户操作不可行（如窗口尚未创建、没有 HWND）时，才退回到内部函数调用或轮询方案。
 
 ---
 
@@ -306,6 +351,8 @@ When a capability is needed:
 |-------|------|---------|
 | **toolbox-ui** | `.trae/skills/toolbox-ui/SKILL.md` | UI 开发规范：CSS 设计系统、尺寸规范、禁止事项、JS 架构。当修改 `templates/index.html` 或任何 UI 相关代码时自动调用。 |
 | **toolbox-run** | `.trae/skills/toolbox-run/SKILL.md` | 运行管理：启动/停止服务器、端口诊断、API 速查。当需要启动或测试服务器时自动调用。 |
+| **step-by-step** | `.trae/skills/step-by-step/SKILL.md` | 步骤化实施：将实现任务分解为精确变更点，每个变更点包含文件路径、before/after 代码、依赖关系。当实现多步功能或修复复杂 bug 时自动调用。 |
+| **problem-solver** | `.trae/skills/problem-solver/SKILL.md` | 结构化根因分析：Fishbone 图 + 5 Whys。在诊断 bug、分析非预期行为时 PROACTIVELY 调用，不得跳过根因直接改代码。 |
 
 Operational/local information such as:
 

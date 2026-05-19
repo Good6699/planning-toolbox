@@ -355,20 +355,21 @@ def _wait_for_flask(timeout=10):
 def _make_tray_image():
     img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle([0, 0, 31, 31], radius=6, outline="#3a5580", width=1)
     blue = "#5ea2ff"
     body = [
-        (26, 7),
-        (22, 5),
-        (16, 8),
-        (10, 14),
-        (7, 20),
-        (7, 26),
-        (16, 26),
-        (22, 20),
+        (30, 4),
+        (24, 2),
+        (16, 6),
+        (8, 14),
+        (4, 22),
+        (4, 30),
+        (16, 30),
+        (24, 22),
     ]
     draw.polygon(body, fill=blue)
-    draw.line([(8, 26), (26, 7)], fill="#ffffff", width=2)
-    draw.line([(20, 20), (12, 20)], fill="#ffffff", width=2)
+    draw.line([(4, 30), (30, 4)], fill="#ffffff", width=2)
+    draw.line([(24, 22), (8, 22)], fill="#ffffff", width=2)
     return img
 
 

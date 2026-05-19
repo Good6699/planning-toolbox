@@ -98,7 +98,7 @@ button,input,textarea,select{
   justify-content:center;
   box-shadow:0 8px 28px rgba(94,162,255,.3),inset 0 1px 0 rgba(255,255,255,.3);
 }
-.logo-icon svg{width:20px;height:20px;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;fill:none;}
+.logo-icon svg{width:20px;height:20px;}
 .logo h1{
   font-size:15px;
   margin:0;
@@ -793,7 +793,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   <aside class="sidebar">
     <div class="logo">
       <div class="logo-icon">
-        <svg viewBox="0 0 24 24"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M22.5,3 L18,1.5 L12,4.5 L6,10.5 L3,16.5 L3,22.5 L12,22.5 L18,16.5 Z" fill="#5ea2ff"/><line x1="3" y1="22.5" x2="22.5" y2="3" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><line x1="18" y1="16.5" x2="6" y2="16.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
       </div>
       <div>
         <h1>策划工具箱</h1>
@@ -1295,7 +1295,7 @@ function buildTranslateTab(panel) {
   const src_lang = config.tr_src_lang||"zh";
   const out = config.tr_out_dir||"";
   const prompt = config.tr_prompt||"请将以下文本翻译为{tgt_lang}，保持格式不变";
-  const langs = ["en","ja","ko","fr","de","es","pt","ru","ar","th","vi"];
+  const savedTgtLangs = config.tr_saved_tgt_langs||[];
   panel.innerHTML = `
     <div class="translate-layout tr-layout">
       <div class="tr-main">
@@ -1320,13 +1320,14 @@ function buildTranslateTab(panel) {
           <div class="card-title">语言列设置</div>
           <div class="form-group">
             <label>源语言列</label>
-            <input type="text" id="tr_src_lang" value="${escapeHtml(src_lang)}" placeholder="如: zh" style="width:6.25rem">
+            <div class="flex-row">
+              <input type="text" id="tr_src_lang" value="${escapeHtml(src_lang)}" placeholder="如: 中文" style="width:6.25rem">
+              <button class="btn btn-normal btn-sm" data-action="tr-lang-adv-settings" title="语言ID高级设置" style="font-size:16px;padding:0 8px;line-height:1">⚙</button>
+            </div>
           </div>
           <div class="form-group">
             <label>目标语言</label>
-            <div class="check-group" id="tr_tgt_langs">
-              ${langs.map(l=>`<label><input type="checkbox" value="${l}"> ${l.toUpperCase()}</label>`).join("")}
-            </div>
+            <div class="check-group" id="tr_tgt_langs"></div>
           </div>
         </div>
         <div class="action-center">
@@ -1391,6 +1392,16 @@ function buildTranslateTab(panel) {
   _initDirHistory("tr_src", "tr_src_history");
   _initDirHistory("tr_ref", "tr_ref_history");
   _initDirHistory("tr_out", "tr_out_dir");
+  // 从高级设置加载语言列表，填充复选框
+  fetch("/api/translate/lang-id-map").then(r=>r.json()).then(d => {
+    const data = d.data || {};
+    const names = Object.keys(data).sort();
+    const cg = document.getElementById("tr_tgt_langs");
+    cg.innerHTML = names.map(n => {
+      const checked = savedTgtLangs.includes(n) ? " checked" : "";
+      return `<label><input type="checkbox" value="${escapeHtml(n)}"${checked}> ${escapeHtml(n)}</label>`;
+    }).join("");
+  });
 }
 function runTranslate() {
   const tgtLangs = [];
@@ -1408,8 +1419,124 @@ function runTranslate() {
     prompt:document.getElementById("tr_prompt").value.trim(),
     batch_size:parseInt(document.getElementById("tr_batch").value)||20
   };
-  saveConfig({tr_api_url:body.api_url,tr_model:body.model,tr_src_lang:body.src_lang,tr_out_dir:body.out_dir,tr_prompt:body.prompt,tr_batch_size:body.batch_size,api_key:apiKey});
+  saveConfig({tr_api_url:body.api_url,tr_model:body.model,tr_src_lang:body.src_lang,tr_out_dir:body.out_dir,tr_prompt:body.prompt,tr_batch_size:body.batch_size,tr_saved_tgt_langs:tgtLangs,api_key:apiKey});
   runTask("/api/translate/run", body, document.querySelector("[data-action='run-translate']"), "tr_log");
+}
+let trLangAdvModal = null;
+function openTrLangAdvSettings() {
+  if (!trLangAdvModal) {
+    trLangAdvModal = document.createElement("div");
+    trLangAdvModal.id = "tr_lang_adv_modal";
+    trLangAdvModal.style.cssText = "position:fixed;top:4rem;left:50%;transform:translateX(-50%);width:36rem;max-height:44rem;background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:1.25rem;z-index:1000;display:none;flex-direction:column;box-shadow:0 1.25rem 3.75rem rgba(0,0,0,.5)";
+    trLangAdvModal.innerHTML = `
+      <div style="padding:1.25rem 1.5rem;border-bottom:1px solid rgba(255,255,255,.05);display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:600;font-size:1rem">语言ID高级设置</span>
+        <button class="btn btn-normal btn-sm" data-action="tr-lang-close-adv">✕</button>
+      </div>
+      <div style="padding:0.75rem 1.5rem;font-size:0.8rem;color:var(--dim)">配置每个语言对应的Excel表头ID，用于自动匹配语言列。例如：中文 → SC, ::SC::, CHS</div>
+      <div style="padding:0 1.5rem;overflow:auto;flex:1">
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem" id="tr_lang_adv_table">
+          <thead>
+            <tr style="border-bottom:1px solid rgba(255,255,255,.08)">
+              <th style="text-align:left;padding:0.5rem;color:var(--sub)">语言名称</th>
+              <th style="text-align:left;padding:0.5rem;color:var(--sub)">匹配ID（逗号分隔）</th>
+              <th style="width:3rem"></th>
+            </tr>
+          </thead>
+          <tbody id="tr_lang_adv_body"></tbody>
+        </table>
+        <div style="text-align:center;padding:0.75rem 0">
+          <button class="btn btn-normal btn-sm" data-action="tr-lang-add-row" style="font-size:13px">+ 新增语言</button>
+        </div>
+      </div>
+      <div class="flex-row" style="padding:0.875rem 1.5rem;border-top:1px solid rgba(255,255,255,.05);justify-content:flex-end;gap:8px">
+        <button class="btn btn-normal" data-action="tr-lang-close-adv">取消</button>
+        <button class="btn btn-primary" data-action="tr-lang-save-adv">保存</button>
+      </div>
+    `;
+    document.body.appendChild(trLangAdvModal);
+    trLangAdvModal.addEventListener("click", e => {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+      const a = btn.dataset.action;
+      if (a === "tr-lang-add-row") {
+        const tbody = document.getElementById("tr_lang_adv_body");
+        const row = document.createElement("tr");
+        row.style.borderBottom = "1px solid rgba(255,255,255,.05)";
+        row.innerHTML = `
+          <td style="padding:0.375rem"><input type="text" class="tr-lang-name" placeholder="如: 中文" style="width:6rem;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0.3rem 0.5rem;color:var(--text);font-size:0.8rem"></td>
+          <td style="padding:0.375rem"><input type="text" class="tr-lang-ids" placeholder="如: SC, ::SC::" style="width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0.3rem 0.5rem;color:var(--text);font-size:0.8rem"></td>
+          <td style="padding:0.375rem;text-align:center"><button class="btn btn-normal btn-sm" style="font-size:12px;padding:0 6px;color:var(--danger)" data-action="tr-lang-del-row">✕</button></td>
+        `;
+        tbody.appendChild(row);
+      } else if (a === "tr-lang-del-row") {
+        const tr = btn.closest("tr");
+        if (tr) tr.remove();
+      }
+    });
+  }
+  fetch("/api/translate/lang-id-map").then(r=>r.json()).then(d => {
+    const data = d.data || {};
+    const tbody = document.getElementById("tr_lang_adv_body");
+    tbody.innerHTML = "";
+    Object.keys(data).sort().forEach(lang => {
+      const ids = (data[lang] || []).join(", ");
+      const row = document.createElement("tr");
+      row.style.borderBottom = "1px solid rgba(255,255,255,.05)";
+      row.innerHTML = `
+        <td style="padding:0.375rem"><input type="text" class="tr-lang-name" value="${escapeHtml(lang)}" style="width:6rem;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0.3rem 0.5rem;color:var(--text);font-size:0.8rem"></td>
+        <td style="padding:0.375rem"><input type="text" class="tr-lang-ids" value="${escapeHtml(ids)}" style="width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0.3rem 0.5rem;color:var(--text);font-size:0.8rem"></td>
+        <td style="padding:0.375rem;text-align:center"><button class="btn btn-normal btn-sm" style="font-size:12px;padding:0 6px;color:var(--danger)" data-action="tr-lang-del-row">✕</button></td>
+      `;
+      tbody.appendChild(row);
+    });
+  });
+  trLangAdvModal.style.display = "flex";
+  // 添加关闭点击外部支持
+  const overlay = document.getElementById("tr_lang_adv_overlay");
+  if (!overlay) {
+    const o = document.createElement("div");
+    o.id = "tr_lang_adv_overlay";
+    o.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.3);z-index:999;display:none";
+    o.addEventListener("click", function() { closeTrLangAdvSettings(); });
+    document.body.appendChild(o);
+  }
+  document.getElementById("tr_lang_adv_overlay").style.display = "block";
+}
+function closeTrLangAdvSettings() {
+  if (trLangAdvModal) trLangAdvModal.style.display = "none";
+  const o = document.getElementById("tr_lang_adv_overlay");
+  if (o) o.style.display = "none";
+}
+function saveTrLangAdvSettings() {
+  const rows = document.querySelectorAll("#tr_lang_adv_body tr");
+  const data = {};
+  rows.forEach(tr => {
+    const nameInput = tr.querySelector(".tr-lang-name");
+    const idsInput = tr.querySelector(".tr-lang-ids");
+    if (!nameInput || !idsInput) return;
+    const name = nameInput.value.trim();
+    const idsText = idsInput.value.trim();
+    if (!name || !idsText) return;
+    const ids = idsText.split(",").map(s => s.trim()).filter(Boolean);
+    if (ids.length) data[name] = ids;
+  });
+  const btn = document.querySelector("[data-action='tr-lang-save-adv']");
+  const orig = btn.textContent;
+  btn.textContent = "保存中...";
+  btn.disabled = true;
+  fetch("/api/translate/lang-id-map", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({lang_id_map: data})
+  }).then(r=>r.json()).then(d => {
+    if (d.ok) {
+      closeTrLangAdvSettings();
+    }
+  }).finally(() => {
+    btn.textContent = orig;
+    btn.disabled = false;
+  });
 }
 async function runTask(url, body, btn, logId) {
   if (!btn.dataset.orig) btn.dataset.orig = btn.textContent;
@@ -1745,6 +1872,9 @@ document.addEventListener("click",e=>{
       }); break;
     case "upload-clear": document.getElementById("upload_log").innerHTML = ""; break;
     case "tr-clear": document.getElementById("tr_log").innerHTML = ""; break;
+    case "tr-lang-adv-settings": openTrLangAdvSettings(); break;
+    case "tr-lang-close-adv": closeTrLangAdvSettings(); break;
+    case "tr-lang-save-adv": saveTrLangAdvSettings(); break;
     case "wf-clear": document.getElementById("wf_log").innerHTML = ""; break;
     case "browse-svn-output": browseDir("svn_output"); break;
     case "browse-svn-url": {

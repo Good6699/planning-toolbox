@@ -278,7 +278,7 @@ button,input,textarea,select{font:inherit;color:inherit;}
   box-shadow:0 8px 28px rgba(94,162,255,.3),inset 0 1px 0 rgba(255,255,255,.3);
   color:#fff;
 }
-.logo-icon svg{width:20px;height:20px;fill:#fff;}
+.logo-icon svg{width:20px;height:20px;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;fill:none;}
 .logo h1{font-size:15px;margin:0;font-weight:600;}
 .logo span{color:var(--dim);font-size:11px;}
 
@@ -438,7 +438,7 @@ input:focus,select:focus{
   <aside class="sidebar">
     <div class="logo">
       <div class="logo-icon">
-        <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
       </div>
       <div>
         <h1>策划工具箱</h1>

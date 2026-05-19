@@ -1,5 +1,11 @@
 {
   "svn_urls": [
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client",
+    "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/gameData",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData",
+    "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/Client",
+    "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/server",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text"
   ],
   "workers": "10",
@@ -22,15 +28,10 @@
   "global_cmp_id_col": "::ID::",
   "cmp_global_id_col": "",
   "src_dir_history": [
-    "C:\\Users\\admin\\.qclaw\\workspace\\输出\\导出",
-    "C:\\Users\\admin\\.qclaw\\workspace\\输出\\导出\\Assets",
-    "C:/Users/admin/.qclaw/workspace/输出/导出/branches/20230105_KR/Client"
+    "C:\\Users\\admin\\.qclaw\\workspace\\输出"
   ],
   "tgt_dir_history": [
-    "G:/D3_JP/Client",
-    "G:/D3_KR2/Client",
-    "G:\\D3_KR2\\gameData",
-    "G:\\D3_KR2"
+    "G:/D3_JP/Client"
   ],
   "workflows": [
     {
@@ -282,7 +283,7 @@
   "output_dir_export": "C:\\Users\\admin\\.qclaw\\workspace\\输出\\导出",
   "window_geometry": "992x800+-1063+178",
   "tr_src_history": [
-    "C:\\Users\\admin\\.qclaw\\workspace\\输出\\翻译模版.xlsx"
+    "C:\\Users\\admin\\.qclaw\\workspace\\多语言翻译表.xlsx"
   ],
   "tr_api_url": "https://api.deepseek.com/v1/chat/completions",
   "tr_model": "deepseek-v4-flash",
@@ -295,10 +296,15 @@
   ],
   "output_dir": "C:\\Users\\admin\\.qclaw\\workspace\\输出",
   "output_dir_history": [
-    "G:/D3_KR2/gameData\\Text",
-    "G:\\D3_KR2\\gameData\\Text",
     "C:\\Users\\admin\\.qclaw\\workspace\\输出",
-    "输出"
+    "C:\\Users\\admin\\.qclaw\\workspace\\ourcesappoutvsworkbenchcontribterminalcommonscriptssafe_rm_aliases.ps1 } catch{} ; Write-Output [Trae CN] Safe Rm alias is not enabled, try to fix it now."
   ],
+  "svn_keyword_history": [
+    "裂隙"
+  ],
+  "svn_author_history": [
+    "gaoyang"
+  ],
+  "tr_src_lang": "zh",
   "tr_api_key_enc": "/ZhanvpqNABPoNt3CbrSkfxhsARxEX7yxR/83CnNjAHvkEQ="
 }

@@ -117,6 +117,11 @@ class SvnTabMixin:
         
         self.mode_var = tk.StringVar(value="compare")
         
+        tk.Radiobutton(mode_frame, text="总结SVN修改记录",
+                       variable=self.mode_var, value="summary",
+                       font=("微软雅黑", 9), anchor="w",
+                       command=self._on_mode_changed).pack(side="left", padx=(0, 16))
+        
         tk.Radiobutton(mode_frame, text="对比 Excel 修改记录",
                        variable=self.mode_var, value="compare",
                        font=("微软雅黑", 9), anchor="w",
@@ -124,11 +129,6 @@ class SvnTabMixin:
         
         tk.Radiobutton(mode_frame, text="导出 SVN 修改文件",
                        variable=self.mode_var, value="export",
-                       font=("微软雅黑", 9), anchor="w",
-                       command=self._on_mode_changed).pack(side="left", padx=(0, 16))
-
-        tk.Radiobutton(mode_frame, text="总结SVN修改记录",
-                       variable=self.mode_var, value="summary",
                        font=("微软雅黑", 9), anchor="w",
                        command=self._on_mode_changed).pack(side="left")
 

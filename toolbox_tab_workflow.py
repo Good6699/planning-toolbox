@@ -1245,8 +1245,6 @@ class WorkflowTabMixin:
             try:
                 w.config(state="normal")
                 w.insert("end", msg + "\n", level)
-                if int(w.index("end-1c").split(".")[0]) > 1000:
-                    w.delete("1.0", "100.0")
                 w.see("end")
                 w.config(state="disabled")
             except Exception:
@@ -1988,9 +1986,6 @@ class WorkflowTabMixin:
                     return
                 log_widget.config(state="normal")
                 log_widget.insert("end", msg + "\n", level)
-                line_count = int(log_widget.index("end-1c").split(".")[0])
-                if line_count > 1000:
-                    log_widget.delete("1.0", "100.0")
                 log_widget.see("end")
                 log_widget.config(state="disabled")
             except Exception:

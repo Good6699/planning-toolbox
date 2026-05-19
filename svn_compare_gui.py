@@ -92,7 +92,7 @@ class SVNCompareGUI(SvnTabMixin, UploadTabMixin, WorkflowTabMixin, TranslateTabM
         tk.Label(title_frame, text="策划工具箱",
                  font=("微软雅黑", 14, "bold"),
                  fg="white", bg="#2c3e50").pack()
-        tk.Label(title_frame, text="策划工具箱  |  对比 Excel  /  导出文件  /  修改总结  /  上传SVN  /  SVN工作流  /  翻译",
+        tk.Label(title_frame, text="策划工具箱  |  修改总结  /  对比 Excel  /  导出文件  /  上传SVN  /  SVN工作流  /  翻译",
                  font=("微软雅黑", 9), fg="#bdc3c7", bg="#2c3e50").pack()
 
         # ════════════════════════════════════════════════════
@@ -400,10 +400,6 @@ class SVNCompareGUI(SvnTabMixin, UploadTabMixin, WorkflowTabMixin, TranslateTabM
                     return
                 self.log_text.config(state="normal")
                 self.log_text.insert("end", msg + "\n", level)
-                # 限制日志行数，避免内存占用过高
-                line_count = int(self.log_text.index("end-1c").split(".")[0])
-                if line_count > 1000:
-                    self.log_text.delete("1.0", "100.0")
                 if self._auto_scroll:
                     self.log_text.see("end")
                 self.log_text.config(state="disabled")

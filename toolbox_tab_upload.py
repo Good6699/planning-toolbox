@@ -55,7 +55,7 @@ class UploadTabMixin:
 
     def _browse_source_dir(self):
         cur = self.src_var.get().strip()
-        initial = cur if (cur and os.path.isdir(cur)) else None
+        initial = cur if (cur and os.path.isdir(cur)) else (os.path.dirname(cur) if cur else None)
         path = filedialog.askdirectory(title="选择源目录", initialdir=initial)
         if path:
             self.src_var.set(path)
@@ -64,7 +64,7 @@ class UploadTabMixin:
 
     def _browse_target_dir(self):
         cur = self.tgt_var.get().strip()
-        initial = cur if (cur and os.path.isdir(cur)) else None
+        initial = cur if (cur and os.path.isdir(cur)) else (os.path.dirname(cur) if cur else None)
         path = filedialog.askdirectory(title="选择目标目录", initialdir=initial)
         if path:
             self.tgt_var.set(path)

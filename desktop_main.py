@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw
 WINDOW_W = 1100
 WINDOW_H = 700
 
-EDGE_THRESHOLD = 40
+EDGE_THRESHOLD = 8
 DOCK_VISIBLE = 4
 ANIM_FRAMES = 16
 
@@ -35,6 +35,7 @@ _tray_icon = None
 _tray_stop = threading.Event()
 _window_visible = True
 _docker = None
+_is_dragging = False
 
 
 
@@ -179,18 +180,18 @@ class EdgeDocker:
             else:
                 if self.docked in ("right", "left"):
                     edge_x = r if self.docked == "left" else x
-                    if abs(cx - edge_x) <= DOCK_VISIBLE + 20 and y - 40 <= cy <= y + h + 40:
+                    if abs(cx - edge_x) <= DOCK_VISIBLE + 4 and y - 8 <= cy <= y + h + 8:
                         self._slide_out(hwnd)
                 elif self.docked in ("top", "bottom"):
                     edge_y = self._docked_mt if self.docked == "top" else self._docked_mb
-                    if abs(cy - edge_y) <= DOCK_VISIBLE + 20 and x - 40 <= cx <= r + 40:
+                    if abs(cy - edge_y) <= DOCK_VISIBLE + 4 and x - 8 <= cx <= r + 8:
                         self._slide_out(hwnd)
 
             if time.perf_counter() < self._busy_until:
                 return
 
         if not self.docked:
-            if not in_window:
+            if not in_window and not _is_dragging:
                 ml, mt, mr, mb = self._monitor_bounds(hwnd)
                 mw = mr - ml
                 can_dock_h = (mw - w >= 80)
@@ -326,6 +327,7 @@ def _acquire_instance_lock():
 
 
 def _start_flask():
+    global _flask_server
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
     sys.path.insert(0, script_dir)
@@ -333,7 +335,9 @@ def _start_flask():
     if os.path.isdir(pm) and pm not in sys.path:
         sys.path.insert(0, pm)
     from web_app import app
-    app.run(host="127.0.0.1", port=18123, debug=False, use_reloader=False)
+    from werkzeug.serving import make_server
+    _flask_server = make_server("127.0.0.1", 18123, app)
+    _flask_server.serve_forever()
 
 
 def _wait_for_flask(timeout=10):
@@ -373,11 +377,96 @@ def _show_window(icon, item=None):
 
 
 def _quit_app(icon, item=None):
-    global _tray_stop
-    _tray_stop.set()
-    if icon:
-        icon.stop()
-    os._exit(0)
+    icon.stop()
+
+
+class ResizeApi:
+    def __init__(self):
+        self._window = None
+        self._cursor_x = 0
+        self._cursor_y = 0
+        self._win_x = 0
+        self._win_y = 0
+        self._win_w = 0
+        self._win_h = 0
+        self._active = False
+
+    def set_window(self, window):
+        self._window = window
+
+    def set_window_rect(self):
+        if not self._window:
+            return
+        try:
+            hwnd = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
+            if not hwnd:
+                return
+            rect = ctypes.wintypes.RECT()
+            ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            self._win_x = rect.left
+            self._win_y = rect.top
+            self._win_w = rect.right - rect.left
+            self._win_h = rect.bottom - rect.top
+            self._cursor_x, self._cursor_y = win32api.GetCursorPos()
+        except:
+            pass
+
+    def start_resize(self, edge):
+        global _is_dragging
+        _is_dragging = True
+        self.set_window_rect()
+        self._edge = edge
+        self._active = True
+
+    def move(self):
+        if not self._active or not self._window:
+            return False
+        try:
+            cx, cy = win32api.GetCursorPos()
+            nx = cx - self._cursor_x + self._win_x
+            ny = cy - self._cursor_y + self._win_y
+            self._window.move(nx, ny)
+        except:
+            return False
+        return True
+
+    def resize(self):
+        if not self._active or not self._window:
+            return False
+        try:
+            cx, cy = win32api.GetCursorPos()
+            dx = cx - self._cursor_x
+            dy = cy - self._cursor_y
+            if dx == 0 and dy == 0:
+                return True
+
+            x, y, w, h = self._win_x, self._win_y, self._win_w, self._win_h
+            if 'left' in self._edge:
+                x = self._win_x + dx
+                w = self._win_w - dx
+            if 'right' in self._edge:
+                w = self._win_w + dx
+            if 'top' in self._edge:
+                y = self._win_y + dy
+                h = self._win_h - dy
+            if 'bottom' in self._edge:
+                h = self._win_h + dy
+            if w < 200:
+                w = 200
+            if h < 200:
+                h = 200
+            ctypes.windll.user32.SetWindowPos(
+                ctypes.windll.user32.FindWindowW(None, "策划工具箱"),
+                0, x, y, w, h, 0x0004
+            )
+        except:
+            return False
+        return True
+
+    def stop_resize(self):
+        global _is_dragging
+        _is_dragging = False
+        self._active = False
 
 
 def _tray_thread():
@@ -393,6 +482,7 @@ def _tray_thread():
         )
     )
     _tray_icon.run()
+    os._exit(0)
 
 
 _wnd_proc_ref = None
@@ -547,6 +637,8 @@ def main():
 
     init_cx, init_cy = _get_cursor_screen_center()
 
+    resize_api = ResizeApi()
+
     window = webview.create_window(
         "策划工具箱",
         url="http://127.0.0.1:18123",
@@ -560,7 +652,10 @@ def main():
         background_color="#0f1115",
         text_select=True,
         zoomable=False,
+        resizable=True,
+        js_api=resize_api,
     )
+    resize_api.set_window(window)
 
     def _init_window(hwnd=None):
         if hwnd is None:
@@ -584,10 +679,6 @@ def main():
     docker.start()
 
     def _sigint_handler(signum, frame):
-        global _tray_stop
-        _tray_stop.set()
-        if _tray_icon:
-            _tray_icon.stop()
         os._exit(0)
 
     signal.signal(signal.SIGINT, _sigint_handler)

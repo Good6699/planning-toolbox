@@ -1,0 +1,2208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>策划工具箱</title>
+<style>
+:root{
+  --bg:#0f1115;
+  --bg2:#151821;
+  --panel:#171b24;
+  --panel2:#1d2330;
+  --card:#1b2230cc;
+  --line:#2a3142;
+  --text:#f2f5ff;
+  --sub:#aeb8cc;
+  --dim:#7f8aa3;
+  --accent:#5ea2ff;
+  --accent2:#7cb8ff;
+  --success:#52d273;
+  --danger:#ff637d;
+  --radius:12px;
+  --radius-sm:8px;
+  --space-xs:4px;
+  --space-sm:8px;
+  --space-md:12px;
+  --space-lg:16px;
+  --space-xl:20px;
+  --space-2xl:24px;
+  --space-3xl:32px;
+  --btn-h:36px;
+  --btn-h-lg:42px;
+  --shadow:0 10px 30px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.03);
+  --sidebar-width:260px;
+}
+*{
+  box-sizing:border-box;
+}
+html{
+  font-size:15px;
+}
+html,body{
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  margin:0;
+  background:#0f1115;
+  font-family:"Segoe UI","Microsoft YaHei UI","PingFang SC",sans-serif;
+  font-weight:500;
+  color:var(--text);
+  text-rendering:optimizeLegibility;
+  -webkit-user-select:none;
+  user-select:none;
+  -webkit-font-smoothing:auto;
+  -moz-osx-font-smoothing:auto;
+}
+body{
+  background:radial-gradient(circle at top,#1c2540 0%,#0f1115 45%);
+}
+button,input,textarea,select{
+  font:inherit;
+  color:inherit;
+}
+.app{
+  width:100%;
+  height:100%;
+  display:grid;
+  grid-template-columns:var(--sidebar-width) minmax(0,1fr);
+}
+.sidebar{
+  background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.005));
+  backdrop-filter:blur(24px);
+  border-right:1px solid rgba(255,255,255,.04);
+  padding:16px 12px;
+  padding-top:20px;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+}
+.drag-bar{
+  position:fixed;top:0;left:0;right:0;height:32px;
+  z-index:9999;
+}
+.drag-bar:hover{cursor:default;}
+.logo{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:0 6px 6px;
+}
+.logo-icon{
+  width:36px;
+  height:36px;
+  border-radius:8px;
+  background:linear-gradient(135deg,#5ea2ff,#3784ff);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:16px;
+  font-weight:700;
+  box-shadow:0 8px 28px rgba(94,162,255,.3),inset 0 1px 0 rgba(255,255,255,.3);
+  color:#fff;
+}
+.logo h1{
+  font-size:15px;
+  margin:0;
+}
+.logo span{
+  color:var(--dim);
+  font-size:11px;
+}
+.nav{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.nav-btn{
+  height:36px;
+  min-height:36px;
+  font-size:12px;
+  border:none;
+  border-radius:8px;
+  background:transparent;
+  color:var(--sub);
+  padding:0 12px;
+  display:flex;
+  align-items:center;
+  cursor:pointer;
+  transition:.18s;
+  text-align:left;
+}
+.nav-btn:hover{
+  background:rgba(255,255,255,.03);
+  color:#fff;
+}
+.nav-btn.active{
+  color:#fff;
+  background:linear-gradient(135deg,rgba(94,162,255,.22),rgba(94,162,255,.06));
+  box-shadow:0 0 0 1px rgba(94,162,255,.18),0 8px 20px rgba(94,162,255,.1);
+  font-weight:600;
+}
+.main{
+  min-width:0;
+  height:100%;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+.topbar{
+  height:68px;
+  padding:0 24px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-shrink:0;
+  border-bottom:1px solid rgba(255,255,255,.04);
+}
+.topbar-left{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:2px;
+}
+.topbar-left h2{
+  font-size:20px;
+  font-weight:700;
+  letter-spacing:.3px;
+  margin:0;
+  line-height:1.2;
+}
+.topbar-left .subtitle-text{
+  color:var(--dim);
+  font-size:11px;
+  line-height:1.2;
+}
+.topbar-right{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.status{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:var(--sub);
+  font-size:11px;
+}
+.status-dot{
+  width:8px;
+  height:8px;
+  border-radius:999px;
+  background:var(--success);
+  box-shadow:0 0 12px rgba(82,210,115,.7);
+}
+.status.running .status-dot{
+  background:#ffc857;
+  box-shadow:0 0 12px rgba(255,200,87,.7);
+}
+.close-btn{
+  width:28px;height:28px;border:none;border-radius:6px;
+  background:transparent;color:var(--dim);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:14px;transition:.15s;flex-shrink:0;
+}
+.close-btn:hover{
+  background:var(--danger);color:#fff;
+}
+.content{
+  flex:1;
+  overflow:auto;
+  padding:20px;
+  width:100%;
+  min-width:0;
+}
+.content-inner{
+  width:100%;
+  max-width:1800px;
+  margin:0 auto;
+}
+.tab-panel{
+  display:none;
+}
+.tab-panel.active{
+  display:block;
+}
+.workbench{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(360px,1fr));
+  gap:16px;
+}
+.card{
+  background:linear-gradient(180deg,rgba(33,40,56,.9),rgba(20,24,34,.94));
+  border:1px solid rgba(255,255,255,.05);
+  border-radius:16px;
+  padding:16px;
+  box-shadow:0 12px 40px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.02);
+  overflow:hidden;
+  position:relative;
+}
+.card:hover{
+  border-color:rgba(255,255,255,.07);
+}
+.card-title{
+  font-size:14px;
+  font-weight:700;
+  margin-bottom:10px;
+}
+.form-group{
+  margin-bottom:12px;
+}
+.form-group label{
+  display:block;
+  margin-bottom:4px;
+  color:var(--sub);
+  font-size:11px;
+}
+input,select{
+  width:100%;
+  border:none;
+  outline:none;
+  background:#0e1219;
+  border:1px solid #2a3040;
+  border-radius:8px;
+  height:36px;
+  min-height:36px;
+  padding:0 10px;
+  transition:border-color .2s ease,box-shadow .2s ease,background .2s ease;
+  font-size:13px;
+  color:#fff;
+}
+textarea{
+  width:100%;
+  outline:none;
+  background:#0e1219;
+  border:1px solid #2a3040;
+  border-radius:8px;
+  min-height:80px;
+  padding:8px 10px;
+  transition:border-color .2s ease,box-shadow .2s ease,background .2s ease;
+  font-size:13px;
+  color:#fff;
+  resize:vertical;
+}
+input:focus,textarea:focus,select:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(94,162,255,.12),0 0 20px rgba(94,162,255,.08);
+  background:#111720;
+}
+input::placeholder,textarea::placeholder{
+  color:rgba(127,138,163,.45);
+}
+.btn{
+  border:none;
+  border-radius:8px;
+  height:var(--btn-h);
+  min-height:var(--btn-h);
+  padding:0 14px;
+  cursor:pointer;
+  transition:transform .15s ease,opacity .18s ease,background .18s ease,box-shadow .18s ease;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:600;
+  font-size:13px;
+  letter-spacing:.2px;
+  user-select:none;
+  white-space:nowrap;
+}
+.btn:hover{
+  transform:translateY(-1px);
+}
+.btn:active{
+  transform:translateY(0);
+}
+.btn-primary{
+  background:linear-gradient(180deg,#67adff,#4b8dff);
+  color:#fff;
+  box-shadow:0 12px 32px rgba(74,141,255,.32),inset 0 1px 0 rgba(255,255,255,.24);
+}
+.btn-primary:hover{
+  box-shadow:0 16px 40px rgba(74,141,255,.44),inset 0 1px 0 rgba(255,255,255,.3);
+}
+.btn-normal{
+  background:rgba(255,255,255,.04);
+  color:var(--sub);
+  border:1px solid rgba(255,255,255,.05);
+}
+.btn-normal:hover{
+  background:rgba(255,255,255,.07);
+  border-color:rgba(255,255,255,.1);
+  color:#fff;
+}
+.file-list{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.file-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border-radius:8px;
+  background:rgba(255,255,255,.015);
+  border:1px solid transparent;
+  transition:.18s;
+  cursor:pointer;
+}
+.file-item:hover{
+  background:rgba(255,255,255,.03);
+  border-color:rgba(94,162,255,.15);
+}
+.file-item.selected{
+  background:rgba(94,162,255,.1);
+  border-color:rgba(94,162,255,.28);
+}
+.file-item input[type="checkbox"]{
+  width:14px;
+  height:14px;
+  accent-color:var(--accent);
+}
+.wf-layout{
+  display:grid;
+  grid-template-columns:320px minmax(0,1fr);
+  gap:16px;
+}
+.wf-layout>div{
+  display:flex;
+  flex-direction:column;
+}
+.wf-layout>div>.card{
+  flex:1;
+  min-height:0;
+}
+.wf-list{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  flex:1;
+  min-height:0;
+}
+.card:has(.wf-list){
+  display:flex;
+  flex-direction:column;
+}
+.card:has(.wf-list)>.flex-row{
+  margin-top:10px;
+}
+.wf-item{
+  padding:10px;
+  border-radius:8px;
+  background:rgba(255,255,255,.02);
+  border:1px solid rgba(255,255,255,.04);
+  cursor:pointer;
+  transition:.18s;
+}
+.wf-item:hover{
+  background:rgba(255,255,255,.04);
+  border-color:rgba(94,162,255,.2);
+}
+.wf-item.selected{
+  background:linear-gradient(135deg,rgba(94,162,255,.16),rgba(94,162,255,.06));
+  border-color:rgba(94,162,255,.3);
+}
+.wf-step{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:8px 12px;
+  border-radius:10px;
+  margin-bottom:8px;
+  background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.015));
+  border:1px solid rgba(255,255,255,.05);
+  transition:border-color .18s ease;
+}
+.wf-step:hover{
+  border-color:rgba(255,255,255,.08);
+}
+.translate-layout{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(420px,1fr));
+  gap:16px;
+}
+.log{
+  background:#090b10;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,.05);
+  padding:10px;
+  height:320px;
+  min-height:320px;
+  max-height:320px;
+  overflow:auto;
+  font-family:"Cascadia Code",Consolas,"Courier New",monospace;
+  font-size:12px;
+  line-height:1.65;
+  color:var(--sub);
+  -webkit-user-select:text;
+  user-select:text;
+}
+.log .error{color:var(--danger);}
+.log .success{color:var(--success);}
+.log .info{color:var(--accent);}
+.log .warn{color:#ffb866;}
+.log .ts{color:var(--dim);margin-right:4px;}
+.toggle-group{
+  display:flex;
+  gap:4px;
+}
+.toggle-btn{
+  padding:6px 14px;
+  border:none;
+  border-radius:7px;
+  background:rgba(255,255,255,.03);
+  color:var(--sub);
+  cursor:pointer;
+  transition:.18s;
+  font-size:12px;
+  font-weight:500;
+}
+.toggle-btn:hover{
+  background:rgba(255,255,255,.06);
+  color:#fff;
+}
+.toggle-btn.active{
+  background:linear-gradient(135deg,rgba(94,162,255,.28),rgba(94,162,255,.1));
+  color:#fff;
+  font-weight:600;
+  box-shadow:0 0 0 1px rgba(94,162,255,.25),0 4px 14px rgba(94,162,255,.12);
+}
+.action-center{
+  display:flex;
+  justify-content:center;
+  margin:20px 0 8px;
+  grid-column:1 / -1;
+}
+.action-center .btn{
+  min-width:260px;
+  height:var(--btn-h-lg);
+  border-radius:12px;
+  font-size:14px;
+  font-weight:700;
+}
+.svn-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 580px;
+  gap:16px;
+}
+.svn-log-wrap{
+  grid-column:1 / -1;
+}
+.upload-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 580px;
+  gap:16px;
+}
+.upload-log-wrap{
+  grid-column:1 / -1;
+}
+.tr-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 580px;
+  gap:16px;
+}
+.tr-log-wrap{
+  grid-column:1 / -1;
+}
+.wf-log-wrap{
+  grid-column:1 / -1;
+}
+.svn-main,
+.upload-main,
+.tr-main{
+  align-self:start;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+.svn-side,
+.upload-side,
+.tr-side{
+  align-self:stretch;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+.svn-side>.card,
+.upload-side>.card,
+.tr-side>.card{
+  flex:1;
+  min-height:0;
+}
+@media (max-width:1100px){
+  .svn-layout,
+  .upload-layout,
+  .tr-layout{
+    grid-template-columns:1fr;
+  }
+  .svn-side,
+  .upload-side,
+  .tr-side{
+    order:2;
+  }
+  .svn-log-wrap,
+  .upload-log-wrap,
+  .tr-log-wrap,
+  .wf-log-wrap{
+    order:3;
+  }
+}
+.card-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-bottom:12px;
+  min-height:32px;
+}
+.card-header.compact{
+  margin-bottom:8px;
+}
+.btn-sm{
+  height:32px;
+  font-size:12px;
+}
+.empty-state{
+  padding:48px 24px;
+  color:var(--sub);
+  text-align:center;
+}
+.form-row{
+  display:grid;
+  grid-template-columns:80px 1fr;
+  gap:10px;
+  align-items:center;
+  margin-bottom:10px;
+}
+.form-row label{
+  color:var(--sub);
+  font-size:12px;
+}
+.flex-row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.suggest-drop{
+  position:fixed;
+  background:#151b26;
+  border:1px solid rgba(94,162,255,.18);
+  border-radius:8px;
+  max-height:180px;
+  overflow-y:auto;
+  z-index:9999;
+  display:none;
+  box-shadow:0 12px 36px rgba(0,0,0,.55);
+}
+.suggest-drop.show{
+  display:block;
+}
+.suggest-drop .s-item{
+  padding:6px 10px;
+  cursor:pointer;
+  font-size:12px;
+  color:var(--sub);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  transition:background .1s;
+  border-bottom:1px solid rgba(255,255,255,.03);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.suggest-drop .s-item .s-label{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  flex:1;
+  min-width:0;
+}
+.suggest-drop .s-item .s-del{
+  flex-shrink:0;
+  width:20px;
+  height:20px;
+  padding:0;
+  border:none;
+  background:transparent;
+  color:var(--dim);
+  cursor:pointer;
+  font-size:16px;
+  line-height:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:4px;
+  transition:color .15s,background .15s;
+}
+.suggest-drop .s-item .s-del:hover{
+  color:var(--danger);
+  background:rgba(255,99,125,.12);
+}
+.suggest-drop .s-item:last-child{
+  border-bottom:none;
+}
+.suggest-drop .s-item:hover,
+.suggest-drop .s-item.sel{
+  background:rgba(94,162,255,.14);
+  color:#fff;
+}
+.section-label{
+  font-size:10px;
+  color:var(--dim);
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:1px;
+  margin-bottom:10px;
+}
+.check-group{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.check-group label{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  cursor:pointer;
+  font-size:12px;
+  color:var(--sub);
+}
+.check-group input[type="checkbox"]{
+  width:14px;
+  height:14px;
+  accent-color:var(--accent);
+}
+.spinner{
+  display:inline-block;
+  width:16px;
+  height:16px;
+  border:2px solid rgba(255,255,255,.1);
+  border-top-color:var(--accent);
+  border-radius:50%;
+  animation:spin 0.6s linear infinite;
+  margin-right:6px;
+}
+.zoom-warning{
+  display:none;
+  align-items:center;
+  gap:6px;
+  padding:4px 12px;
+  border-radius:8px;
+  background:linear-gradient(135deg,rgba(255,150,50,.18),rgba(255,100,50,.08));
+  border:1px solid rgba(255,150,50,.3);
+  font-size:11px;
+  color:#ffb866;
+}
+.zoom-warning.visible{
+  display:flex;
+}
+.zoom-warning .zw-dismiss{
+  height:24px;
+  padding:0 8px;
+  border-radius:6px;
+  border:none;
+  background:rgba(255,255,255,.06);
+  color:inherit;
+  cursor:pointer;
+  font-size:11px;
+  white-space:nowrap;
+  transition:.15s;
+}
+.zoom-warning .zw-dismiss:hover{
+  background:rgba(255,255,255,.12);
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.14);}
+@media (max-width:1000px){
+  :root{
+    --sidebar-width:72px;
+  }
+  .logo h1,
+  .logo span{
+    display:none;
+  }
+  .nav-btn{
+    justify-content:center;
+    padding:0;
+  }
+}
+@media (max-width:1200px){
+  .workbench,.translate-layout{
+    grid-template-columns:1fr;
+  }
+  .wf-layout{
+    grid-template-columns:1fr;
+  }
+}
+@media (max-width:900px){
+  .app{
+    display:block;
+  }
+  .sidebar{
+    width:100%;
+    height:auto;
+    position:relative;
+  }
+  .content{
+    padding:12px;
+  }
+  .topbar{
+    padding:0 12px;
+  }
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+.svn-url-drop-target{
+  transition:border-color .2s,background .2s;
+}
+.svn-url-drop-target.drag-over{
+  border-color:var(--accent) !important;
+  background:rgba(94,162,255,.08) !important;
+  outline:2px dashed var(--accent);
+  outline-offset:-2px;
+}
+.drag-over{
+  border-color:var(--accent) !important;
+  background:rgba(94,162,255,.08) !important;
+  outline:2px dashed var(--accent);
+  outline-offset:-2px;
+}
+.svn-url-drop-hint{
+  display:none;
+  font-size:11px;color:var(--accent);
+  margin-top:4px;
+}
+.svn-url-drop-target.drag-over + .svn-url-drop-hint{
+  display:block;
+}
+.svn-drop-hint{
+  font-size:11px;color:var(--dim);
+  margin-top:2px;
+}
+</style>
+</head>
+<body>
+<div class="drag-bar"></div>
+<div class="app">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">◈</div>
+      <div>
+        <h1>策划工具箱</h1>
+        <span>Game Pipeline Toolkit</span>
+      </div>
+    </div>
+    <nav class="nav" id="sidebar_nav"></nav>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <h2 id="page_title">SVN 记录</h2>
+        <span class="subtitle-text" id="page_subtitle">修改摘要、版本对比与导出工具</span>
+      </div>
+      <div class="topbar-right">
+        <div class="status" id="status_bar">
+          <div class="status-dot"></div>
+          <span>系统空闲</span>
+        </div>
+        <div class="zoom-warning" id="zoom_warning">
+          <span>⚠ 浏览器缩放异常，请按 <b>Ctrl+0</b> 恢复 100%</span>
+          <button class="zw-dismiss" data-action="dismiss-zoom-warn">知道了</button>
+        </div>
+        <button class="close-btn" id="close_btn" title="关闭到托盘">✕</button>
+      </div>
+    </header>
+    <section class="content">
+      <div class="content-inner" id="content"></div>
+    </section>
+  </main>
+</div>
+<script>
+const S = {};
+const nav = [
+  {key:"svn",label:"SVN 记录"},
+  {key:"upload",label:"上传 SVN"},
+  {key:"workflow",label:"工作流"},
+  {key:"translate",label:"翻译"},
+];
+nav.forEach(n => { S[n.key] = {el:null,built:false,logEl:null}; });
+const sidebarNav = document.getElementById("sidebar_nav");
+const content = document.getElementById("content");
+nav.forEach(n=>{
+  const btn = document.createElement("button");
+  btn.className = "nav-btn";
+  btn.textContent = n.label;
+  btn.dataset.key = n.key;
+  sidebarNav.appendChild(btn);
+  S[n.key].navBtn = btn;
+});
+nav.forEach(n => {
+  const panel = document.createElement("div");
+  panel.className = "tab-panel";
+  panel.id = "tab-" + n.key;
+  content.appendChild(panel);
+  S[n.key].panel = panel;
+});
+let config = {};
+async function loadConfig() {
+  const r = await fetch("/api/config");
+  config = await r.json();
+}
+async function saveConfig(updates) {
+  Object.assign(config, updates);
+  await fetch("/api/config", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(updates)});
+}
+const tabMeta = {
+  svn:{title:"SVN 记录",sub:"修改摘要、版本对比与导出工具"},
+  upload:{title:"上传 SVN",sub:"批量文件上传到 SVN 工作目录"},
+  workflow:{title:"工作流",sub:"自动化 SVN 操作编排"},
+  translate:{title:"翻译",sub:"Excel 多语言批量翻译工作台"},
+};
+function switchTab(key) {
+  nav.forEach(n => {
+    S[n.key].panel.classList.remove("active");
+    S[n.key].navBtn.classList.remove("active");
+  });
+  S[key].panel.classList.add("active");
+  S[key].navBtn.classList.add("active");
+  const meta = tabMeta[key];
+  if (meta) {
+    document.getElementById("page_title").textContent = meta.title;
+    document.getElementById("page_subtitle").textContent = meta.sub;
+  }
+  if (!S[key].built) {
+    buildTab(key);
+  } else if (key === "upload") {
+    const src = document.getElementById("upload_src");
+    if (src && src.value.trim()) refreshFiles();
+  }
+}
+function buildTab(key) {
+  const panel = S[key].panel;
+  panel.innerHTML = '<div class="empty-state">加载中…</div>';
+  setTimeout(() => {
+    switch(key) {
+      case "svn": buildSvnTab(panel); break;
+      case "upload": buildUploadTab(panel); break;
+      case "workflow": buildWorkflowTab(panel); break;
+      case "translate": buildTranslateTab(panel); break;
+    }
+    S[key].built = true;
+  }, 20);
+}
+const now = new Date();
+const cy = now.getFullYear();
+const cm = now.getMonth()+1;
+const cd = now.getDate();
+function buildSvnTab(panel) {
+  const today = `${cy}-${String(cm).padStart(2,"0")}-${String(cd).padStart(2,"0")}`;
+  const yearStart = `${cy}-01-01`;
+  panel.innerHTML = `
+    <div class="workbench svn-layout">
+      <div class="svn-main">
+        <div class="card">
+          <div class="card-title">SVN 地址</div>
+          <div class="flex-row">
+            <input type="text" id="svn_url" placeholder="输入 SVN 仓库 URL" style="flex:1" autocomplete="off" class="svn-url-drop-target">
+            <button class="btn btn-normal" style="flex-shrink:0" data-action="browse-svn-url" title="浏览本地SVN工作副本">浏览</button>
+            <button class="btn btn-normal" style="flex-shrink:0" data-action="open-svn-url" title="打开文件夹">打开</button>
+          </div>
+          <div class="svn-url-drop-hint">可将文件/文件夹拖拽到输入框自动识别 SVN 地址</div>
+        </div>
+        <div class="card">
+          <div class="card-title">操作设置</div>
+          <div class="form-group">
+            <label>模式</label>
+            <div class="toggle-group" id="svn_mode_group">
+              <button class="toggle-btn active" data-v="summary">修改摘要</button>
+              <button class="toggle-btn" data-v="compare">对比 Excel</button>
+              <button class="toggle-btn" data-v="export">导出文件</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>日期范围</label>
+            <div class="flex-row" style="align-items:center">
+              <input type="date" id="svn_start" value="${yearStart}" style="flex:1;min-width:0">
+              <span style="color:var(--dim)">—</span>
+              <input type="date" id="svn_end" value="${today}" style="flex:1;min-width:0">
+              <button class="btn btn-normal" data-action="svn-today">今日</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="svn-side">
+        <div class="card">
+          <div class="section-label">过滤与输出</div>
+          <div class="form-group">
+            <label>关键词过滤</label>
+            <input type="text" id="svn_keyword" placeholder="按SVN提交备注过滤" autocomplete="off">
+            <div class="svn-drop-hint">回车保存搜索历史</div>
+          </div>
+          <div class="form-group">
+            <label>提交者过滤</label>
+            <input type="text" id="svn_author" placeholder="按作者过滤" autocomplete="off">
+            <div class="svn-drop-hint">回车保存搜索历史</div>
+          </div>
+          <div class="form-group">
+            <label>输出目录</label>
+            <div class="flex-row">
+              <input type="text" id="svn_output" placeholder="选择输出目录" style="flex:1" autocomplete="off">
+              <button class="btn btn-normal" style="flex-shrink:0" data-action="browse-svn-output" id="svn_browse_btn">浏览</button>
+              <button class="btn btn-normal" style="flex-shrink:0" data-action="open-svn-output" title="打开输出文件夹" id="svn_open_btn">打开</button>
+            </div>
+            <div style="display:flex;margin-top:8px">
+              <div style="margin-left:auto;width:56px;text-align:center">
+                <button data-action="svn-advanced" title="高级设置" style="border:none;background:transparent;color:var(--dim);font-size:32px;padding:0;cursor:pointer;line-height:1">⚙</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="action-center">
+        <button class="btn btn-primary" data-action="run-svn" data-output="#svn_output">开始执行</button>
+      </div>
+      <div class="svn-log-wrap">
+        <div class="card">
+          <div class="card-header compact">
+            <span style="font-weight:600">执行日志</span>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button class="btn btn-normal btn-sm" data-action="svn-clear-cache">清除缓存</button>
+              <button class="btn btn-normal btn-sm" data-action="svn-clear">清空日志</button>
+            </div>
+          </div>
+          <div class="log" id="svn_log"></div>
+        </div>
+      </div>
+    </div>
+  `;
+  initSuggest("svn_url", config.svn_urls||[]);
+  enablePathDrop("svn_url", { mode: "svn" });
+  enablePathDrop("svn_output", { mode: "path" });
+  if (config.svn_urls?.length) document.getElementById("svn_url").value = config.svn_urls[0];
+  document.getElementById("svn_url").addEventListener("keydown",e=>{
+    if (e.key === "Enter") {
+      const val = e.target.value.trim();
+      if (val && val.startsWith("http")) {
+        saveConfig({svn_urls: [val, ...(config.svn_urls||[]).filter(u=>u!==val)].slice(0,20)});
+        config.svn_urls = [val, ...(config.svn_urls||[]).filter(u=>u!==val)].slice(0,20);
+        initSuggest("svn_url", config.svn_urls);
+      }
+    }
+  });
+  document.getElementById("svn_output").value = config.output_dir || "";
+  initSuggest("svn_output", config.output_dir_history||[]);
+  document.getElementById("svn_url").addEventListener("blur", ()=>{
+    const val = document.getElementById("svn_url").value.trim();
+    if (val && val.startsWith("http") && !config.svn_urls.includes(val)) {
+      saveConfig({svn_urls: [val, ...(config.svn_urls||[])].slice(0,20)});
+      config.svn_urls = [val, ...(config.svn_urls||[])].slice(0,20);
+      initSuggest("svn_url", config.svn_urls);
+    }
+  });
+  document.getElementById("svn_output").addEventListener("blur", ()=>{
+    const val = document.getElementById("svn_output").value.trim();
+    if (val && !config.output_dir_history.includes(val)) {
+      saveConfig({output_dir_history: [val, ...(config.output_dir_history||[])].slice(0,10)});
+      config.output_dir_history = [val, ...(config.output_dir_history||[])].slice(0,10);
+      initSuggest("svn_output", config.output_dir_history);
+    }
+  });
+  initSuggest("svn_keyword", config.svn_keyword_history||[]);
+  initSuggest("svn_author", config.svn_author_history||[]);
+  ["svn_keyword","svn_author"].forEach(id => {
+    document.getElementById(id).addEventListener("blur", ()=>{
+      const val = document.getElementById(id).value.trim();
+      const key = id==="svn_keyword" ? "svn_keyword_history" : "svn_author_history";
+      if (val && !(config[key]||[]).includes(val)) {
+        saveConfig({[key]: [val, ...(config[key]||[])].slice(0,20)});
+        initSuggest(id, config[key]);
+      }
+    });
+  });
+  S.svn.logEl = document.getElementById("svn_log");
+}
+function runSvn() {
+  const mode = document.querySelector("#svn_mode_group .toggle-btn.active")?.dataset.v || "compare";
+  const body = {
+    svn_url:document.getElementById("svn_url").value.trim(),
+    mode,
+    start_date:document.getElementById("svn_start").value,
+    end_date:document.getElementById("svn_end").value,
+    keyword:document.getElementById("svn_keyword")?.value||"",
+    author:document.getElementById("svn_author")?.value||"",
+    output:document.getElementById("svn_output")?.value||""
+  };
+  const out = body.output;
+  const kw = body.keyword;
+  const au = body.author;
+  saveConfig({
+    output_dir: out,
+    output_dir_history: [out, ...(config.output_dir_history||[]).filter(u=>u!==out)].slice(0,10),
+    svn_urls: [body.svn_url, ...(config.svn_urls||[]).filter(u=>u!==body.svn_url)].slice(0,20),
+    svn_keyword_history: kw && !(config.svn_keyword_history||[]).includes(kw) ? [kw, ...(config.svn_keyword_history||[])].slice(0,20) : config.svn_keyword_history,
+    svn_author_history: au && !(config.svn_author_history||[]).includes(au) ? [au, ...(config.svn_author_history||[])].slice(0,20) : config.svn_author_history,
+  });
+  config.svn_urls = [body.svn_url, ...(config.svn_urls||[]).filter(u=>u!==body.svn_url)].slice(0,20);
+  if (kw && !(config.svn_keyword_history||[]).includes(kw)) config.svn_keyword_history = [kw, ...(config.svn_keyword_history||[])].slice(0,20);
+  if (au && !(config.svn_author_history||[]).includes(au)) config.svn_author_history = [au, ...(config.svn_author_history||[])].slice(0,20);
+  initSuggest("svn_url", config.svn_urls);
+  initSuggest("svn_keyword", config.svn_keyword_history||[]);
+  initSuggest("svn_author", config.svn_author_history||[]);
+  runTask("/api/svn/run", body, document.querySelector("[data-action='run-svn']"), "svn_log");
+}
+function buildUploadTab(panel) {
+  panel.innerHTML = `
+    <div class="workbench upload-layout">
+      <div class="upload-main">
+        <div class="card">
+          <div class="card-title">源目录</div>
+          <div class="flex-row">
+            <input type="text" id="upload_src" placeholder="选择源目录" style="flex:1" autocomplete="off">
+            <button class="btn btn-normal" data-action="browse-upload-src">浏览</button>
+            <button class="btn btn-normal" data-action="refresh-files">刷新</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header compact">
+            <div class="card-title">文件列表</div>
+            <div class="flex-row">
+              <button class="btn btn-normal btn-sm" data-action="select-all">全选</button>
+              <button class="btn btn-normal btn-sm" data-action="select-none">取消全选</button>
+            </div>
+          </div>
+          <div class="file-list" id="upload_files"></div>
+        </div>
+      </div>
+      <div class="upload-side">
+        <div class="card">
+          <div class="section-label">目标设置</div>
+          <div class="form-group">
+            <label>SVN 目标目录</label>
+            <div class="flex-row">
+              <input type="text" id="upload_tgt" placeholder="选择目标 SVN 工作目录" style="flex:1" autocomplete="off">
+              <button class="btn btn-normal" data-action="browse-upload-tgt">浏览</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="action-center">
+        <button class="btn btn-primary" data-action="run-upload">上传到 SVN</button>
+      </div>
+      <div class="upload-log-wrap">
+        <div class="card">
+          <div class="card-header compact">
+            <span style="font-weight:600">执行日志</span>
+            <button class="btn btn-normal btn-sm" data-action="upload-clear">清空</button>
+          </div>
+          <div class="log" id="upload_log"></div>
+        </div>
+      </div>
+    </div>
+  `;
+  if (config.src_dir_history?.length) document.getElementById("upload_src").value = config.src_dir_history[0];
+  if (config.tgt_dir_history?.length) document.getElementById("upload_tgt").value = config.tgt_dir_history[0];
+  initSuggest("upload_src", config.src_dir_history||[]);
+  initSuggest("upload_tgt", config.tgt_dir_history||[]);
+  S.upload.logEl = document.getElementById("upload_log");
+  enablePathDrop("upload_src", { mode: "path", callback: refreshFiles });
+  enablePathDrop("upload_tgt", { mode: "path" });
+  let _srcTimer;
+  document.getElementById("upload_src").addEventListener("input", ()=>{
+    clearTimeout(_srcTimer);
+    _srcTimer = setTimeout(refreshFiles, 300);
+  });
+  _initDirHistory("upload_src", "src_dir_history", refreshFiles);
+  _initDirHistory("upload_tgt", "tgt_dir_history");
+  const _src = document.getElementById("upload_src").value.trim();
+  if (_src) refreshFiles();
+}
+let uploadFilesData = [];
+async function refreshFiles() {
+  const src = document.getElementById("upload_src").value.trim();
+  if (!src) return;
+  const r = await fetch("/api/files/list", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:src})});
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  uploadFilesData = d.entries;
+  renderFileList();
+}
+function renderFileList(){
+  const container = document.getElementById("upload_files");
+  container.innerHTML = uploadFilesData.map((f,i)=>`
+    <div class="file-item ${f._sel ? 'selected':''}" data-idx="${i}">
+      <input type="checkbox" ${f._sel ? 'checked':''}>
+      <div style="flex:1">${f.is_dir ? '📁':'📄'} ${f.name}</div>
+      <div style="color:var(--dim);font-size:0.8125rem">${f.size} ${f.date}</div>
+    </div>
+  `).join("");
+}
+function selectAllFiles(v) { uploadFilesData.forEach(f => f._sel = v); renderFileList(); }
+function runUpload() {
+  const src = document.getElementById("upload_src").value.trim();
+  const tgt = document.getElementById("upload_tgt").value.trim();
+  const files = uploadFilesData.filter(f => f._sel).map(f => ({name:f.name,path:f.path,is_dir:f.is_dir}));
+  saveConfig({tgt_dir_history: [tgt, ...(config.tgt_dir_history||[]).filter(u=>u!==tgt)].slice(0,20)});
+  runTask("/api/upload/run", {src_dir:src, tgt_dir:tgt, files}, document.querySelector("[data-action='run-upload']"), "upload_log");
+}
+function buildWorkflowTab(panel) {
+  panel.innerHTML = `
+    <div class="wf-layout">
+      <div>
+        <div class="card">
+          <div class="card-title">工作流列表</div>
+          <div class="wf-list" id="wf_list"></div>
+          <div class="flex-row" style="margin-top:1rem">
+            <button class="btn btn-primary" style="flex:1" data-action="wf-create">+ 新建</button>
+            <button class="btn btn-normal" data-action="wf-copy">复制</button>
+            <button class="btn btn-normal" data-action="wf-delete">删除</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card" id="wf_detail">
+          <div class="empty-state">请从左侧选择一个工作流</div>
+        </div>
+        <div class="action-center">
+          <button class="btn btn-primary" data-action="run-workflow">执行工作流</button>
+        </div>
+      </div>
+      <div class="wf-log-wrap">
+        <div class="card">
+          <div class="card-header compact">
+            <span style="font-weight:600">执行日志</span>
+            <button class="btn btn-normal btn-sm" data-action="wf-clear">清空</button>
+          </div>
+          <div class="log" id="wf_log"></div>
+        </div>
+      </div>
+    </div>
+  `;
+  refreshWorkflowList();
+  S.workflow.logEl = document.getElementById("wf_log");
+}
+function refreshWorkflowList() {
+  const list = document.getElementById("wf_list");
+  const wfs = config.workflows || [];
+  list.innerHTML = wfs.map((w,i) => `
+    <div class="wf-item ${wfSelectedIdx===i?'selected':''}" data-idx="${i}">
+      <div style="font-weight:600">${w.name||"工作流"+(i+1)}</div>
+      <div style="color:var(--dim);font-size:0.8125rem">${(w.steps||[]).length} 步骤</div>
+    </div>
+  `).join("");
+}
+let wfSelectedIdx = -1;
+function wfSelect(idx, el) {
+  wfSelectedIdx = idx;
+  document.querySelectorAll(".wf-item").forEach(e=>e.classList.remove("selected"));
+  if (el) el.classList.add("selected");
+  renderWfDetail(idx);
+}
+function renderWfDetail(idx) {
+  const wf = (config.workflows||[])[idx];
+  if (!wf) return;
+  const detail = document.getElementById("wf_detail");
+  const steps = wf.steps || [];
+  const stepTypes = {export_text:"导出文字表",upload_svn:"上传SVN",merge_table:"合并表格",merge_translation:"合并翻译",export_error_code:"导出错误码",lock_svn:"锁定SVN",open_tables:"打开表格"};
+  detail.innerHTML = `
+    <div class="card-title">工作流详情</div>
+    <div class="form-group">
+      <label>名称</label>
+      <input type="text" id="wf_name" value="${escapeHtml(wf.name||"")}" placeholder="输入工作流名称">
+    </div>
+    <div class="form-group">
+      <label>执行步骤</label>
+      <div id="wf_steps">
+        ${steps.map((s,i) => `
+          <div class="wf-step">
+            <div style="flex:1">${i+1}. ${stepTypes[s.type]||s.type}</div>
+            <input type="text" value="${escapeHtml(s.name||"")}" placeholder="步骤名称" style="width:8.75rem">
+            <button class="btn btn-normal btn-sm" data-action="wf-del-step" data-wf="${idx}" data-step="${i}">删除</button>
+          </div>
+        `).join("") || '<div style="color:var(--dim);text-align:center;padding:1.25rem">暂无步骤</div>'}
+      </div>
+    </div>
+    <div class="flex-row">
+      <select id="wf_step_type" style="flex:1">
+        ${Object.entries(stepTypes).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}
+      </select>
+      <input type="text" id="wf_step_name" placeholder="步骤名称" style="width:7.5rem">
+      <button class="btn btn-primary" data-action="wf-add-step" data-wf="${idx}">+ 添加</button>
+    </div>
+  `;
+}
+function escapeHtml(s){
+  return (s||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function wfUpdateName(idx, name) {
+  config.workflows[idx].name = name;
+  saveConfig({workflows:config.workflows});
+  refreshWorkflowList();
+}
+function wfAddStep(wfIdx) {
+  const type = document.getElementById("wf_step_type").value;
+  const name = document.getElementById("wf_step_name").value.trim();
+  if (!name) return;
+  config.workflows[wfIdx].steps = config.workflows[wfIdx].steps || [];
+  config.workflows[wfIdx].steps.push({type, name});
+  saveConfig({workflows:config.workflows});
+  renderWfDetail(wfIdx);
+  refreshWorkflowList();
+}
+function wfDelStep(wfIdx, stepIdx) {
+  config.workflows[wfIdx].steps.splice(stepIdx,1);
+  saveConfig({workflows:config.workflows});
+  renderWfDetail(wfIdx);
+  refreshWorkflowList();
+}
+function wfCreate() {
+  config.workflows = config.workflows || [];
+  config.workflows.push({name:"新工作流",steps:[]});
+  saveConfig({workflows:config.workflows});
+  refreshWorkflowList();
+}
+function wfCopy() {
+  if (wfSelectedIdx<0) return;
+  const orig = JSON.parse(JSON.stringify(config.workflows[wfSelectedIdx]));
+  orig.name = (orig.name||"工作流") + " (副本)";
+  config.workflows.splice(wfSelectedIdx+1,0,orig);
+  saveConfig({workflows:config.workflows});
+  refreshWorkflowList();
+}
+function wfDelete() {
+  if (wfSelectedIdx<0) return;
+  if (!confirm("确定删除此工作流？")) return;
+  config.workflows.splice(wfSelectedIdx,1);
+  wfSelectedIdx = -1;
+  saveConfig({workflows:config.workflows});
+  refreshWorkflowList();
+  document.getElementById("wf_detail").innerHTML = '<div class="empty-state">请从左侧选择一个工作流</div>';
+}
+function runWorkflow() {
+  if (wfSelectedIdx < 0) { alert("请先选择一个工作流"); return; }
+  runTask("/api/workflow/run", {wf_idx: wfSelectedIdx}, document.querySelector("[data-action='run-workflow']"), "wf_log");
+}
+function buildTranslateTab(panel) {
+  const api_url = config.tr_api_url||"https://api.openai.com/v1/chat/completions";
+  const model = config.tr_model||"gpt-4o-mini";
+  const src_lang = config.tr_src_lang||"zh";
+  const out = config.tr_out_dir||"";
+  const prompt = config.tr_prompt||"请将以下文本翻译为{tgt_lang}，保持格式不变";
+  const langs = ["en","ja","ko","fr","de","es","pt","ru","ar","th","vi"];
+  panel.innerHTML = `
+    <div class="translate-layout tr-layout">
+      <div class="tr-main">
+        <div class="card">
+          <div class="card-title">翻译文件</div>
+          <div class="form-group">
+            <label>文件路径</label>
+            <div class="flex-row">
+              <input type="text" id="tr_src" placeholder="选择要翻译的 Excel 文件" style="flex:1" autocomplete="off">
+              <button class="btn btn-normal" data-action="browse-tr-src">浏览</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>参考文件</label>
+            <div class="flex-row">
+              <input type="text" id="tr_ref" placeholder="参考翻译文件（可选）" style="flex:1" autocomplete="off">
+              <button class="btn btn-normal" data-action="browse-tr-ref">浏览</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">语言列设置</div>
+          <div class="form-group">
+            <label>源语言列</label>
+            <input type="text" id="tr_src_lang" value="${escapeHtml(src_lang)}" placeholder="如: zh" style="width:6.25rem">
+          </div>
+          <div class="form-group">
+            <label>目标语言</label>
+            <div class="check-group" id="tr_tgt_langs">
+              ${langs.map(l=>`<label><input type="checkbox" value="${l}"> ${l.toUpperCase()}</label>`).join("")}
+            </div>
+          </div>
+        </div>
+        <div class="action-center">
+          <button class="btn btn-primary" data-action="run-translate" data-output="#tr_out">开始翻译</button>
+        </div>
+      </div>
+      <div class="tr-side">
+        <div class="card">
+          <div class="section-label">API 设置</div>
+          <div class="form-group">
+            <label>API URL</label>
+            <input type="text" id="tr_api_url" value="${escapeHtml(api_url)}">
+          </div>
+          <div class="form-group">
+            <label>API Key</label>
+            <input type="password" id="tr_api_key" placeholder="输入 API Key">
+          </div>
+          <div class="form-group">
+            <label>模型</label>
+            <input type="text" id="tr_model" value="${escapeHtml(model)}">
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-label">输出设置</div>
+          <div class="form-group">
+            <label>输出目录</label>
+            <div class="flex-row">
+              <input type="text" id="tr_out" value="${escapeHtml(out)}" style="flex:1">
+              <button class="btn btn-normal" data-action="browse-tr-out">浏览</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>翻译 Prompt</label>
+            <textarea id="tr_prompt">${escapeHtml(prompt)}</textarea>
+          </div>
+          <div class="form-group">
+            <label>批处理量</label>
+            <input type="number" id="tr_batch" value="${config.tr_batch_size||20}">
+          </div>
+        </div>
+      </div>
+      <div class="tr-log-wrap">
+        <div class="card">
+          <div class="card-header compact">
+            <span style="font-weight:600">执行日志</span>
+            <button class="btn btn-normal btn-sm" data-action="tr-clear">清空</button>
+          </div>
+          <div class="log" id="tr_log"></div>
+        </div>
+      </div>
+    </div>
+  `;
+  if (config.tr_src_history?.length) document.getElementById("tr_src").value = config.tr_src_history[0];
+  if (config.tr_ref_history?.length) document.getElementById("tr_ref").value = config.tr_ref_history[0];
+  if (config.tr_api_key) document.getElementById("tr_api_key").value = config.tr_api_key;
+  initSuggest("tr_src", config.tr_src_history||[]);
+  initSuggest("tr_ref", config.tr_ref_history||[]);
+  S.translate.logEl = document.getElementById("tr_log");
+  enablePathDrop("tr_src", { mode: "path" });
+  enablePathDrop("tr_ref", { mode: "path" });
+  enablePathDrop("tr_out", { mode: "path" });
+  _initDirHistory("tr_src", "tr_src_history");
+  _initDirHistory("tr_ref", "tr_ref_history");
+  _initDirHistory("tr_out", "tr_out_dir");
+}
+function runTranslate() {
+  const tgtLangs = [];
+  document.querySelectorAll("#tr_tgt_langs input:checked").forEach(cb=>tgtLangs.push(cb.value));
+  const apiKey = document.getElementById("tr_api_key").value.trim();
+  const body = {
+    src_path:document.getElementById("tr_src").value.trim(),
+    ref_path:document.getElementById("tr_ref").value.trim(),
+    api_url:document.getElementById("tr_api_url").value.trim(),
+    api_key:apiKey,
+    model:document.getElementById("tr_model").value.trim(),
+    src_lang:document.getElementById("tr_src_lang").value.trim(),
+    tgt_langs:tgtLangs,
+    out_dir:document.getElementById("tr_out").value.trim(),
+    prompt:document.getElementById("tr_prompt").value.trim(),
+    batch_size:parseInt(document.getElementById("tr_batch").value)||20
+  };
+  saveConfig({tr_api_url:body.api_url,tr_model:body.model,tr_src_lang:body.src_lang,tr_out_dir:body.out_dir,tr_prompt:body.prompt,tr_batch_size:body.batch_size,api_key:apiKey});
+  runTask("/api/translate/run", body, document.querySelector("[data-action='run-translate']"), "tr_log");
+}
+async function runTask(url, body, btn, logId) {
+  if (!btn.dataset.orig) btn.dataset.orig = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>执行中...';
+  const logEl = document.getElementById(logId);
+  logEl.innerHTML = "";
+  const statusBar = document.getElementById("status_bar");
+  statusBar.classList.add("running");
+  statusBar.querySelector("span").textContent = "运行中";
+  const r = await fetch(url, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const d = await r.json();
+  if (d.error) {
+    logEl.innerHTML = '<span class="error">❌ '+escapeHtml(d.error)+'</span>';
+    btn.disabled=false;
+    btn.textContent=btn.dataset.orig;
+    statusBar.classList.remove("running");
+    statusBar.querySelector("span").textContent = "系统空闲";
+    return;
+  }
+  const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
+  let _outputPath = "";
+  evtSrc.onmessage = (e) => {
+    if (e.data === "[DONE]") {
+      evtSrc.close();
+      btn.disabled = false;
+      btn.textContent = btn.dataset.orig;
+      statusBar.classList.remove("running");
+      statusBar.querySelector("span").textContent = "系统空闲";
+      if (_outputPath) {
+        fetch("/api/open/folder", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:_outputPath})}).then(r=>r.json()).then(d=>{
+          if (!d.ok) console.warn("打开文件夹失败:", d);
+        }).catch(e=>console.warn("打开文件夹请求失败:", e));
+        const _hint = document.createElement("div");
+        _hint.textContent = "📂 已打开输出文件夹";
+        _hint.style.color = "var(--accent)";
+        logEl.appendChild(_hint);
+      }
+      return;
+    }
+    const lines = e.data.split("\n");
+    for (const raw of lines) {
+      if (!raw.trim()) continue;
+      const m = raw.match(/^\[(\d{2}:\d{2}:\d{2})\](?:\[(\w+)\])?\s*(.*)/);
+      let tag = "", msg = raw;
+      if (m) {
+        msg = m[3] || "";
+        tag = (m[2] || "").toLowerCase();
+        msg = `<span class="ts">${m[1]}</span> ${msg}`;
+      }
+      const cls = {"error":"error","warn":"warn","ok":"success","success":"success","info":"info"}[tag] || "";
+      const div = document.createElement("div");
+      div.className = cls;
+      div.innerHTML = msg;
+      const _m = msg.match(/(?:已生成修改总结|修改总结)[:\s]+(.+?)\\修改总结\.txt/);
+      if (_m) _outputPath = _m[1].trim();
+      const _pm = msg.match(/\[输出路径\]\s+(.+)/);
+      if (_pm && !_outputPath) _outputPath = _pm[1].trim();
+      logEl.appendChild(div);
+    }
+    const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 32;
+    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+  };
+  evtSrc.onerror = () => {
+    evtSrc.close();
+    btn.disabled = false;
+    btn.textContent = btn.dataset.orig;
+    statusBar.classList.remove("running");
+    statusBar.querySelector("span").textContent = "系统空闲";
+    logEl.innerHTML += "\n⚠ 日志连接中断\n";
+  };
+}
+let dirModal = null;
+function browseDir(inputId, callback, initialPath) {
+  if (!dirModal) {
+    dirModal = document.createElement("div");
+    dirModal.style.cssText = "position:fixed;top:6.25rem;left:50%;transform:translateX(-50%);width:35rem;max-height:43.75rem;background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:1.25rem;z-index:1000;display:none;flex-direction:column;box-shadow:0 1.25rem 3.75rem rgba(0,0,0,.5)";
+    dirModal.innerHTML = `
+        <div style="padding:1.25rem 1.5rem;border-bottom:1px solid rgba(255,255,255,.05);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600;font-size:1rem">选择目录</span>
+          <button class="btn btn-normal btn-sm" data-action="close-dir-modal">✕</button>
+        </div>
+        <div class="flex-row" style="padding:0.875rem 1.5rem">
+          <button class="btn btn-normal btn-sm" id="dir_up">⬆ 上级</button>
+          <span id="dir_path" style="color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;align-self:center;font-size:0.8125rem"></span>
+        </div>
+        <div id="dir_drives" style="padding:0.25rem 1rem 0;display:flex;flex-wrap:wrap;gap:4px"></div>
+        <div id="dir_list" style="flex:1;overflow:auto;padding:0.5rem 1rem"></div>
+        <div class="flex-row" style="padding:0.875rem 1.5rem;border-top:1px solid rgba(255,255,255,.05);justify-content:flex-end">
+          <button class="btn btn-normal" data-action="close-dir-modal">取消</button>
+          <button class="btn btn-primary" data-action="confirm-dir">选择此目录</button>
+        </div>
+      `;
+    document.body.appendChild(dirModal);
+    document.getElementById("dir_up").onclick = () => dirNavigate(dirModal._parent);
+    document.getElementById("dir_drives").onclick = (e) => {
+      const btn = e.target.closest("[data-drive]");
+      if (btn) dirNavigate(btn.dataset.drive);
+    };
+    document.getElementById("dir_list").onclick = (e) => {
+      const item = e.target.closest("[data-path]");
+      if (item) {
+        document.querySelectorAll("#dir_list [data-path]").forEach(x=>x.style.background="");
+        item.style.background = "rgba(94,162,255,.2)";
+        dirModal._selected = item.dataset.path;
+      }
+    };
+    document.getElementById("dir_list").ondblclick = (e) => {
+      const item = e.target.closest("[data-path]");
+      if (item) dirNavigate(item.dataset.path);
+    };
+  }
+  dirModal._targetInput = inputId;
+  dirModal._callback = callback;
+  dirModal._selected = null;
+  const cur = initialPath || document.getElementById(inputId).value.trim() || "C:\\";
+  dirNavigate(cur);
+  dirModal.style.display = "flex";
+}
+async function dirNavigate(path) {
+  const r = await fetch("/api/dir/browse", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path})});
+  const d = await r.json();
+  document.getElementById("dir_path").textContent = d.current;
+  dirModal._parent = d.parent;
+  document.getElementById("dir_up").disabled = !d.parent;
+  let drivesHtml = "";
+  if (d.drives && d.drives.length) {
+    drivesHtml = d.drives.map(dd => `<button class="btn btn-normal btn-sm" data-drive="${escapeHtml(dd.path)}" style="font-size:12px;height:28px;min-height:28px;padding:0 10px">${escapeHtml(dd.name)}</button>`).join("");
+  }
+  document.getElementById("dir_drives").innerHTML = drivesHtml;
+  document.getElementById("dir_list").innerHTML = d.dirs.map(dd => `<div data-path="${escapeHtml(dd.path)}" style="padding:0.875rem 1rem;border-radius:0.75rem;cursor:pointer;transition:.15s">📁 ${escapeHtml(dd.name)}</div>`).join("");
+}
+function confirmDir() {
+  const path = dirModal._selected || document.getElementById("dir_path").textContent;
+  if (path) {
+    document.getElementById(dirModal._targetInput).value = path;
+    if (dirModal._callback) dirModal._callback();
+  }
+  closeDirModal();
+}
+function closeDirModal() {
+  dirModal.style.display = "none";
+}
+let advModal = null;
+function openAdvSettings() {
+  if (!advModal) {
+    advModal = document.createElement("div");
+    advModal.style.cssText = "position:fixed;top:6.25rem;left:50%;transform:translateX(-50%);width:34rem;max-height:43.75rem;background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:1.25rem;z-index:1000;display:none;flex-direction:column;box-shadow:0 1.25rem 3.75rem rgba(0,0,0,.5)";
+    advModal.innerHTML = `
+        <div style="padding:1.25rem 1.5rem;border-bottom:1px solid rgba(255,255,255,.05);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600;font-size:1rem">⚙ 高级设置</span>
+          <button class="btn btn-normal btn-sm" data-action="close-adv-settings">✕</button>
+        </div>
+        <div style="padding:1.25rem 1.5rem;overflow:auto;flex:1">
+          <div style="font-size:0.85rem;font-weight:600;color:var(--accent);margin-bottom:8px">SVN 认证</div>
+          <div class="form-group">
+            <label>用户名</label>
+            <input type="text" id="adv_svn_user" placeholder="SVN 用户名" autocomplete="off" style="width:100%">
+          </div>
+          <div class="form-group">
+            <label>密码</label>
+            <input type="password" id="adv_svn_pass" placeholder="SVN 密码" style="width:100%">
+          </div>
+          <div style="font-size:0.85rem;font-weight:600;color:var(--accent);margin:16px 0 8px">导出设置</div>
+          <div class="form-group">
+            <label>排除目录（逗号分隔）</label>
+            <input type="text" id="adv_exclude_dirs" placeholder="BinData, GenerateData, Language" autocomplete="off" style="width:100%">
+          </div>
+          <div style="font-size:0.85rem;font-weight:600;color:var(--accent);margin:16px 0 8px">文件级配置</div>
+          <div class="form-group">
+            <label>文件名</label>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input type="text" id="adv_cmp_file" placeholder="选择或输入文件名" autocomplete="off" style="flex:1;min-width:0">
+              <button class="btn btn-normal btn-sm" data-action="adv-save-preset" style="font-size:13px;padding:0 10px">保存</button>
+              <button class="btn btn-normal btn-sm" data-action="adv-del-preset" style="font-size:13px;padding:0 10px;color:var(--warn,orange)" id="adv_del_preset_btn">×</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="form-group">
+              <label>标题行数</label>
+              <input type="number" id="adv_cmp_title_rows" placeholder="1" min="1" step="1" style="width:100%">
+            </div>
+            <div class="form-group">
+              <label>对比ID列</label>
+              <input type="number" id="adv_cmp_id_col" placeholder="1" min="1" step="1" style="width:100%">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>输出列表头（逗号分隔）</label>
+            <input type="text" id="adv_cmp_output_cols" placeholder="留空=全部列" autocomplete="off" style="width:100%">
+          </div>
+        </div>
+        <div class="flex-row" style="padding:0.875rem 1.5rem;border-top:1px solid rgba(255,255,255,.05);justify-content:flex-end;gap:8px">
+          <button class="btn btn-normal" data-action="close-adv-settings">取消</button>
+          <button class="btn btn-primary" data-action="save-adv-settings">保存</button>
+        </div>
+      `;
+    document.body.appendChild(advModal);
+    document.getElementById("adv_cmp_file").addEventListener("input", advLoadPresetValues);
+  }
+  document.getElementById("adv_svn_user").value = config.svn_user || "";
+  document.getElementById("adv_svn_pass").value = "";
+  document.getElementById("adv_exclude_dirs").value = config.exclude_dirs || "";
+  document.getElementById("adv_cmp_title_rows").value = config.cmp_title_rows || "1";
+  document.getElementById("adv_cmp_id_col").value = config.cmp_id_col || "1";
+  document.getElementById("adv_cmp_output_cols").value = config.cmp_output_cols || "";
+  document.getElementById("adv_cmp_file").value = "";
+  advRefreshPresetList();
+  advModal.style.display = "flex";
+}
+function advRefreshPresetList() {
+  const presets = config.cmp_file_presets || [];
+  _suggests["adv_cmp_file"] = { items: ["", ...presets] };
+  const delBtn = document.getElementById("adv_del_preset_btn");
+  delBtn.style.opacity = presets.length ? "1" : "0.3";
+}
+function advLoadPresetValues() {
+  const name = document.getElementById("adv_cmp_file").value.trim();
+  const settings = config.cmp_file_settings || {};
+  const vals = settings[name];
+  if (vals) {
+    document.getElementById("adv_cmp_title_rows").value = vals.cmp_title_rows || "1";
+    document.getElementById("adv_cmp_id_col").value = vals.cmp_id_col || "1";
+    document.getElementById("adv_cmp_output_cols").value = vals.cmp_output_cols || "";
+  } else {
+    document.getElementById("adv_cmp_title_rows").value = config.cmp_title_rows || "1";
+    document.getElementById("adv_cmp_id_col").value = config.cmp_id_col || "1";
+    document.getElementById("adv_cmp_output_cols").value = config.cmp_output_cols || "";
+  }
+}
+function saveAdvFilePreset() {
+  const name = document.getElementById("adv_cmp_file").value.trim();
+  const cmp_title_rows = document.getElementById("adv_cmp_title_rows").value.trim() || "1";
+  const cmp_id_col = document.getElementById("adv_cmp_id_col").value || "1";
+  const cmp_output_cols = document.getElementById("adv_cmp_output_cols").value.trim();
+  if (name) {
+    const payload = {
+      cmp_file_presets: [...new Set([name, ...(config.cmp_file_presets || [])])],
+      cmp_file_settings: Object.assign({}, config.cmp_file_settings || {}, {
+        [name]: { cmp_title_rows, cmp_id_col, cmp_output_cols }
+      })
+    };
+    fetch("/api/config", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
+      .then(r=>r.json()).then(d=>{
+        if (d.ok) {
+          config.cmp_file_presets = payload.cmp_file_presets;
+          config.cmp_file_settings = payload.cmp_file_settings;
+          advRefreshPresetList();
+        }
+      });
+  } else {
+    const payload = { cmp_title_rows, cmp_id_col, cmp_output_cols };
+    fetch("/api/config", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
+      .then(r=>r.json()).then(d=>{
+        if (d.ok) {
+          config.cmp_title_rows = cmp_title_rows;
+          config.cmp_id_col = cmp_id_col;
+          config.cmp_output_cols = cmp_output_cols;
+        }
+      });
+  }
+}
+function delAdvFilePreset() {
+  const name = document.getElementById("adv_cmp_file").value.trim();
+  if (!name || !(config.cmp_file_presets || []).includes(name)) return;
+  const presets = (config.cmp_file_presets || []).filter(n => n !== name);
+  const settings = Object.assign({}, config.cmp_file_settings || {});
+  delete settings[name];
+  const payload = { cmp_file_presets: presets, cmp_file_settings: settings };
+  fetch("/api/config", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
+    .then(r=>r.json()).then(d=>{
+      if (d.ok) {
+        config.cmp_file_presets = presets;
+        config.cmp_file_settings = settings;
+        document.getElementById("adv_cmp_file").value = "";
+        document.getElementById("adv_cmp_title_rows").value = config.cmp_title_rows || "1";
+        document.getElementById("adv_cmp_id_col").value = config.cmp_id_col || "1";
+        document.getElementById("adv_cmp_output_cols").value = config.cmp_output_cols || "";
+        advRefreshPresetList();
+      }
+    });
+}
+function closeAdvSettings() {
+  advModal.style.display = "none";
+}
+function saveAdvSettings() {
+  const svn_user = document.getElementById("adv_svn_user").value.trim();
+  const svn_pass = document.getElementById("adv_svn_pass").value;
+  const exclude_dirs = document.getElementById("adv_exclude_dirs").value.trim();
+  const payload = { svn_user, cmp_title_rows: config.cmp_title_rows || "1", cmp_id_col: config.cmp_id_col || "1", cmp_output_cols: config.cmp_output_cols || "" };
+  if (svn_pass) payload.svn_pass = svn_pass;
+  if (exclude_dirs) payload.exclude_dirs = exclude_dirs;
+  else payload.exclude_dirs = "";
+  document.querySelector("[data-action='save-adv-settings']").textContent = "保存中…";
+  fetch("/api/config", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
+    .then(r=>r.json()).then(d=>{
+      if (d.ok) {
+        config.svn_user = svn_user;
+        config.exclude_dirs = exclude_dirs;
+        closeAdvSettings();
+      }
+    }).finally(()=>{
+      document.querySelector("[data-action='save-adv-settings']").textContent = "保存";
+    });
+}
+document.addEventListener("click",e=>{
+  const target = e.target.closest("[data-action]");
+  if(!target) return;
+  const action = target.dataset.action;
+  switch(action){
+    case "run-svn": runSvn(); break;
+    case "run-upload": runUpload(); break;
+    case "run-translate": runTranslate(); break;
+    case "run-workflow": runWorkflow(); break;
+    case "svn-today": {
+      const today = `${cy}-${String(cm).padStart(2,"0")}-${String(cd).padStart(2,"0")}`;
+      document.getElementById("svn_start").value = today;
+      document.getElementById("svn_end").value = today;
+      break;
+    }
+    case "svn-advanced": openAdvSettings(); break;
+    case "close-adv-settings": closeAdvSettings(); break;
+    case "save-adv-settings": saveAdvSettings(); break;
+    case "adv-save-preset": saveAdvFilePreset(); break;
+    case "adv-del-preset": delAdvFilePreset(); break;
+    case "svn-clear": document.getElementById("svn_log").innerHTML = ""; break;
+    case "svn-clear-cache":
+      fetch("/api/cache/clear", {method:"POST"}).then(r=>r.json()).then(d=>{
+        const el = document.getElementById("svn_log");
+        const div = document.createElement("div");
+        div.textContent = `${d.ok ? "🗑 已清除" : "⚠ 清除失败"} ${d.count||0} 个缓存文件`;
+        el.appendChild(div);
+      }); break;
+    case "upload-clear": document.getElementById("upload_log").innerHTML = ""; break;
+    case "tr-clear": document.getElementById("tr_log").innerHTML = ""; break;
+    case "wf-clear": document.getElementById("wf_log").innerHTML = ""; break;
+    case "browse-svn-output": browseDir("svn_output"); break;
+    case "browse-svn-url": {
+      const v = document.getElementById("svn_url").value.trim();
+      if (v.startsWith("http")) {
+        fetch("/api/svn/find-wc", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:v})})
+          .then(r=>r.json()).then(d=>{
+            const startPath = (d.ok && d.path) ? d.path : null;
+            browseDir("svn_url", onSvnUrlPicked, startPath);
+          });
+      } else {
+        browseDir("svn_url", onSvnUrlPicked);
+      }
+      break;
+    }
+    case "open-svn-url": {
+      const v = document.getElementById("svn_url").value.trim();
+      if (!v) break;
+      if (v.startsWith("http")) {
+        fetch("/api/svn/open-wc", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:v})})
+          .then(r=>r.json()).then(d=>{if(!d.ok) _showToast(d.error||"未找到本地副本");});
+      } else {
+        fetch("/api/open/folder", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:v})});
+      }
+      break;
+    }
+    case "open-svn-output": {
+      const _p = document.getElementById("svn_output").value.trim();
+      if (_p) fetch("/api/open/folder", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:_p})});
+      break;
+    }
+    case "browse-upload-src": browseDir("upload_src", refreshFiles); break;
+    case "browse-upload-tgt": browseDir("upload_tgt"); break;
+    case "refresh-files": refreshFiles(); break;
+    case "select-all": selectAllFiles(true); break;
+    case "select-none": selectAllFiles(false); break;
+    case "wf-create": wfCreate(); break;
+    case "wf-copy": wfCopy(); break;
+    case "wf-delete": wfDelete(); break;
+    case "wf-add-step": wfAddStep(Number(target.dataset.wf)); break;
+    case "wf-del-step": wfDelStep(Number(target.dataset.wf), Number(target.dataset.step)); break;
+    case "browse-tr-src": browseFile("tr_src"); break;
+    case "browse-tr-ref": browseFile("tr_ref"); break;
+    case "browse-tr-out": browseDir("tr_out"); break;
+    case "close-dir-modal": closeDirModal(); break;
+    case "confirm-dir": confirmDir(); break;
+    case "dismiss-zoom-warn": {
+      const w = document.getElementById("zoom_warning");
+      w.classList.remove("visible");
+      w.dataset.dismissed = "1";
+      break;
+    }
+  }
+});
+document.addEventListener("change",e=>{
+  if(!e.target.matches(".file-item input[type='checkbox']")) return;
+  const item = e.target.closest(".file-item");
+  const idx = Number(item.dataset.idx);
+  uploadFilesData[idx]._sel = e.target.checked;
+  item.classList.toggle("selected", e.target.checked);
+});
+document.addEventListener("click",e=>{
+  const item = e.target.closest(".file-item");
+  if(!item) return;
+  if(e.target.matches("input")) return;
+  const idx = Number(item.dataset.idx);
+  const file = uploadFilesData[idx];
+  file._sel = !file._sel;
+  const checkbox = item.querySelector("input[type='checkbox']");
+  checkbox.checked = file._sel;
+  item.classList.toggle("selected", file._sel);
+});
+document.addEventListener("click",e=>{
+  const item = e.target.closest("[data-idx]");
+  if(item && !item.classList.contains("file-item")){
+    if(item.classList.contains("wf-item")){
+      wfSelect(Number(item.dataset.idx), item);
+      return;
+    }
+  }
+  const navItem = e.target.closest("[data-key]");
+  if(navItem){
+    const key = navItem.dataset.key;
+    if(key && S[key]) switchTab(key);
+  }
+});
+document.addEventListener("click",e=>{
+  const toggle = e.target.closest(".toggle-btn");
+  if(!toggle) return;
+  const group = toggle.closest(".toggle-group");
+  if(!group) return;
+  group.querySelectorAll(".toggle-btn").forEach(b=>b.classList.remove("active"));
+  toggle.classList.add("active");
+});
+document.addEventListener("input",e=>{
+  if(e.target.id === "wf_name"){
+    wfUpdateName(wfSelectedIdx, e.target.value);
+  }
+});
+let _suggests = {};
+let _activeInputId = null;
+let _portal = null;
+function _getPortal() {
+  if (!_portal) {
+    _portal = document.createElement("div");
+    _portal.className = "suggest-drop";
+    document.body.appendChild(_portal);
+  }
+  return _portal;
+}
+function initSuggest(inputId, items) {
+  if (!items.length) return;
+  _suggests[inputId] = { items };
+}
+function _showSuggest(inputId, showAll) {
+  const s = _suggests[inputId];
+  if (!s) return;
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  const val = inp.value.toLowerCase();
+  const visible = s.items.map((u,i) => ({val:u, idx:i})).filter(x => showAll || !val || x.val.toLowerCase().includes(val));
+  const portal = _getPortal();
+  portal.innerHTML = visible.length
+    ? visible.map(x => {
+        const label = x.val || "⊙ 全局默认";
+        const dim = !x.val ? ' style="color:var(--dim)"' : '';
+        return `<div class="s-item" data-idx="${x.idx}" data-val="${escapeHtml(x.val)}"${dim}><span class="s-label">${escapeHtml(label)}</span><button class="s-del" data-del-idx="${x.idx}" title="删除">×</button></div>`;
+      }).join("")
+    : '<div class="s-item" style="color:var(--dim);cursor:default">无匹配记录</div>';
+  const rect = inp.getBoundingClientRect();
+  portal.style.top = (rect.bottom + 4) + "px";
+  portal.style.left = rect.left + "px";
+  portal.style.minWidth = rect.width + "px";
+  portal.classList.add("show");
+  _activeInputId = inputId;
+  s.selIdx = -1;
+}
+function _hideSuggest() {
+  if (_portal) _portal.classList.remove("show");
+  _activeInputId = null;
+}
+function _selectSuggest(val) {
+  if (_activeInputId) {
+    const inp = document.getElementById(_activeInputId);
+    inp.value = val;
+    inp.dispatchEvent(new Event("input", {bubbles:true}));
+    const _configMap = {svn_url:"svn_urls",svn_keyword:"svn_keyword_history",svn_author:"svn_author_history",svn_output:"output_dir_history",upload_src:"src_dir_history",upload_tgt:"tgt_dir_history",tr_src:"tr_src_history",tr_ref:"tr_ref_history",tr_out:"tr_out_dir"};
+    const ck = _configMap[_activeInputId];
+    if (ck && config[ck]) {
+      const updated = [val, ...config[ck].filter(v=>v!==val)].slice(0,20);
+      saveConfig({[ck]: updated});
+      config[ck] = updated;
+      initSuggest(_activeInputId, updated);
+    }
+  }
+  _hideSuggest();
+}
+document.addEventListener("focusin", e => {
+  const inp = e.target.closest("input[autocomplete='off']");
+  if (inp && inp.id && _suggests[inp.id]) _showSuggest(inp.id, true);
+});
+document.addEventListener("input", e => {
+  const inp = e.target.closest("input[autocomplete='off']");
+  if (inp && inp.id && _suggests[inp.id]) _showSuggest(inp.id);
+});
+document.addEventListener("click", e => {
+  const del = e.target.closest("[data-del-idx]");
+  if (del && _activeInputId) {
+    e.stopPropagation();
+    const idx = Number(del.dataset.delIdx);
+    const s = _suggests[_activeInputId];
+    if (s && idx >= 0 && idx < s.items.length) {
+      const removed = s.items[idx];
+      s.items.splice(idx, 1);
+      const map = {svn_url:["svn_urls",20], svn_output:["output_dir_history",10], upload_src:["src_dir_history",20], upload_tgt:["tgt_dir_history",20], tr_src:["tr_src_history",20], tr_ref:["tr_ref_history",20], tr_out:["tr_out_dir",20], adv_cmp_file:["cmp_file_presets",20]};
+      const mk = map[_activeInputId];
+      if (mk) {
+        const hist = (config[mk[0]]||[]).filter(v=>v!==removed);
+        saveConfig({[mk[0]]: hist});
+        config[mk[0]] = hist;
+      }
+      _showSuggest(_activeInputId, true);
+    }
+    return;
+  }
+  const item = e.target.closest(".suggest-drop .s-item");
+  if (item && item.dataset.val !== undefined) {
+    _selectSuggest(item.dataset.val);
+    return;
+  }
+  if (!e.target.closest(".suggest-drop") && !e.target.closest("input[autocomplete='off']")) {
+    _hideSuggest();
+  }
+});
+document.addEventListener("keydown", e => {
+  if (!_activeInputId || !_portal || !_portal.classList.contains("show")) return;
+  const s = _suggests[_activeInputId];
+  if (!s) return;
+  const items = _portal.querySelectorAll(".s-item:not([style*='cursor:default'])");
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    s.selIdx = Math.min((s.selIdx||-1) + 1, items.length - 1);
+    items.forEach((el,i) => el.classList.toggle("sel", i === s.selIdx));
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    s.selIdx = Math.max((s.selIdx||0) - 1, 0);
+    items.forEach((el,i) => el.classList.toggle("sel", i === s.selIdx));
+  } else if (e.key === "Enter") {
+    if (s.selIdx >= 0 && items[s.selIdx]) {
+      e.preventDefault();
+      _selectSuggest(items[s.selIdx].dataset.val);
+    }
+  } else if (e.key === "Escape") {
+    _hideSuggest();
+  }
+});
+function _initDirHistory(inputId, configKey, callback){
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  input.addEventListener("blur", async ()=>{
+    const val = input.value.trim();
+    if (!val) return;
+    const r = await fetch("/api/path/verify", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:val})});
+    const d = await r.json();
+    if (!d.ok) return;
+    const hist = config[configKey]||[];
+    const updated = [val, ...hist.filter(v=>v!==val)].slice(0,20);
+    saveConfig({[configKey]: updated});
+    config[configKey] = updated;
+    initSuggest(inputId, updated);
+    if (callback) callback();
+  });
+}
+function enablePathDrop(inputId, opts){
+  opts = opts || {};
+  const input = document.getElementById(inputId);
+  if(!input) return;
+  input.addEventListener("dragover", e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    input.classList.add("drag-over");
+  });
+  input.addEventListener("dragleave", ()=>{
+    input.classList.remove("drag-over");
+  });
+}
+function onSvnUrlPicked() {
+  const input = document.getElementById("svn_url");
+  const path = input.value.trim();
+  if (!path) return;
+  const _dropInputs = ["upload_src","upload_tgt","tr_src","tr_ref","tr_out","svn_output"];
+  for (const id of _dropInputs) {
+    const el = document.getElementById(id);
+    if (el && el.classList.contains("drag-over")) {
+      el.value = path;
+      el.classList.remove("drag-over");
+      input.value = config.svn_urls?.[0] || "";
+      const _configMap = {upload_src:"src_dir_history",upload_tgt:"tgt_dir_history",tr_src:"tr_src_history",tr_ref:"tr_ref_history",tr_out:"tr_out_dir",svn_output:"output_dir_history"};
+      const ck = _configMap[id];
+      if (ck) {
+        const updated = [path, ...(config[ck]||[]).filter(v=>v!==path)].slice(0,20);
+        saveConfig({[ck]: updated});
+        config[ck] = updated;
+        initSuggest(id, updated);
+      }
+      if (id === "upload_src") refreshFiles();
+      return;
+    }
+  }
+  document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
+  fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path})})
+    .then(r=>r.json()).then(d=>{
+      if (d.ok) {
+        input.value = d.url;
+        saveConfig({
+          svn_urls: [d.url, ...(config.svn_urls||[]).filter(u=>u!==d.url)].slice(0,20),
+          output_dir_history: [path, ...(config.output_dir_history||[]).filter(v=>v!==path)].slice(0,10)
+        });
+        config.svn_urls = [d.url, ...(config.svn_urls||[]).filter(u=>u!==d.url)].slice(0,20);
+        config.output_dir_history = [path, ...(config.output_dir_history||[]).filter(v=>v!==path)].slice(0,10);
+        initSuggest("svn_url", config.svn_urls);
+      } else {
+        _showToast(d.error || "该文件夹不是 SVN 工作副本");
+      }
+    }).catch(()=>_showToast("无法检测 SVN 仓库"));
+}
+function _showToast(msg) {
+  const t = document.createElement("div");
+  Object.assign(t.style, {
+    position:"fixed",bottom:"48px",left:"50%",transform:"translateX(-50%)",
+    background:"rgba(0,0,0,.85)",color:"#fff",padding:"10px 24px",
+    borderRadius:"8px",fontSize:"13px",zIndex:"9999",transition:"opacity .3s"
+  });
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>{t.style.opacity="0";setTimeout(()=>t.remove(),300);},2000);
+}
+function browseFile(inputId) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".xlsx,.xls";
+  input.onchange = () => {
+    if (input.files[0]) {
+      document.getElementById(inputId).value = input.files[0].path || input.files[0].name;
+    }
+  };
+  input.click();
+}
+function getBrowserZoom() {
+  if (window.visualViewport && window.visualViewport.scale) {
+    return window.visualViewport.scale;
+  }
+  if (window.outerWidth && window.innerWidth) {
+    return Math.round(window.outerWidth / window.innerWidth * 100) / 100;
+  }
+  return 1;
+}
+function checkZoom() {
+  const scale = getBrowserZoom();
+  const warn = document.getElementById("zoom_warning");
+  if (!warn || warn.dataset.dismissed === "1") return;
+  if (Math.abs(scale - 1) > 0.02) {
+    warn.classList.add("visible");
+  } else {
+    warn.classList.remove("visible");
+  }
+}
+let _zoomPollTimer = null;
+window.addEventListener("DOMContentLoaded", async () => {
+  await loadConfig();
+  switchTab("svn");
+  setTimeout(checkZoom, 300);
+  _zoomPollTimer = setInterval(checkZoom, 1500);
+});
+document.getElementById("close_btn")?.addEventListener("click", ()=>{
+  fetch("/api/close", {method:"POST"});
+});
+
+const RESIZE_EDGE = 8;
+let _resizeState = null;
+
+function _setEdgeCursor(cursor) {
+  document.body.style.cursor = cursor;
+  document.querySelectorAll('.drag-bar').forEach(el => el.style.cursor = cursor);
+}
+
+function _hasVScrollbar(el) {
+  return el && el.scrollHeight > el.clientHeight;
+}
+
+function getEdge(mx, my) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const l = mx < RESIZE_EDGE;
+  const r = mx > vw - RESIZE_EDGE;
+  const t = my < RESIZE_EDGE;
+  const b = my > vh - RESIZE_EDGE;
+  const CORNER = 4;
+  if (t && l && mx < CORNER && my < CORNER) return 'top-left';
+  if (t && r && mx > vw - CORNER && my < CORNER) return 'top-right';
+  if (b && l && mx < CORNER && my > vh - CORNER) return 'bottom-left';
+  if (b && r && mx > vw - CORNER && my > vh - CORNER) return 'bottom-right';
+  if (r) {
+    const content = document.querySelector('.content');
+    if (_hasVScrollbar(content)) {
+      const sbw = content.offsetWidth - content.clientWidth;
+      const cr = content.getBoundingClientRect();
+      if (mx > cr.right - sbw) {
+        return null;
+      }
+    }
+  }
+  if (l) return 'left';
+  if (r) return 'right';
+  if (t) return 'top';
+  if (b) return 'bottom';
+  return null;
+}
+
+const _cursorMap = {
+  'left':'ew-resize','right':'ew-resize',
+  'top':'ns-resize','bottom':'ns-resize',
+  'top-left':'nwse-resize','bottom-right':'nwse-resize',
+  'top-right':'nesw-resize','bottom-left':'nesw-resize',
+};
+
+let _dragState = null;
+let _resizeTick = 0;
+
+document.addEventListener('mousemove', function(e) {
+  if (_resizeState || _dragState) {
+    e.preventDefault();
+    const now = Date.now();
+    if (now - _resizeTick < 25) return;
+    _resizeTick = now;
+    if (window.pywebview && window.pywebview.api) {
+      const p = _resizeState ? window.pywebview.api.resize() : window.pywebview.api.move();
+      p.then(function(active) {
+        if (!active) {
+          _resizeState = null;
+          _dragState = null;
+          _setEdgeCursor('');
+        }
+      });
+    }
+    return;
+  }
+  const edge = getEdge(e.clientX, e.clientY);
+  _setEdgeCursor(edge ? _cursorMap[edge] : '');
+});
+
+document.addEventListener('mousedown', function(e) {
+  if (e.target.closest('.drag-bar')) {
+    const edge = getEdge(e.clientX, e.clientY);
+    if (!edge) {
+      e.preventDefault();
+      if (window.pywebview && window.pywebview.api) {
+        window.pywebview.api.start_resize('move');
+        _dragState = true;
+      }
+      return;
+    }
+  }
+  const edge = getEdge(e.clientX, e.clientY);
+  if (!edge) return;
+  e.preventDefault();
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.start_resize(edge);
+    _resizeState = true;
+  }
+});
+
+document.addEventListener('mouseup', function(e) {
+  if (_resizeState) {
+    _resizeState = null;
+    _setEdgeCursor('');
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.stop_resize();
+    }
+  }
+  if (_dragState) {
+    _dragState = null;
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.stop_resize();
+    }
+  }
+});
+
+document.addEventListener('mouseleave', function() {
+  if (_resizeState || _dragState) {
+    _resizeState = null;
+    _dragState = null;
+    _setEdgeCursor('');
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.stop_resize();
+    }
+  }
+});
+</script>
+</body>
+</html>

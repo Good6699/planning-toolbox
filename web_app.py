@@ -1,0 +1,1203 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""策划工具箱 - Web 版本 (Flask 后端)"""
+import sys, os, json, signal, subprocess, threading, queue, time, shutil, stat
+from datetime import datetime
+
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_pm = os.path.join(_script_dir, "py_modules")
+if os.path.isdir(_pm) and _pm not in sys.path:
+    sys.path.insert(0, _pm)
+sys.path.insert(0, _script_dir)
+
+from flask import Flask, render_template, request, jsonify, Response, send_from_directory
+from toolbox_config import (
+    SCRIPT_DIR, MAIN_SCRIPT, CONFIG_FILE, DEFAULT_OUTPUT_DIR,
+    load_config, save_config, int_or
+)
+from toolbox_platform import _get_subprocess_kwargs, _get_svn_path
+
+if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
+    if len(sys.argv) < 3:
+        print("Usage: --worker <worker_script> [args...]", file=sys.stderr)
+        sys.exit(1)
+    worker_script = sys.argv[2]
+    worker_args = sys.argv[3:]
+    env = os.environ.copy()
+    pm = os.path.join(_script_dir, "py_modules")
+    if os.path.isdir(pm):
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = pm if not existing else pm + os.pathsep + existing
+    q = queue.Queue()
+    proc = subprocess.Popen(
+        [sys.executable, worker_script] + worker_args,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, encoding="utf-8", errors="replace",
+        bufsize=1, env=env,
+        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    )
+    for line in iter(proc.stdout.readline, ""):
+        q.put(line)
+    proc.wait()
+    q.put(None)
+    sys.exit(proc.returncode)
+
+app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.jinja_env.auto_reload = True
+
+@app.after_request
+def _no_cache(response):
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+# ── SSE 日志流 ───────────────────────────────────────────
+_log_queues = {}  # task_id -> queue.Queue
+
+def _get_next_task_id():
+    return str(int(time.time() * 1000))
+
+_active_subprocesses = []
+_active_tasks = {}
+
+def _register_proc(proc, task_id=None):
+    _active_subprocesses.append(proc)
+    if task_id:
+        _active_tasks.setdefault(task_id, []).append(proc)
+
+def _unregister_proc(proc, task_id=None):
+    try:
+        _active_subprocesses.remove(proc)
+    except ValueError:
+        pass
+    if task_id:
+        procs = _active_tasks.get(task_id, [])
+        try:
+            procs.remove(proc)
+        except ValueError:
+            pass
+        if not procs and task_id in _active_tasks:
+            del _active_tasks[task_id]
+
+def _handle_shutdown(signum, frame):
+    for proc in list(_active_subprocesses):
+        try:
+            proc.kill()
+            proc.communicate(timeout=5)
+        except:
+            pass
+    _log_queues.clear()
+    sys.exit(0)
+
+try:
+    signal.signal(signal.SIGTERM, _handle_shutdown)
+except AttributeError:
+    pass
+signal.signal(signal.SIGINT, _handle_shutdown)
+
+# ═══════════════════════════════════════════════════════════
+# 页面
+# ═══════════════════════════════════════════════════════════
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+# ═══════════════════════════════════════════════════════════
+# 配置 API
+# ═══════════════════════════════════════════════════════════
+@app.route("/api/config", methods=["GET"])
+def api_get_config():
+    cfg = load_config()
+    safe = {
+        "svn_urls": cfg.get("svn_urls", []),
+        "src_dir_history": cfg.get("src_dir_history", []),
+        "tgt_dir_history": cfg.get("tgt_dir_history", []),
+        "tr_src_history": cfg.get("tr_src_history", []),
+        "tr_ref_history": cfg.get("tr_ref_history", []),
+        "tr_api_url": cfg.get("tr_api_url", "https://api.openai.com/v1/chat/completions"),
+        "tr_model": cfg.get("tr_model", "gpt-4o-mini"),
+        "tr_src_lang": cfg.get("tr_src_lang", "zh"),
+        "tr_out_dir": cfg.get("tr_out_dir", DEFAULT_OUTPUT_DIR),
+        "tr_prompt": cfg.get("tr_prompt", "请将以下文本翻译为{tgt_lang}，保持格式不变"),
+        "tr_batch_size": cfg.get("tr_batch_size", 20),
+        "output_dir": cfg.get("output_dir", DEFAULT_OUTPUT_DIR),
+        "output_dir_history": cfg.get("output_dir_history", []),
+        "svn_keyword_history": cfg.get("svn_keyword_history", []),
+        "svn_author_history": cfg.get("svn_author_history", []),
+        "exclude_dirs": cfg.get("exclude_dirs", ""),
+        "svn_user": cfg.get("svn_user", ""),
+        "cmp_file_presets": cfg.get("cmp_file_presets", []),
+        "cmp_file_settings": cfg.get("cmp_file_settings", {}),
+        "cmp_title_rows": cfg.get("cmp_title_rows", "1"),
+        "cmp_id_col": cfg.get("cmp_id_col", "::ID::"),
+        "cmp_global_id_col": cfg.get("cmp_global_id_col", ""),
+        "cmp_output_cols": cfg.get("cmp_output_cols", ""),
+        "workflows": cfg.get("workflows", []),
+        "tr_api_key": cfg.get("tr_api_key", ""),
+    }
+    return jsonify(safe)
+
+@app.route("/api/config", methods=["POST"])
+def api_save_config():
+    cfg = load_config()
+    data = request.get_json(force=True)
+    for k, v in data.items():
+        if k == "api_key" and v:
+            cfg["tr_api_key"] = v
+        elif k == "svn_pass" and v:
+            from toolbox_config import encrypt_key
+            cfg["svn_pass"] = encrypt_key(v)
+        elif k in ("api_key", "svn_pass"):
+            pass
+        else:
+            cfg[k] = v
+    save_config(cfg)
+    return jsonify({"ok": True})
+
+# ═══════════════════════════════════════════════════════════
+# SVN 执行 API
+# ═══════════════════════════════════════════════════════════
+@app.route("/api/svn/run", methods=["POST"])
+def api_svn_run():
+    data = request.get_json(force=True)
+    svn_url = data.get("svn_url", "").strip()
+    mode = data.get("mode", "compare")
+    start_date = data.get("start_date", "")
+    end_date = data.get("end_date", "")
+    keyword = data.get("keyword", "").strip()
+    author = data.get("author", "").strip()
+    output = data.get("output", DEFAULT_OUTPUT_DIR).strip()
+
+    if not svn_url:
+        return jsonify({"error": "请输入 SVN URL"}), 400
+
+    # 保存 URL 到历史
+    cfg = load_config()
+    urls = cfg.get("svn_urls", [])
+    if svn_url in urls:
+        urls.remove(svn_url)
+    urls.insert(0, svn_url)
+    cfg["svn_urls"] = urls[:20]
+    save_config(cfg)
+
+    is_export_like = mode in ("export", "summary")
+    if not output or not os.path.isdir(output):
+        output = DEFAULT_OUTPUT_DIR
+    os.makedirs(output, exist_ok=True)
+
+    # 清空输出目录
+    if is_export_like:
+        for fname in os.listdir(output):
+            fpath = os.path.join(output, fname)
+            try:
+                if os.path.isfile(fpath):
+                    os.remove(fpath)
+                elif os.path.isdir(fpath):
+                    shutil.rmtree(fpath)
+            except: pass
+
+    task_id = _get_next_task_id()
+    q = queue.Queue()
+    _log_queues[task_id] = q
+
+    def _run():
+        q.put(f"{'='*50}\n")
+        q.put(f"开始执行\n")
+        q.put(f"模式: {mode}\n")
+        q.put(f"SVN URL: {svn_url}\n")
+        q.put(f"日期范围: {start_date} ~ {end_date}\n")
+        q.put(f"输出: {output}\n")
+
+        cmd = [sys.executable, MAIN_SCRIPT, "--url", svn_url,
+               "--start", start_date, "--end", end_date, "--output", output]
+        if mode == "export":
+            cmd += ["--export", "--export-dir", output]
+            exclude = cfg.get("exclude_dirs", "").strip()
+            if exclude:
+                cmd += ["--exclude-dirs", exclude]
+        elif mode == "summary":
+            cmd += ["--summary", "--export-dir", output]
+            exclude = cfg.get("exclude_dirs", "").strip()
+            if exclude:
+                cmd += ["--exclude-dirs", exclude]
+        if keyword:
+            cmd += ["--keyword", keyword]
+        if author:
+            cmd += ["--author", author]
+
+        svn_user = cfg.get("svn_user", "").strip()
+        svn_pass = cfg.get("svn_pass", "").strip()
+        if svn_user:
+            cmd += ["--svn-user", svn_user]
+        if svn_pass:
+            from toolbox_config import decrypt_key
+            cmd += ["--svn-pass", decrypt_key(svn_pass)]
+
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                     text=True, encoding="utf-8", errors="replace",
+                                     bufsize=1, **_get_subprocess_kwargs())
+            _register_proc(proc, task_id)
+            try:
+                for line in iter(proc.stdout.readline, ""):
+                    q.put(line)
+                proc.wait()
+                q.put(f"\n── 执行完成 (退出码: {proc.returncode}) ──\n")
+            finally:
+                _unregister_proc(proc, task_id)
+        except Exception as e:
+            q.put(f"\n❌ 执行失败: {e}\n")
+        q.put(f"[输出路径] {output}\n")
+        q.put(None)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"task_id": task_id})
+
+@app.route("/api/task/cancel", methods=["POST"])
+def api_task_cancel():
+    data = request.get_json(force=True)
+    task_id = data.get("task_id", "").strip()
+    if not task_id:
+        return jsonify({"error": "缺少 task_id"}), 400
+
+    procs = _active_tasks.pop(task_id, [])
+    for proc in procs:
+        try:
+            proc.kill()
+            proc.communicate(timeout=5)
+        except:
+            pass
+        try:
+            _active_subprocesses.remove(proc)
+        except ValueError:
+            pass
+
+    q = _log_queues.pop(task_id, None)
+    if q:
+        try:
+            q.put(json.dumps({"type": "cancelled", "message": "任务已取消"}, ensure_ascii=False))
+            q.put(None)
+        except:
+            pass
+
+    return jsonify({"status": "cancelled", "task_id": task_id})
+
+# ═══════════════════════════════════════════════════════════
+# 文件浏览 API（上传页签用）
+# ═══════════════════════════════════════════════════════════
+@app.route("/api/files/list", methods=["POST"])
+def api_file_list():
+    data = request.get_json(force=True)
+    path = data.get("path", "").strip()
+    if not path or not os.path.isdir(path):
+        return jsonify({"error": "无效目录"}), 400
+
+    entries = []
+    try:
+        items = sorted(os.listdir(path), key=lambda x: (not os.path.isdir(os.path.join(path, x)), x.lower()))
+        for name in items:
+            fp = os.path.join(path, name)
+            try:
+                st = os.stat(fp)
+                is_dir = os.path.isdir(fp)
+                if is_dir:
+                    total = 0
+                    for r, _, fs in os.walk(fp):
+                        for f in fs:
+                            try: total += os.path.getsize(os.path.join(r, f))
+                            except: pass
+                    size = total
+                else:
+                    size = st.st_size
+                if size >= 1024*1024:
+                    s = f"{size/1024/1024:.1f}MB"
+                elif size >= 1024:
+                    s = f"{size/1024:.1f}KB"
+                else:
+                    s = f"{size}B"
+                mtime = datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M")
+            except:
+                is_dir = os.path.isdir(fp)
+                s = "-"
+                mtime = "-"
+            entries.append({
+                "name": name, "path": fp, "is_dir": is_dir,
+                "size": s, "date": mtime,
+            })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+    return jsonify({"entries": entries, "path": path})
+
+def _get_drives():
+    drives = []
+    for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+        root = f"{letter}:\\"
+        if os.path.exists(root):
+            drives.append({"name": f"{letter}:", "path": root})
+    return drives
+
+
+@app.route("/api/path/verify", methods=["POST"])
+def api_path_verify():
+    data = request.get_json(force=True)
+    path = data.get("path", "").strip()
+    if not path:
+        return jsonify({"ok": False})
+    return jsonify({"ok": os.path.isdir(path)})
+
+
+@app.route("/api/dir/browse", methods=["POST"])
+def api_dir_browse():
+    data = request.get_json(force=True)
+    path = os.path.normpath(data.get("path", os.path.expanduser("~")))
+    if not os.path.isdir(path):
+        path = os.path.normpath(os.path.expanduser("~"))
+
+    dirs = []
+    try:
+        items = sorted(os.listdir(path), key=lambda x: x.lower())
+        for name in items:
+            fp = os.path.join(path, name)
+            if os.path.isdir(fp) and not name.startswith("."):
+                dirs.append({"name": name, "path": fp})
+    except: pass
+
+    parent = os.path.dirname(path) if path else ""
+    return jsonify({"dirs": dirs, "current": os.path.normpath(path), "parent": parent, "drives": _get_drives()})
+
+# ═══════════════════════════════════════════════════════════
+# 上传执行 API
+# ═══════════════════════════════════════════════════════════
+@app.route("/api/upload/run", methods=["POST"])
+def api_upload_run():
+    data = request.get_json(force=True)
+    src = data.get("src_dir", "").strip()
+    tgt = data.get("tgt_dir", "").strip()
+    files = data.get("files", [])  # list of {name, path, is_dir}
+
+    if not src or not os.path.isdir(src):
+        return jsonify({"error": "无效源目录"}), 400
+    if not tgt or not os.path.isdir(tgt):
+        return jsonify({"error": "无效目标目录"}), 400
+    if not files:
+        return jsonify({"error": "请选择文件"}), 400
+
+    # 保存历史
+    cfg = load_config()
+    for k, v in [("src_dir_history", src), ("tgt_dir_history", tgt)]:
+        hist = cfg.get(k, [])
+        if v in hist: hist.remove(v)
+        hist.insert(0, v)
+        cfg[k] = hist[:20]
+    save_config(cfg)
+
+    task_id = _get_next_task_id()
+    q = queue.Queue()
+    _log_queues[task_id] = q
+
+    def _run():
+        q.put(f"{'='*50}\n")
+        q.put(f"开始上传\n")
+        q.put(f"源: {src}\n")
+        q.put(f"目标: {tgt}\n\n")
+
+        success = fail = 0
+        for fi in files:
+            name = fi["name"]
+            sp = fi["path"]
+            is_dir = fi.get("is_dir", False)
+            try:
+                if is_dir:
+                    target_dir = os.path.join(tgt, name)
+                    if os.path.isdir(target_dir):
+                        q.put(f"📂 {name}/ 已存在，合并文件...\n")
+                    else:
+                        os.makedirs(target_dir, exist_ok=True)
+                    for root, dirs, fnames in os.walk(sp):
+                        rel = os.path.relpath(root, sp)
+                        dst_dir = os.path.join(target_dir, rel)
+                        os.makedirs(dst_dir, exist_ok=True)
+                        for fn in fnames:
+                            _copy_file(os.path.join(root, fn), os.path.join(dst_dir, fn))
+                    q.put(f"✓ {name}/ 文件夹已复制\n")
+                else:
+                    _copy_file(sp, os.path.join(tgt, name))
+                    q.put(f"✓ {name}\n")
+                success += 1
+            except Exception as e:
+                fail += 1
+                q.put(f"✗ {name}: {e}\n")
+        q.put(f"\n── 完成: {success} 成功, {fail} 失败 ──\n")
+        q.put(None)
+
+    def _copy_file(src_p, dst_p):
+        os.makedirs(os.path.dirname(dst_p), exist_ok=True)
+        if os.path.isfile(dst_p):
+            os.chmod(dst_p, stat.S_IWRITE)
+        shutil.copy2(src_p, dst_p)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"task_id": task_id})
+
+# ═══════════════════════════════════════════════════════════
+# 工作流 API
+# ═══════════════════════════════════════════════════════════
+@app.route("/api/workflow/list", methods=["GET"])
+def api_workflow_list():
+    cfg = load_config()
+    return jsonify({"workflows": cfg.get("workflows", [])})
+
+@app.route("/api/workflow/save", methods=["POST"])
+def api_workflow_save():
+    data = request.get_json(force=True)
+    cfg = load_config()
+    cfg["workflows"] = data.get("workflows", [])
+    save_config(cfg)
+    return jsonify({"ok": True})
+
+@app.route("/api/workflow/run", methods=["POST"])
+def api_workflow_run():
+    data = request.get_json(force=True)
+    wf_idx = data.get("wf_idx", -1)
+    cfg = load_config()
+    wfs = cfg.get("workflows", [])
+    if wf_idx < 0 or wf_idx >= len(wfs):
+        return jsonify({"error": "无效工作流"}), 400
+    wf = wfs[wf_idx]
+    steps = wf.get("steps", [])
+    if not steps:
+        return jsonify({"error": "工作流没有步骤"}), 400
+
+    task_id = _get_next_task_id()
+    q = queue.Queue()
+    _log_queues[task_id] = q
+
+    def _put(msg, tag=""):
+        q.put(msg)
+    def _line(msg, tag=""):
+        prefix = {"error": "❌ ", "ok": "✓ ", "warn": "⚠ ", "head": ""}.get(tag, "")
+        _put(f"{prefix}{msg}\n")
+
+    def _run():
+        _put(f"{'='*50}\n")
+        _put(f"执行工作流: {wf.get('name', '未命名')}\n")
+        _put(f"共 {len(steps)} 个步骤\n\n")
+
+        blocked = False
+        for i, step in enumerate(steps):
+            _put(f"-- [{i+1}/{len(steps)}] {step.get('name', '')} --\n")
+            if blocked:
+                _put("已阻断，跳过\n")
+                continue
+            stype = step.get("type", "")
+            ok = True
+            try:
+                if stype == "export_text":
+                    ok = _exec_export_text(step, _put, task_id)
+                elif stype == "upload_svn":
+                    ok = _exec_upload_svn(step, _put, task_id)
+                elif stype == "merge_table":
+                    ok = _exec_merge_table(step, _put)
+                elif stype == "merge_translation":
+                    ok = _exec_merge_translation(step, _put)
+                elif stype == "export_error_code":
+                    ok = _exec_export_error_code(step, _put)
+                elif stype == "lock_svn":
+                    ok = _exec_lock_svn(step, _put, task_id)
+                elif stype == "open_tables":
+                    ok = _exec_open_tables(step, _put)
+                else:
+                    _line(f"未知步骤类型: {stype}", "error")
+                    ok = False
+            except Exception as e:
+                _line(str(e), "error")
+                ok = False
+            if not ok:
+                _line("步骤执行失败，阻断后续步骤", "error")
+                blocked = True
+        _put(f"\n{'='*50}\n")
+        _put("工作流执行完成\n" if not blocked else "工作流执行完成（有失败步骤）\n")
+        _put(None)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"task_id": task_id})
+
+
+def _exec_export_text(step, put, task_id=None):
+    input_file = step.get("input_file", "").strip()
+    tools = step.get("tools", [])
+    if input_file and not os.path.exists(input_file):
+        put(f"输入文件无效: {input_file}\n")
+        return False
+    if not tools:
+        put("未配置工具，跳过\n")
+        return True
+    put(f"输入文件: {os.path.basename(input_file) if input_file else 'N/A'}\n")
+    for tool_path in tools:
+        put(f"  执行: {os.path.basename(tool_path)}...\n")
+        proc = None
+        try:
+            proc = subprocess.Popen(
+                ["cmd.exe", "/c", tool_path],
+                cwd=os.path.dirname(tool_path) if os.path.isdir(os.path.dirname(tool_path)) else None,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, **_get_subprocess_kwargs())
+            _register_proc(proc, task_id)
+            try:
+                stdout, stderr = proc.communicate(timeout=3600)
+                if proc.returncode == 0:
+                    put(f"  完成\n")
+                else:
+                    put(f"  退出码={proc.returncode}\n")
+                    if stderr:
+                        put(stderr[-500:] + "\n")
+            finally:
+                _unregister_proc(proc, task_id)
+        except subprocess.TimeoutExpired:
+            if proc:
+                try:
+                    proc.kill()
+                    proc.communicate(timeout=5)
+                except:
+                    pass
+                _unregister_proc(proc, task_id)
+            put(f"  超时\n")
+        except Exception as e:
+            if proc:
+                _unregister_proc(proc, task_id)
+            put(f"  错误: {e}\n")
+    return True
+
+
+def _exec_upload_svn(step, put, task_id=None):
+    dirs = step.get("dirs", [])
+    if not dirs:
+        put("未配置上传目录\n")
+        return True
+    svn = _get_svn_path()
+    for d in dirs:
+        if not os.path.isdir(d):
+            put(f"目录不存在: {d}\n")
+            continue
+        put(f"SVN 添加: {d}\n")
+        proc = None
+        try:
+            proc = subprocess.Popen([svn, "add", "--force", d],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, **_get_subprocess_kwargs())
+            _register_proc(proc, task_id)
+            try:
+                proc.communicate(timeout=300)
+            finally:
+                _unregister_proc(proc, task_id)
+        except:
+            if proc:
+                _unregister_proc(proc, task_id)
+        proc = None
+        try:
+            proc = subprocess.Popen([svn, "commit", "-m", f"工作流自动提交: {os.path.basename(d)}", d],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, **_get_subprocess_kwargs())
+            _register_proc(proc, task_id)
+            try:
+                stdout, stderr = proc.communicate(timeout=300)
+                if proc.returncode == 0:
+                    put(f"  提交成功\n")
+                else:
+                    put(f"  提交失败: {stderr[-200:]}\n")
+            finally:
+                _unregister_proc(proc, task_id)
+        except Exception as e:
+            if proc:
+                _unregister_proc(proc, task_id)
+            put(f"  提交异常: {e}\n")
+    return True
+
+
+def _exec_lock_svn(step, put, task_id=None):
+    target_path = step.get("target_path", "").strip()
+    lock_msg = step.get("lock_msg", "锁定中，请勿修改")
+    if not target_path or not os.path.isfile(target_path):
+        put(f"锁定目标无效: {target_path}\n")
+        return False
+    svn = _get_svn_path()
+    put(f"SVN 锁定: {target_path}\n")
+    proc = None
+    try:
+        proc = subprocess.Popen([svn, "lock", "--force", "-m", lock_msg, target_path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, **_get_subprocess_kwargs())
+        _register_proc(proc, task_id)
+        try:
+            stdout, stderr = proc.communicate(timeout=60)
+            if proc.returncode == 0:
+                put("锁定成功\n")
+                return True
+            else:
+                put(f"锁定失败: {stderr[-200:]}\n")
+        finally:
+            _unregister_proc(proc, task_id)
+    except Exception as e:
+        if proc:
+            _unregister_proc(proc, task_id)
+        put(f"锁定异常: {e}\n")
+    return True
+
+
+def _exec_open_tables(step, put):
+    file_paths = step.get("file_paths", [])
+    if not file_paths:
+        put("没有要打开的文件\n")
+        return True
+    for fp in file_paths:
+        fp = fp.strip()
+        if not fp or not os.path.exists(fp):
+            put(f"文件不存在: {fp}\n")
+            continue
+        try:
+            os.startfile(fp)
+            put(f"打开: {os.path.basename(fp)}\n")
+        except Exception as e:
+            put(f"无法打开 {fp}: {e}\n")
+    return True
+
+
+def _exec_export_error_code(step, put):
+    put("导出错误码功能请使用桌面版\n")
+    return True
+
+
+def _exec_merge_translation(step, put):
+    put("合并翻译功能请使用桌面版\n")
+    return True
+
+
+def _exec_merge_table(step, put):
+    put("合并表格功能请使用桌面版\n")
+    return True
+
+# ═══════════════════════════════════════════════════════════
+# 翻译执行 API
+# ═══════════════════════════════════════════════════════════
+@app.route("/api/translate/run", methods=["POST"])
+def api_translate_run():
+    data = request.get_json(force=True)
+    src_path = data.get("src_path", "").strip()
+    ref_path = data.get("ref_path", "").strip()
+    api_url = data.get("api_url", "").strip()
+    api_key = data.get("api_key", "").strip()
+    model = data.get("model", "gpt-4o-mini").strip()
+    src_lang = data.get("src_lang", "").strip()
+    tgt_langs = data.get("tgt_langs", [])
+    out_dir = data.get("out_dir", DEFAULT_OUTPUT_DIR).strip()
+    prompt_template = data.get("prompt", "").strip()
+    batch_size = int(data.get("batch_size", 20))
+
+    if not src_path or not os.path.isfile(src_path):
+        return jsonify({"error": "请选择有效的翻译表格"}), 400
+    if not api_key:
+        return jsonify({"error": "请输入 API Key"}), 400
+    if not tgt_langs:
+        return jsonify({"error": "请选择目标语言"}), 400
+
+    os.makedirs(out_dir, exist_ok=True)
+
+    # 保存配置
+    cfg = load_config()
+    for k, v in [("tr_src_history", src_path), ("tr_ref_history", ref_path),
+                 ("tr_api_url", api_url), ("tr_model", model),
+                 ("tr_src_lang", src_lang), ("tr_out_dir", out_dir),
+                 ("tr_prompt", prompt_template), ("tr_batch_size", batch_size)]:
+        if k.endswith("_history"):
+            hist = cfg.get(k, [])
+            if v and v not in hist:
+                hist.insert(0, v)
+                cfg[k] = hist[:20]
+        elif v or isinstance(v, int):
+            cfg[k] = v
+    save_config(cfg)
+
+    task_id = _get_next_task_id()
+    q = queue.Queue()
+    _log_queues[task_id] = q
+
+    def _run():
+        import openpyxl, requests, time as _time, re as _re
+        from datetime import datetime
+
+        q.put(f"{'='*50}\n")
+        q.put(f"开始翻译\n")
+        q.put(f"源文件: {src_path}\n")
+        q.put(f"源语言: {src_lang}\n")
+        q.put(f"目标语言: {', '.join(tgt_langs)}\n")
+        q.put(f"模型: {model}\n\n")
+
+        base_name = os.path.splitext(os.path.basename(src_path))[0]
+        if len(tgt_langs) == 1:
+            safe_tgt = tgt_langs[0].strip(":").replace(" ", "_")
+            out_name = f"翻译_{base_name}_{safe_tgt}.xlsx"
+        else:
+            out_name = f"翻译_{base_name}_多语言.xlsx"
+        out_path = os.path.join(out_dir, out_name)
+
+        def _clean(name):
+            return name.strip(":")
+        clean_src = _clean(src_lang)
+        clean_tgts = [_clean(t) for t in tgt_langs]
+        lang_display = "、".join(clean_tgts)
+
+        prompt = (prompt_template or "请将以下文本从{src_lang}翻译为{tgt_lang}，保持格式不变")
+        system_prompt = prompt.replace("{src_lang}", clean_src).replace("{tgt_lang}", lang_display)
+
+        def _load_ref(tgt_lang_name):
+            refs = {}
+            if not ref_path or not os.path.isfile(ref_path):
+                return refs
+            ext = os.path.splitext(ref_path)[1].lower()
+            try:
+                if ext in (".xlsx", ".xlsm"):
+                    rwb = openpyxl.load_workbook(ref_path, read_only=True, data_only=True)
+                    rws = rwb.active
+                    rheaders = [str(c.value).strip() if c.value is not None else "" for c in rws[1]]
+                    src_idx = tgt_idx = None
+                    for i, h in enumerate(rheaders):
+                        if h and h.lower() == src_lang.lower():
+                            src_idx = i
+                        if h and h.lower() == tgt_lang_name.lower():
+                            tgt_idx = i
+                    if src_idx is not None and tgt_idx is not None:
+                        for row in rws.iter_rows(min_row=2, values_only=True):
+                            if row[src_idx] and row[tgt_idx]:
+                                refs[str(row[src_idx]).strip()] = str(row[tgt_idx]).strip()
+                    rwb.close()
+                    q.put(f"参考 ({tgt_lang_name}): {len(refs)} 条\n")
+                else:
+                    with open(ref_path, "r", encoding="utf-8") as f:
+                        refs["__raw_text__"] = f.read()
+            except Exception as e:
+                q.put(f"读取参考文件失败: {e}\n")
+            return refs
+
+        def _call_api(texts, tgt_names, refs_by_target, retries=5):
+            user_parts = []
+            has_raw = any(r.get("__raw_text__") for r in refs_by_target.values() if r)
+            if has_raw:
+                for tgt in tgt_names:
+                    r = refs_by_target.get(tgt, {})
+                    if r.get("__raw_text__"):
+                        user_parts.append(f"参考内容 ({_clean(tgt)}):\n{r['__raw_text__']}")
+            else:
+                ref_parts = []
+                for tgt in tgt_names:
+                    r = refs_by_target.get(tgt, {})
+                    if r:
+                        sample = list(r.items())[:30]
+                        ref_parts.append(f"【{_clean(tgt)}】参考:\n" + "\n".join(f"{k} -> {v}" for k, v in sample))
+                if ref_parts:
+                    user_parts.append("\n".join(ref_parts))
+
+            numbered = [f"{i+1}|{t.replace(chr(13),' ').replace(chr(10),' ')}" for i, t in enumerate(texts)]
+            user_parts.append(
+                f"请将以下文本从 {clean_src} 一次性翻译为 {lang_display}。"
+                f"\n严格按照编号和分隔符格式返回，每行一条："
+                f"\n编号|翻译1|翻译2|翻译3..."
+                f"\n不要包含任何额外说明、解释或空行。"
+                f"\n\n待翻译文本：\n" + "\n".join(numbered)
+            )
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": "\n\n".join(user_parts)}
+            ]
+            payload = {
+                "model": model,
+                "messages": messages,
+                "temperature": 0.3,
+                "max_tokens": 4096 + len(texts) * len(tgt_names) * 200
+            }
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            for attempt in range(retries + 1):
+                try:
+                    resp = requests.post(api_url, headers=headers, json=payload, timeout=300)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        usage = data.get("usage", {})
+                        hit = usage.get("prompt_cache_hit_tokens", 0)
+                        miss = usage.get("prompt_cache_miss_tokens", 0)
+                        total_p = usage.get("prompt_tokens", 0)
+                        if total_p > 0:
+                            rate = hit / total_p * 100
+                            q.put(f"  缓存命中 {hit}/{total_p} tokens ({rate:.1f}%)\n")
+                        raw = data["choices"][0]["message"]["content"].strip()
+                        results = [None] * len(texts)
+                        for line in raw.split("\n"):
+                            line = line.strip()
+                            if not line:
+                                continue
+                            m = _re.match(r"^\s*(\d+)\s*[|.:、]\s*(.*)", line)
+                            if m:
+                                idx = int(m.group(1)) - 1
+                                if 0 <= idx < len(texts):
+                                    parts = [p.strip() for p in m.group(2).split("|")]
+                                    row_result = {}
+                                    for ti, tgt in enumerate(tgt_names):
+                                        if ti < len(parts) and parts[ti]:
+                                            row_result[tgt] = parts[ti]
+                                    results[idx] = row_result
+                        return results
+                    elif resp.status_code == 429:
+                        wait = 5 * (3 ** attempt)
+                        q.put(f"  限流(429)，等待 {wait}s 重试 ({attempt+1}/{retries+1})\n")
+                        _time.sleep(wait)
+                        continue
+                    else:
+                        q.put(f"API 返回 {resp.status_code}: {resp.text[:200]}\n")
+                        if attempt < retries:
+                            _time.sleep(3)
+                            continue
+                        return None
+                except Exception as e:
+                    q.put(f"API 调用异常: {e}\n")
+                    if attempt < retries:
+                        _time.sleep(3)
+                        continue
+                    return None
+            return None
+
+        try:
+            wb = openpyxl.load_workbook(src_path)
+            ws = wb.active
+
+            headers = [str(c.value).strip() if c.value is not None else "" for c in ws[1]]
+
+            src_col = None
+            for i, h in enumerate(headers, 1):
+                if h.lower() == src_lang.lower():
+                    src_col = i
+                    break
+            if src_col is None:
+                q.put(f"未找到源语言列 '{src_lang}'\n")
+                q.put(None)
+                return
+
+            tgt_col_map = {}
+            for tl in tgt_langs:
+                for i, h in enumerate(headers, 1):
+                    if h.lower() == tl.lower():
+                        tgt_col_map[tl] = i
+                        break
+                if tl not in tgt_col_map:
+                    q.put(f"未找到目标语言列 '{tl}'，跳过\n")
+
+            if not tgt_col_map:
+                q.put("未找到任何有效的目标语言列\n")
+                q.put(None)
+                return
+
+            tgt_names = list(tgt_col_map.keys())
+            cols_str = ", ".join(f"{k}({v})" for k, v in tgt_col_map.items())
+            q.put(f"源列: {src_col} | 目标列: {cols_str}\n")
+
+            q.put("加载参考文件...\n")
+            all_refs = {}
+            has_raw = False
+            for tgt in tgt_names:
+                all_refs[tgt] = _load_ref(tgt)
+                if all_refs[tgt].get("__raw_text__"):
+                    has_raw = True
+
+            batch_items = []
+            ref_matched = 0
+            for row in ws.iter_rows(min_row=2, values_only=False):
+                src_val = row[src_col - 1].value
+                if src_val is None or not str(src_val).strip():
+                    continue
+                src_text = str(src_val).strip()
+
+                missing_targets = set()
+                for tgt_name, tgt_col in tgt_col_map.items():
+                    tgt_val = row[tgt_col - 1].value
+                    if tgt_val and str(tgt_val).strip():
+                        continue
+                    if not has_raw:
+                        ref_val = all_refs.get(tgt_name, {}).get(src_text)
+                        if ref_val:
+                            ws.cell(row=row[0].row, column=tgt_col, value=ref_val)
+                            ref_matched += 1
+                            continue
+                    missing_targets.add(tgt_name)
+
+                if missing_targets:
+                    batch_items.append((row[0].row, src_text, missing_targets))
+
+            q.put(f"参考匹配直接填入: {ref_matched} 条\n")
+            q.put(f"需要 API 翻译: {len(batch_items)} 条 -> {len(tgt_names)} 个语言\n")
+
+            if not batch_items:
+                q.put("无需 API 翻译，全部已处理\n")
+                wb.save(out_path)
+                wb.close()
+                q.put(f"已保存: {out_path}\n")
+                q.put(None)
+                return
+
+            overall_fail = 0
+            total_batches = (len(batch_items) + batch_size - 1) // batch_size
+            for batch_start in range(0, len(batch_items), batch_size):
+                batch = batch_items[batch_start:batch_start + batch_size]
+                texts = [item[1] for item in batch]
+                rows = [item[0] for item in batch]
+                missing_sets = [item[2] for item in batch]
+
+                batch_num = batch_start // batch_size + 1
+                q.put(f"批次 {batch_num}/{total_batches} ({len(texts)} 条 x {len(tgt_names)} 语言)\n")
+
+                results = _call_api(texts, tgt_names, all_refs)
+                if results is None:
+                    q.put(f"  批次 {batch_num} 全部失败\n")
+                    for row_num, missing in zip(rows, missing_sets):
+                        for tgt_name in missing:
+                            ws.cell(row=row_num, column=tgt_col_map[tgt_name], value="【翻译失败】")
+                    overall_fail += sum(len(m) for m in missing_sets)
+                    _time.sleep(1)
+                    continue
+
+                batch_ok = batch_fail = 0
+                for row_num, row_result, missing in zip(rows, results, missing_sets):
+                    if row_result is None:
+                        for tgt_name in missing:
+                            ws.cell(row=row_num, column=tgt_col_map[tgt_name], value="【翻译失败】")
+                        batch_fail += len(missing)
+                        continue
+                    for tgt_name in missing:
+                        trans = row_result.get(tgt_name)
+                        if trans:
+                            ws.cell(row=row_num, column=tgt_col_map[tgt_name], value=trans)
+                            batch_ok += 1
+                        else:
+                            ws.cell(row=row_num, column=tgt_col_map[tgt_name], value="【翻译失败】")
+                            batch_fail += 1
+
+                overall_fail += batch_fail
+                status = "ok" if batch_fail == 0 else "warn"
+                q.put(f"  批次 {batch_num} 完成（成功 {batch_ok}/{batch_ok + batch_fail}）\n")
+                _time.sleep(0.5)
+
+            wb.save(out_path)
+            wb.close()
+            q.put(f"{'='*50}\n")
+            q.put(f"翻译完成! 输出文件: {out_path}\n")
+        except Exception as e:
+            import traceback
+            q.put(f"翻译过程出错: {e}\n")
+            q.put(traceback.format_exc() + "\n")
+        q.put(None)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"task_id": task_id})
+
+@app.route("/api/open/folder", methods=["POST"])
+def api_open_folder():
+    data = request.get_json(force=True)
+    path = data.get("path", "").strip()
+    if path and os.path.isdir(path):
+        try:
+            os.startfile(path)
+            return jsonify({"ok": True})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify({"error": "路径无效"}), 400
+
+
+@app.route("/api/svn/detect", methods=["POST"])
+def api_svn_detect():
+    data = request.get_json(force=True)
+    path = os.path.normpath(data.get("path", "").strip())
+    if not path:
+        return jsonify({"ok": False, "error": "路径为空"}), 400
+    try:
+        svn_exe = _get_svn_path()
+        check = os.path.abspath(path)
+        svn_url = None
+        while True:
+            result = subprocess.run(
+                [svn_exe, "info", "--show-item", "url", check],
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                timeout=15,
+                **_get_subprocess_kwargs()
+            )
+            url = result.stdout.strip()
+            if url and result.returncode == 0:
+                svn_url = url
+                break
+            parent = os.path.dirname(check)
+            if parent == check:
+                break
+            check = parent
+        if not svn_url and os.path.isdir(path):
+            for entry in os.listdir(path):
+                sub = os.path.join(path, entry)
+                if os.path.isdir(os.path.join(sub, ".svn")):
+                    result = subprocess.run(
+                        [svn_exe, "info", "--show-item", "url", sub],
+                        capture_output=True, text=True,
+                        encoding="utf-8", errors="replace",
+                        timeout=15,
+                        **_get_subprocess_kwargs()
+                    )
+                    url = result.stdout.strip()
+                    if url and result.returncode == 0:
+                        svn_url = url
+                        break
+        if svn_url:
+            from urllib.parse import unquote
+            svn_url = unquote(svn_url)
+            return jsonify({"ok": True, "url": svn_url})
+        return jsonify({"ok": False, "error": f"不是 SVN 工作副本: {path}"}), 200
+    except FileNotFoundError:
+        return jsonify({"ok": False, "error": "SVN 命令不可用，请确认已安装 SVN 命令行工具"}), 200
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "error": "SVN 命令超时"}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 200
+
+
+def _find_svn_wc(url):
+    """根据 SVN URL 查找对应的本地工作副本路径（不打开资源管理器）"""
+    cfg = load_config()
+    candidates = set()
+    for d in cfg.get("output_dir_history", []):
+        if d:
+            candidates.add(d)
+    for u in cfg.get("svn_urls", []):
+        if u and not u.startswith("http"):
+            candidates.add(u)
+    found = None
+    for c in candidates:
+        d = os.path.normpath(c)
+        while True:
+            try:
+                r = subprocess.run(
+                    ["svn", "info", "--show-item", "url", d],
+                    capture_output=True, text=True, timeout=5
+                )
+                wc_url = r.stdout.strip() if r.returncode == 0 else ""
+                if wc_url and (url == wc_url or url.startswith(wc_url + "/")):
+                    rel = url[len(wc_url):].lstrip("/")
+                    wc = subprocess.run(
+                        ["svn", "info", "--show-item", "wc-root", d],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    wc_root = wc.stdout.strip()
+                    found = os.path.join(wc_root, rel.replace("/", os.sep)) if rel else wc_root
+                    break
+            except Exception:
+                pass
+            parent = os.path.dirname(d)
+            if parent == d or not parent:
+                break
+            d = parent
+        if found:
+            break
+    return found
+
+
+@app.route("/api/svn/find-wc", methods=["POST"])
+def api_svn_find_wc():
+    """查找 SVN URL 对应的本地工作副本路径（不打开资源管理器）"""
+    data = request.get_json(force=True)
+    url = data.get("url", "").strip()
+    if not url:
+        return jsonify({"ok": False, "error": "URL 为空"}), 400
+    found = _find_svn_wc(url)
+    if found and os.path.isdir(found):
+        return jsonify({"ok": True, "path": os.path.normpath(found)})
+    return jsonify({"ok": False, "error": "未找到对应的本地工作副本"}), 200
+
+
+@app.route("/api/svn/open-wc", methods=["POST"])
+def api_svn_open_wc():
+    data = request.get_json(force=True)
+    url = data.get("url", "").strip()
+    if not url:
+        return jsonify({"ok": False, "error": "URL 为空"}), 400
+    found = _find_svn_wc(url)
+    if found and os.path.isdir(found):
+        os.startfile(found)
+        return jsonify({"ok": True, "path": os.path.normpath(found)})
+    return jsonify({"ok": False, "error": "未找到对应的本地工作副本"}), 200
+
+
+@app.route("/api/cache/clear", methods=["POST"])
+def api_cache_clear():
+    """清除 __parse_cache__、__byte_cache__ 和 __ss_cache__ 目录"""
+    total = 0
+    for sub in ("__parse_cache", "__byte_cache", "__ss_cache"):
+        cache_dir = os.path.join(SCRIPT_DIR, sub)
+        if not os.path.exists(cache_dir):
+            continue
+        try:
+            for fname in os.listdir(cache_dir):
+                fpath = os.path.join(cache_dir, fname)
+                if os.path.isfile(fpath):
+                    os.remove(fpath)
+                    total += 1
+        except Exception as e:
+            return jsonify({"error": f"清理 {sub} 失败: {e}"}), 500
+    return jsonify({"ok": True, "count": total})
+
+
+# ═══════════════════════════════════════════════════════════
+# SSE 日志流
+# ═══════════════════════════════════════════════════════════
+@app.route("/api/log/stream/<task_id>")
+def api_log_stream(task_id):
+    q = _log_queues.get(task_id)
+    if not q:
+        return Response("data: 任务不存在\n\n", mimetype="text/event-stream")
+
+    def _stream():
+        while True:
+            try:
+                line = q.get(timeout=15)
+                if line is None:
+                    yield f"data: [DONE]\n\n"
+                    break
+                # SSE data field: newlines inside data get collapsed by HTML.
+                # Use \n inside data payload — frontend splits and renders.
+                yield f"data: {line}\n\n"
+            except queue.Empty:
+                yield f"data: \n\n"
+
+    response = Response(_stream(), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    return response
+
+# ═══════════════════════════════════════════════════════════
+# 静态文件
+# ═══════════════════════════════════════════════════════════
+@app.route("/api/close", methods=["POST"])
+def api_close():
+    import ctypes
+    try:
+        hwnd = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 0)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+@app.route("/api/static/<path:filename>")
+def api_static(filename):
+    return send_from_directory(_script_dir, filename)
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=18123, debug=False)

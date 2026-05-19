@@ -2,6 +2,13 @@
 
 ## AGENT 行为规则
 
+### ⚠️ 分析/制定方案前必须执行
+
+1. **每次分析问题或制定方案前，必须先上网查资料** — 使用 `WebSearch` 工具搜索相关技术资料、最佳实践、已知解决方案。
+2. **同一对话中每次遇到新问题时也必须查** — 不是只在对话开始时查一次，而是每次碰到新的技术问题、需要做决策时都要重新查。
+3. **即使自己知道答案也必须查** — 技术资料在持续更新，过去的知识可能已过时。不能凭记忆或经验下结论。
+4. **不得跳过此步骤直接下结论** — 任何技术方案制定、bug 诊断、功能设计前都必须先查资料。
+
 ### ⚠️ 修改代码前必须执行
 
 1. **每次修改代码前，必须先调用 `step-by-step` skill** — 使用 step-by-step 技能将实现任务分解为有序的 Phase（问题分析 → 变更定位 → 变更点详述 → 实施顺序 → 逐项实施），再开始修改代码。
@@ -23,6 +30,8 @@
 3. **ThreadPool + Queue + 哨兵流水线** — 2025Q2 已验证死锁 + 竞态条件 + 假并行。
 
 4. **在子进程中调 _log()** — 虽然 _log() 本身没问题，但 spawn 子进程的 stdout 管道状态不可靠，避免依赖。
+
+5. **禁止从 GitHub 下载文件覆盖本地文件** — 任何时候都不得自行从 GitHub 或其他远程仓库下载文件来覆盖项目中的本地文件。任何文件恢复、回退、获取历史版本等操作，都必须先经过用户明确同意后才能执行。
 
 ### ✅ 当前正确架构（2026-05）
 
@@ -122,3 +131,45 @@ sharedStrings 变了 ≠ sheet 内容变了：
 - 不要删除 `临时辅助文件/` 目录下的文件
 - 不要删除 `__byte_cache/` 下的缓存文件
 - 子进程并发测试：先用路径参数模拟（`_test_pipeline.py` 风格），确认 2/4 worker 全部存活再上线
+
+---
+
+## ⚠️ Git 提交规范 — 每次提交前必须执行
+
+**所有代码提交都必须遵循 [git_workflow_rules.md](.trae/rules/git_workflow_rules.md) 中定义的规范。**
+
+### 每次 git commit 前必须执行的三步检查
+
+1. **语法检查：** `python -m py_compile <修改的文件>` — 确保无语法错误
+2. **规范检查：** `flake8 <修改的文件>` — 确保符合 PEP8 规范
+3. **写规范的 commit message：** `<type>(<scope>): <subject>` 格式
+
+### pre-commit 钩子
+
+项目已配置 `.git/hooks/pre-commit`，git commit 时会自动运行 flake8 检查暂存区文件。如果检查到 E/F 级别错误，提交将被阻止。
+
+### 提交信息格式速查
+
+```
+feat(web): 新功能
+fix(cmp): 修复 Bug
+perf(worker): 性能优化
+refactor(gui): 代码重构
+docs(rules): 文档/规则
+chore: 杂项/构建
+```
+
+### 里程碑版本标签
+
+- 语义化版本：`v<major>.<minor>.<patch>`（如 `v1.0`、`v1.1`）
+- 里程碑版本推送 tag 到 GitHub 后需创建 GitHub Release
+- 常规提交（非里程碑）直接 `git push`，不创建 tag
+
+**⚠️ 只改 Web 应用端（Flask 后端 + templates/index.html），不改其他版本。**
+
+- 所有问题、需求、修改都默认只针对 **Web 应用端**（`web_app.py` + `templates/index.html`）
+- **tkinter GUI 桌面版**（`svn_compare_gui.py`、`toolbox_tab_*.py`、`desktop_main.py` 等）不做任何修改
+- **命令行版**（`svn_oneclick_compare.py`、`_cmp_worker.py` 等）不做任何修改
+- **说明书/README** 不做任何修改
+- **纯静态 HTML**（`_rebuild_html.py`、`desktop_shell_demo.py` 等）不做任何修改
+- 所有功能测试只关注 Web 应用端行为

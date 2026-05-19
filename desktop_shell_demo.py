@@ -272,13 +272,10 @@ button,input,textarea,select{font:inherit;color:inherit;}
 }
 .logo-icon{
   width:36px;height:36px;border-radius:8px;
-  background:linear-gradient(135deg,var(--accent),var(--accent3));
+  border:1px solid rgba(255,255,255,.15);
   display:flex;align-items:center;justify-content:center;
-  font-size:16px;font-weight:700;
-  box-shadow:0 8px 28px rgba(94,162,255,.3),inset 0 1px 0 rgba(255,255,255,.3);
-  color:#fff;
 }
-.logo-icon svg{width:20px;height:20px;}
+.logo-icon svg{width:26px;height:26px;}
 .logo h1{font-size:15px;margin:0;font-weight:600;}
 .logo span{color:var(--dim);font-size:11px;}
 

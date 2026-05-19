@@ -1,8 +1,8 @@
 {
   "svn_urls": [
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/gameData",
-    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/Client",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/server",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
@@ -282,9 +282,7 @@
   ],
   "output_dir_export": "C:\\Users\\admin\\.qclaw\\workspace\\输出\\导出",
   "window_geometry": "992x800+-1063+178",
-  "tr_src_history": [
-    "C:\\Users\\admin\\.qclaw\\workspace\\多语言翻译表.xlsx"
-  ],
+  "tr_src_history": [],
   "tr_api_url": "https://api.deepseek.com/v1/chat/completions",
   "tr_model": "deepseek-v4-flash",
   "tr_out_dir": "C:\\Users\\admin\\.qclaw\\workspace\\输出",
@@ -292,12 +290,12 @@
   "tr_batch_size": 300,
   "tr_saved_src_lang": "::SC::",
   "tr_saved_tgt_langs": [
-    "::KR::"
+    "韩文"
   ],
   "output_dir": "C:\\Users\\admin\\.qclaw\\workspace\\输出",
   "output_dir_history": [
     "C:\\Users\\admin\\.qclaw\\workspace\\输出",
-    "C:\\Users\\admin\\.qclaw\\workspace\\ourcesappoutvsworkbenchcontribterminalcommonscriptssafe_rm_aliases.ps1 } catch{} ; Write-Output [Trae CN] Safe Rm alias is not enabled, try to fix it now."
+    "G:\\D3_KR2\\gameData"
   ],
   "svn_keyword_history": [
     "裂隙"
@@ -305,6 +303,99 @@
   "svn_author_history": [
     "gaoyang"
   ],
-  "tr_src_lang": "zh",
+  "tr_src_lang": "::SC::",
+  "tr_lang_id_map": {
+    "简体中文": [
+      "SC",
+      "::SC::",
+      "中文",
+      "CHS",
+      "CH",
+      "CN",
+      "简体",
+      "SChinese"
+    ],
+    "英文": [
+      "EN",
+      "::EN::",
+      "English",
+      "ENG",
+      "EN_US",
+      "EN_GB"
+    ],
+    "韩文": [
+      "KR",
+      "::KR::",
+      "KO",
+      "KOR",
+      "Korean",
+      "한국어"
+    ],
+    "日文": [
+      "JP",
+      "::JP::",
+      "JA",
+      "JPN",
+      "Japanese",
+      "日本語"
+    ],
+    "繁体中文": [
+      "TW",
+      "::TW::",
+      "TCH",
+      "TC",
+      "繁体",
+      "TChinese"
+    ],
+    "法文": [
+      "FR",
+      "::FR::",
+      "FRENCH"
+    ],
+    "德文": [
+      "GE",
+      "::GE::",
+      "DE",
+      "GER",
+      "German"
+    ],
+    "西班牙文": [
+      "SP",
+      "::SP::",
+      "ES",
+      "SPA",
+      "Spanish"
+    ],
+    "葡萄牙文": [
+      "PT",
+      "::PT::",
+      "POR",
+      "Portuguese"
+    ],
+    "俄文": [
+      "RU",
+      "::RU::",
+      "RUS",
+      "Russian"
+    ],
+    "泰文": [
+      "TH",
+      "::TH::",
+      "THAI",
+      "Thai"
+    ],
+    "印尼文": [
+      "IN",
+      "::IN::",
+      "IND",
+      "Indonesian"
+    ],
+    "土耳其文": [
+      "TR",
+      "::TR::",
+      "TUR",
+      "Turkish"
+    ]
+  },
   "tr_api_key_enc": "/ZhanvpqNABPoNt3CbrSkfxhsARxEX7yxR/83CnNjAHvkEQ="
 }

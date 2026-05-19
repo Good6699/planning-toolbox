@@ -600,22 +600,19 @@ input::placeholder,textarea::placeholder{
   cursor:pointer;
   font-size:12px;
   color:var(--sub);
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
   transition:background .1s;
   border-bottom:1px solid rgba(255,255,255,.03);
   display:flex;
-  align-items:center;
+  align-items:flex-start;
   justify-content:space-between;
   gap:8px;
 }
 .suggest-drop .s-item .s-label{
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
+  word-break:break-all;
+  overflow-wrap:break-word;
   flex:1;
   min-width:0;
+  line-height:1.4;
 }
 .suggest-drop .s-item .s-del{
   flex-shrink:0;
@@ -2119,31 +2116,18 @@ function enablePathDrop(inputId, opts){
   input.addEventListener("dragleave", ()=>{
     input.classList.remove("drag-over");
   });
+  input.addEventListener("drop", e=>{
+    e.preventDefault();
+    input.classList.remove("drag-over");
+  });
 }
+document.addEventListener("dragend", ()=>{
+  document.querySelectorAll(".drag-over").forEach(el=>el.classList.remove("drag-over"));
+});
 function onSvnUrlPicked() {
   const input = document.getElementById("svn_url");
   const path = input.value.trim();
   if (!path) return;
-  const _dropInputs = ["upload_src","upload_tgt","tr_src","tr_ref","tr_out","svn_output"];
-  for (const id of _dropInputs) {
-    const el = document.getElementById(id);
-    if (el && el.classList.contains("drag-over")) {
-      el.value = path;
-      el.classList.remove("drag-over");
-      input.value = config.svn_urls?.[0] || "";
-      const _configMap = {upload_src:"src_dir_history",upload_tgt:"tgt_dir_history",tr_src:"tr_src_history",tr_ref:"tr_ref_history",tr_out:"tr_out_dir",svn_output:"output_dir_history"};
-      const ck = _configMap[id];
-      if (ck) {
-        const updated = [path, ...(config[ck]||[]).filter(v=>v!==path)].slice(0,20);
-        saveConfig({[ck]: updated});
-        config[ck] = updated;
-        initSuggest(id, updated);
-      }
-      if (id === "upload_src") refreshFiles();
-      return;
-    }
-  }
-  document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
   fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path})})
     .then(r=>r.json()).then(d=>{
       if (d.ok) {

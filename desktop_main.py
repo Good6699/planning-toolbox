@@ -3,6 +3,7 @@
 """策划工具箱桌面壳 — pywebview + Flask + QQ式贴边 + 系统托盘"""
 import sys
 import os
+import json
 import threading
 import time
 import socket
@@ -633,6 +634,63 @@ def _find_window_hwnd(timeout=5):
     return None
 
 
+def _init_dnd(window):
+    """用 pywebview DOM DnD API 统一处理所有输入框的拖拽文件路径"""
+    def on_drop(e):
+        target_id = ''
+        target = e.get('target')
+        if target:
+            target_id = target.get('id', '')
+        files = e.get('dataTransfer', {}).get('files', [])
+        if not files:
+            return
+        path = files[0].get('pywebviewFullPath')
+        if not path:
+            return
+        if not target_id:
+            return
+        js_path = json.dumps(path)
+        if target_id == 'svn_url':
+            js = f"document.getElementById('{target_id}').value={js_path};onSvnUrlPicked();"
+        else:
+            js = f"document.getElementById('{target_id}').value={js_path};document.getElementById('{target_id}').dispatchEvent(new Event('blur',{{bubbles:true}}));"
+        def _inj():
+            try:
+                window.evaluate_js(js)
+            except Exception:
+                pass
+        threading.Thread(target=_inj, daemon=True).start()
+
+    def _on_loaded():
+        try:
+            from webview.dom import DOMEventHandler
+            window.dom.document.events.drop += DOMEventHandler(on_drop, True, True)
+        except Exception:
+            pass
+
+    window.events.loaded += _on_loaded
+
+    def _on_shown(window):
+        try:
+            from webview.platforms.winforms import BrowserView
+            form = BrowserView.instances.get(window.uid)
+            if not form or not hasattr(form, 'browser'):
+                return
+            edge = form.browser
+            wv = getattr(edge, 'webview', None)
+            if wv is None:
+                return
+            try:
+                from System import Action
+                form.Invoke(Action(lambda: setattr(wv, 'AllowDrop', False)))
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    window.events.shown += _on_shown
+
+
 def main():
     _acquire_instance_lock()
 
@@ -669,6 +727,8 @@ def main():
         js_api=resize_api,
     )
     resize_api.set_window(window)
+
+    _init_dnd(window)
 
     def _init_window(hwnd=None):
         if hwnd is None:

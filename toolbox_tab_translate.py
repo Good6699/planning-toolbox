@@ -117,12 +117,12 @@ class TranslateTabMixin:
             self._save_tr_src_history(path)
             self._detect_translate_columns()
 
-    def _load_lang_map(self):
-        """加载 lang_map.txt，返回 {关键词小写: 语言名}"""
+    def _import_lang_map_txt_to_json(self):
+        """从 lang_map.txt 读取并合并为 {语言名: [ID列表]} 格式"""
         map_path = os.path.join(SCRIPT_DIR, "lang_map.txt")
-        mapping = {}
+        result = {}
         if not os.path.isfile(map_path):
-            return mapping
+            return result
         try:
             with open(map_path, "r", encoding="utf-8") as f:
                 for line in f:
@@ -131,12 +131,44 @@ class TranslateTabMixin:
                         continue
                     if "=" in line:
                         key, val = line.split("=", 1)
-                        key = key.strip().lower()
+                        key = key.strip()
                         val = val.strip()
                         if key and val:
-                            mapping[key] = val
+                            if val not in result:
+                                result[val] = []
+                            if key not in result[val]:
+                                result[val].append(key)
         except Exception:
             pass
+        return result
+
+    def _load_lang_id_map(self):
+        """从配置加载语言ID映射，返回 {语言名: [ID列表]}
+        首次使用时自动从 lang_map.txt 导入
+        """
+        data = dict(self.config.get("tr_lang_id_map", {}))
+        if not data:
+            data = self._import_lang_map_txt_to_json()
+            if data:
+                self._save_lang_id_map(data)
+        return data
+
+    def _save_lang_id_map(self, data):
+        """保存语言ID映射到配置"""
+        self.config["tr_lang_id_map"] = data
+        save_config(self.config)
+
+    def _load_lang_map(self):
+        """加载语言映射，返回 {关键词小写: 语言名}
+        仅从 config 的 tr_lang_id_map 获取
+        """
+        mapping = {}
+        lang_id_map = self._load_lang_id_map()
+        for lang_name, ids in lang_id_map.items():
+            for id_str in ids:
+                key = id_str.strip().lower()
+                if key:
+                    mapping[key] = lang_name
         return mapping
 
     def _edit_lang_map(self):
@@ -153,6 +185,148 @@ class TranslateTabMixin:
         import threading
         threading.Thread(target=_wait_and_refresh, daemon=True).start()
         self._tlog(f"已打开语言映射文件: {map_path}", "info")
+
+    def _open_lang_advanced_settings(self):
+        """打开语言ID高级设置弹窗"""
+        data = self._load_lang_id_map()
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("语言ID高级设置")
+        dialog.geometry("520x400")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        main_frame = tk.Frame(dialog, padx=10, pady=10)
+        main_frame.pack(fill="both", expand=True)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(0, weight=1)
+
+        columns = ("语言名称", "匹配ID")
+        tree = ttk.Treeview(main_frame, columns=columns, show="headings",
+                             selectmode="browse", height=10)
+        tree.heading("语言名称", text="语言名称")
+        tree.heading("匹配ID", text="匹配ID（逗号分隔）")
+        tree.column("语言名称", width=100, minwidth=80)
+        tree.column("匹配ID", width=340, minwidth=200)
+
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        tree.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+
+        def _refresh_tree():
+            tree.delete(*tree.get_children())
+            for lang_name in sorted(data.keys()):
+                ids = data[lang_name]
+                tree.insert("", "end", values=(lang_name, ", ".join(ids)))
+
+        _refresh_tree()
+
+        btn_frame = tk.Frame(main_frame)
+        btn_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+
+        def _add_lang():
+            self._lang_advanced_edit_dialog(dialog, data, tree, _refresh_tree)
+
+        def _edit_lang():
+            sel = tree.selection()
+            if not sel:
+                messagebox.showwarning("提示", "请先选择一条语言配置", parent=dialog)
+                return
+            item = tree.item(sel[0])
+            self._lang_advanced_edit_dialog(dialog, data, tree, _refresh_tree,
+                                             item["values"][0], item["values"][1])
+
+        def _delete_lang():
+            sel = tree.selection()
+            if not sel:
+                messagebox.showwarning("提示", "请先选择一条语言配置", parent=dialog)
+                return
+            item = tree.item(sel[0])
+            lang_name = item["values"][0]
+            if messagebox.askyesno("确认删除", f"确定要删除「{lang_name}」的配置吗？",
+                                    parent=dialog):
+                data.pop(lang_name, None)
+                _refresh_tree()
+
+        ttk.Button(btn_frame, text="+ 新增", command=_add_lang,
+                   width=8).pack(side="left", padx=(0, 5))
+        ttk.Button(btn_frame, text="编辑", command=_edit_lang,
+                   width=8).pack(side="left", padx=(0, 5))
+        ttk.Button(btn_frame, text="删除", command=_delete_lang,
+                   width=8).pack(side="left", padx=(0, 5))
+
+        bottom_frame = tk.Frame(main_frame)
+        bottom_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+
+        def _save():
+            self._save_lang_id_map(data)
+            self._detect_translate_columns()
+            dialog.destroy()
+            self._tlog("语言ID映射已保存", "ok")
+
+        ttk.Button(bottom_frame, text="保存", command=_save,
+                   width=10).pack(side="right", padx=(5, 0))
+        ttk.Button(bottom_frame, text="取消", command=dialog.destroy,
+                   width=10).pack(side="right")
+
+    def _lang_advanced_edit_dialog(self, parent_dialog, data, tree, refresh_cb,
+                                    lang_name=None, ids_str=None):
+        """新增或编辑语言配置的弹窗"""
+        is_edit = lang_name is not None
+        title = "编辑语言配置" if is_edit else "新增语言配置"
+
+        edit_dialog = tk.Toplevel(parent_dialog)
+        edit_dialog.title(title)
+        edit_dialog.geometry("400x180")
+        edit_dialog.transient(parent_dialog)
+        edit_dialog.grab_set()
+
+        tk.Label(edit_dialog, text="语言名称：",
+                 font=("微软雅黑", 9)).pack(padx=10, pady=(10, 0), anchor="w")
+        name_var = tk.StringVar(value=lang_name if is_edit else "")
+        name_entry = ttk.Entry(edit_dialog, textvariable=name_var,
+                                font=("微软雅黑", 9))
+        name_entry.pack(padx=10, pady=(2, 5), fill="x")
+
+        tk.Label(edit_dialog, text="匹配ID（多个用逗号分隔）：",
+                 font=("微软雅黑", 9)).pack(padx=10, pady=(5, 0), anchor="w")
+        ids_var = tk.StringVar(value=ids_str if is_edit else "")
+        ids_entry = ttk.Entry(edit_dialog, textvariable=ids_var,
+                               font=("微软雅黑", 9))
+        ids_entry.pack(padx=10, pady=(2, 5), fill="x")
+
+        tk.Label(edit_dialog, text="例: SC, ::SC::, CHS",
+                 font=("微软雅黑", 8), fg="#888").pack(padx=10, anchor="w")
+
+        def _confirm():
+            new_name = name_var.get().strip()
+            ids_text = ids_var.get().strip()
+            if not new_name:
+                messagebox.showwarning("提示", "请输入语言名称", parent=edit_dialog)
+                return
+            if not ids_text:
+                messagebox.showwarning("提示", "请输入至少一个匹配ID", parent=edit_dialog)
+                return
+            ids_list = [i.strip() for i in ids_text.split(",") if i.strip()]
+            if not ids_list:
+                messagebox.showwarning("提示", "请输入有效的匹配ID", parent=edit_dialog)
+                return
+            if is_edit and new_name != lang_name:
+                data.pop(lang_name, None)
+            data[new_name] = ids_list
+            refresh_cb()
+            edit_dialog.destroy()
+
+        btn_frame = tk.Frame(edit_dialog)
+        btn_frame.pack(pady=(10, 0))
+        ttk.Button(btn_frame, text="确定", command=_confirm,
+                   width=8).pack(side="left", padx=(0, 10))
+        ttk.Button(btn_frame, text="取消",
+                   command=edit_dialog.destroy, width=8).pack(side="left")
+
+        if not is_edit:
+            name_entry.focus_set()
 
     def _detect_translate_columns(self):
         """读取 Excel 第一行表头，用映射表自动识别语言，填充 UI"""
@@ -310,6 +484,33 @@ class TranslateTabMixin:
         import openpyxl
         import requests
 
+        # 加载语言ID映射
+        _lang_id_map = dict(self.config.get("tr_lang_id_map", {}))
+        _header_to_lang_map = {}
+        _any_id_to_lang = {}
+        for _ln, _ids in _lang_id_map.items():
+            _any_id_to_lang[_ln.lower()] = _ln
+            for _id in _ids:
+                _k = _id.strip().lower()
+                _header_to_lang_map[_k] = _ln
+                _any_id_to_lang[_k] = _ln
+
+        def _resolve_lang(val):
+            v = val.strip().lower()
+            return _any_id_to_lang.get(v, val)
+
+        def _match_col(val, headers_list):
+            val_lower = val.strip().lower()
+            val_lang = _resolve_lang(val)
+            for i, h in enumerate(headers_list, 1):
+                hl = h.lower()
+                header_lang = _header_to_lang_map.get(hl)
+                if header_lang and val_lang and header_lang == val_lang:
+                    return i
+                if hl == val_lower:
+                    return i
+            return None
+
         def _load_ref_for_target(tgt_lang_name):
             refs = {}
             if not ref_path or not os.path.isfile(ref_path):
@@ -320,13 +521,8 @@ class TranslateTabMixin:
                     rwb = openpyxl.load_workbook(ref_path, read_only=True, data_only=True)
                     rws = rwb.active
                     rheaders = [str(c.value).strip() if c.value is not None else "" for c in rws[1]]
-                    src_idx = None
-                    tgt_idx = None
-                    for i, h in enumerate(rheaders):
-                        if h and h.lower() == src_lang.lower():
-                            src_idx = i
-                        if h and h.lower() == tgt_lang_name.lower():
-                            tgt_idx = i
+                    src_idx = _match_col(src_lang, rheaders)
+                    tgt_idx = _match_col(tgt_lang_name, rheaders)
                     if src_idx is not None and tgt_idx is not None:
                         for row in rws.iter_rows(min_row=2, values_only=True):
                             if row[src_idx] and row[tgt_idx]:
@@ -465,11 +661,7 @@ class TranslateTabMixin:
                     headers.append(h)
 
                 # 找到源语言列
-                src_col = None
-                for i, h in enumerate(headers, 1):
-                    if h.lower() == src_lang.lower():
-                        src_col = i
-                        break
+                src_col = _match_col(src_lang, headers)
                 if src_col is None:
                     self._tlog(f"未找到源语言列 '{src_lang}'", "error")
                     return
@@ -477,11 +669,10 @@ class TranslateTabMixin:
                 # 找到所有已勾选的目标语言列
                 tgt_col_map = {}
                 for tl in tgt_langs:
-                    for i, h in enumerate(headers, 1):
-                        if h.lower() == tl.lower():
-                            tgt_col_map[tl] = i
-                            break
-                    if tl not in tgt_col_map:
+                    col = _match_col(tl, headers)
+                    if col is not None:
+                        tgt_col_map[tl] = col
+                    else:
                         self._tlog(f"未找到目标语言列 '{tl}'，跳过", "warn")
 
                 if not tgt_col_map:

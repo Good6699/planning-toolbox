@@ -122,6 +122,8 @@ def api_get_config():
         "tr_out_dir": cfg.get("tr_out_dir", DEFAULT_OUTPUT_DIR),
         "tr_prompt": cfg.get("tr_prompt", "请将以下文本翻译为{tgt_lang}，保持格式不变"),
         "tr_batch_size": cfg.get("tr_batch_size", 20),
+        "tr_lang_id_map": cfg.get("tr_lang_id_map", {}),
+        "tr_saved_tgt_langs": cfg.get("tr_saved_tgt_langs", []),
         "output_dir": cfg.get("output_dir", DEFAULT_OUTPUT_DIR),
         "output_dir_history": cfg.get("output_dir_history", []),
         "svn_keyword_history": cfg.get("svn_keyword_history", []),
@@ -680,6 +682,52 @@ def _exec_merge_table(step, put):
     return True
 
 # ═══════════════════════════════════════════════════════════
+# 语言ID映射 API
+# ═══════════════════════════════════════════════════════════
+def _import_lang_map_txt_to_json():
+    """从 lang_map.txt 读取并合并为 {语言名: [ID列表]} 格式"""
+    map_path = os.path.join(SCRIPT_DIR, "lang_map.txt")
+    result = {}
+    if not os.path.isfile(map_path):
+        return result
+    try:
+        with open(map_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip()
+                    if key and val:
+                        if val not in result:
+                            result[val] = []
+                        if key not in result[val]:
+                            result[val].append(key)
+    except Exception:
+        pass
+    return result
+
+@app.route("/api/translate/lang-id-map", methods=["GET", "POST"])
+def api_translate_lang_id_map():
+    if request.method == "GET":
+        cfg = load_config()
+        data = cfg.get("tr_lang_id_map", {})
+        if not data:
+            data = _import_lang_map_txt_to_json()
+            if data:
+                cfg["tr_lang_id_map"] = data
+                save_config(cfg)
+        return jsonify({"data": data})
+    data = request.get_json(force=True)
+    lang_id_map = data.get("lang_id_map", {})
+    cfg = load_config()
+    cfg["tr_lang_id_map"] = lang_id_map
+    save_config(cfg)
+    return jsonify({"ok": True})
+
+# ═══════════════════════════════════════════════════════════
 # 翻译执行 API
 # ═══════════════════════════════════════════════════════════
 @app.route("/api/translate/run", methods=["POST"])
@@ -749,6 +797,42 @@ def api_translate_run():
         clean_tgts = [_clean(t) for t in tgt_langs]
         lang_display = "、".join(clean_tgts)
 
+        # 加载语言ID映射，构建反转表 {关键词小写: 语言名}
+        _lang_id_map = dict(load_config().get("tr_lang_id_map", {}))
+        _header_to_lang_map = {}
+        _any_id_to_lang = {}
+        for lang_name, ids in _lang_id_map.items():
+            _any_id_to_lang[lang_name.lower()] = lang_name
+            for id_str in ids:
+                key = id_str.strip().lower()
+                _header_to_lang_map[key] = lang_name
+                _any_id_to_lang[key] = lang_name
+
+        def _header_to_lang(header_lower):
+            return _header_to_lang_map.get(header_lower)
+
+        def _resolve_lang(val):
+            """将语言代码/ID/名称统一解析为语言名，用于匹配"""
+            v = val.strip().lower()
+            return _any_id_to_lang.get(v, val)
+
+        def _match_col(val, headers_list):
+            """检查 val 是否匹配某个表头，返回 (列索引从1开始, 匹配到的表头)
+            匹配优先级:
+            1) 表头被语言映射识别到的语言名与 val 的语言名相同
+            2) 表头文本与 val 大小写不敏感匹配
+            """
+            val_lower = val.strip().lower()
+            val_lang = _resolve_lang(val)
+            for i, h in enumerate(headers_list, 1):
+                hl = h.lower()
+                header_lang = _header_to_lang(hl)
+                if header_lang and val_lang and header_lang == val_lang:
+                    return i, h
+                if hl == val_lower:
+                    return i, h
+            return None, None
+
         prompt = (prompt_template or "请将以下文本从{src_lang}翻译为{tgt_lang}，保持格式不变")
         system_prompt = prompt.replace("{src_lang}", clean_src).replace("{tgt_lang}", lang_display)
 
@@ -762,12 +846,8 @@ def api_translate_run():
                     rwb = openpyxl.load_workbook(ref_path, read_only=True, data_only=True)
                     rws = rwb.active
                     rheaders = [str(c.value).strip() if c.value is not None else "" for c in rws[1]]
-                    src_idx = tgt_idx = None
-                    for i, h in enumerate(rheaders):
-                        if h and h.lower() == src_lang.lower():
-                            src_idx = i
-                        if h and h.lower() == tgt_lang_name.lower():
-                            tgt_idx = i
+                    src_idx, _ = _match_col(src_lang, rheaders)
+                    tgt_idx, _ = _match_col(tgt_lang_name, rheaders)
                     if src_idx is not None and tgt_idx is not None:
                         for row in rws.iter_rows(min_row=2, values_only=True):
                             if row[src_idx] and row[tgt_idx]:
@@ -876,11 +956,7 @@ def api_translate_run():
 
             headers = [str(c.value).strip() if c.value is not None else "" for c in ws[1]]
 
-            src_col = None
-            for i, h in enumerate(headers, 1):
-                if h.lower() == src_lang.lower():
-                    src_col = i
-                    break
+            src_col, src_match = _match_col(src_lang, headers)
             if src_col is None:
                 q.put(f"未找到源语言列 '{src_lang}'\n")
                 q.put(None)
@@ -888,11 +964,10 @@ def api_translate_run():
 
             tgt_col_map = {}
             for tl in tgt_langs:
-                for i, h in enumerate(headers, 1):
-                    if h.lower() == tl.lower():
-                        tgt_col_map[tl] = i
-                        break
-                if tl not in tgt_col_map:
+                col, _ = _match_col(tl, headers)
+                if col is not None:
+                    tgt_col_map[tl] = col
+                else:
                     q.put(f"未找到目标语言列 '{tl}'，跳过\n")
 
             if not tgt_col_map:
@@ -992,6 +1067,7 @@ def api_translate_run():
             wb.save(out_path)
             wb.close()
             q.put(f"{'='*50}\n")
+            q.put(f"[输出路径] {out_dir}\n")
             q.put(f"翻译完成! 输出文件: {out_path}\n")
         except Exception as e:
             import traceback

@@ -1893,7 +1893,12 @@ def _get_changed_files_for_pair(cur: int, prv: int, svn_url: str, svn_user: str 
         if r.returncode != 0:
             return (cur, prv, [])
         changed: List[str] = []
-        base = svn_url.rstrip("/") + "/"
+        # 文件 URL 检测：含 Excel 扩展名时取父目录作为 base
+        _FILE_EXTS = (".xlsm", ".xlsx", ".xls", ".xlsb", ".csv")
+        _base_url = svn_url.rstrip("/")
+        if any(_base_url.lower().endswith(ext) for ext in _FILE_EXTS):
+            _base_url = os.path.dirname(_base_url)
+        base = _base_url + "/"
         for line in r.stdout.decode("utf-8", errors="replace").splitlines():
             line = line.strip()
             if not line:
@@ -1903,8 +1908,8 @@ def _get_changed_files_for_pair(cur: int, prv: int, svn_url: str, svn_user: str 
                 full_url = parts[1]
                 if full_url.startswith(base):
                     rel = full_url[len(base):]
-                elif full_url.startswith(svn_url.rstrip("/")):
-                    rel = full_url[len(svn_url.rstrip("/")):].lstrip("/")
+                elif full_url.startswith(_base_url):
+                    rel = full_url[len(_base_url):].lstrip("/")
                 else:
                     rel = os.path.basename(full_url)
                 changed.append(urllib.parse.unquote(rel))
@@ -2476,6 +2481,16 @@ def step4_export_files(svn_url: str, revisions: List[int],
 
     # 提取 svn_url 的路径段，用于从 diff 输出中裁剪相对路径
     url_path = urllib.parse.urlparse(svn_url).path.strip("/")
+    # 文件 URL 检测：含 Excel 扩展名时取父目录作为路径前缀
+    _FILE_EXTS = (".xlsm", ".xlsx", ".xls", ".xlsb", ".csv")
+    if url_path and any(url_path.lower().endswith(ext) for ext in _FILE_EXTS):
+        url_path = os.path.dirname(url_path)
+    # 同时计算文件下载用的 base URL
+    _svn_stripped = svn_url.rstrip("/")
+    if any(_svn_stripped.lower().endswith(ext) for ext in _FILE_EXTS):
+        base_url = os.path.dirname(_svn_stripped)
+    else:
+        base_url = _svn_stripped
     url_segments = url_path.split("/")
     # 跳过 svn/D3，取分支路径前缀，如 ['branches', '20240606_KR2', 'Client']
     branch_prefix = url_segments[2:] if len(url_segments) > 2 else []
@@ -2558,35 +2573,96 @@ def step4_export_files(svn_url: str, revisions: List[int],
 
     os.makedirs(export_dir, exist_ok=True)
 
+    def _vw(s):
+        """视觉宽度：CJK=2, ASCII=1"""
+        return sum(2 if '\u2e80' <= ch <= '\u9fff' or '\u3000' <= ch <= '\u303f' else 1 for ch in s)
+
     lines = []
-    lines.append("=" * 60)
-    lines.append("  SVN 修改文件导出总结")
-    lines.append("=" * 60)
-    lines.append(f"  SVN URL: {svn_url}")
+    BOX_W = 66
+
+    # ═══════════ 标题框 ═══════════
+    title = "SVN 修改文件导出总结"
+    inner = BOX_W - 4
+    tl = _vw(title)
+    lp = (inner - tl) // 2
+    rp = inner - lp - tl
+    lines.append("╔" + "═" * (BOX_W - 2) + "╗")
+    lines.append("║" + " " * lp + title + " " * rp + "║")
+    lines.append("╚" + "═" * (BOX_W - 2) + "╝")
+    lines.append("")
+
+    # ═══════════ 元信息表 ═══════════
+    meta = [("URL", svn_url)]
     if keywords:
-        lines.append(f"  关键词: {', '.join(keywords)}")
+        meta.append(("关键词", "、".join(keywords)))
     if start_date:
-        lines.append(f"  筛选日期: {start_date} ~ {end_date}")
+        meta.append(("日期", f"{start_date}  ~  {end_date}"))
     if exclude_dirs:
-        lines.append(f"  排除文件夹: {exclude_dirs}")
-    lines.append(f"  版本范围: r{revisions[-1]} ~ r{revisions[0]}")
-    lines.append(f"  导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    lines.append(f"  导出目录: {export_dir}")
-    lines.append("=" * 60)
+        meta.append(("排除", exclude_dirs))
+    meta.append(("版本", f"r{revisions[-1]}  ~  r{revisions[0]}"))
+    meta.append(("时间", datetime.now().strftime("%Y-%m-%d  %H:%M:%S")))
+    meta.append(("输出", export_dir))
+
+    label_w = max(_vw(l) for l, _ in meta)
+    left_col_w = label_w + 2  # spaces around label
+    right_col_w = BOX_W - left_col_w - 5  # borders: ┌ ┬ ┐ → 3, plus space before right border → +1
+
+    def _trunc_val(val: str, max_vw: int) -> str:
+        if _vw(val) <= max_vw:
+            return val
+        # 保留开头和结尾，中间替换为 ...
+        mid = 3  # "..."
+        half = (max_vw - mid) // 2
+        buf = []
+        vw = 0
+        for ch in val:
+            cw = 2 if '\u2e80' <= ch <= '\u9fff' or '\u3000' <= ch <= '\u303f' else 1
+            if vw + cw > half:
+                break
+            buf.append(ch)
+            vw += cw
+        left = "".join(buf)
+        # 从右边取
+        buf2 = []
+        vw = 0
+        for ch in reversed(val):
+            cw = 2 if '\u2e80' <= ch <= '\u9fff' or '\u3000' <= ch <= '\u303f' else 1
+            if vw + cw > half:
+                break
+            buf2.append(ch)
+            vw += cw
+        right = "".join(reversed(buf2))
+        return left + "..." + right
+
+    lines.append(" " + "┌" + "─" * left_col_w + "┬" + "─" * right_col_w + "┐")
+    for label, val in meta:
+        vd = _trunc_val(val, right_col_w - 2)  # -2 for spaces around value
+        l_pad = left_col_w - _vw(label) - 2  # -2 for spaces
+        v_pad = right_col_w - _vw(vd) - 2
+        lines.append(f" │ {label}{' ' * (l_pad + 1)}│ {vd}{' ' * (v_pad + 1)}│")
+    lines.append(" " + "└" + "─" * left_col_w + "┴" + "─" * right_col_w + "┘")
     lines.append("")
 
-    total_count = len(added_files) + len(modified_files) + len(deleted_files)
-    lines.append(f"📊 共 {total_count} 个文件")
-    lines.append(f"  ├─ 新增: {len(added_files)} 个")
-    lines.append(f"  ├─ 修改: {len(modified_files)} 个")
-    lines.append(f"  └─ 删除: {len(deleted_files)} 个")
+    # ═══════════ 统计汇总 ═══════════
+    added_no_meta = {rel: rev for rel, rev in added_files.items()
+                     if not urllib.parse.unquote(rel).endswith(".meta")}
+    added_display_count = len(added_no_meta)
+    mod_count = len(modified_files)
+    del_count = len(deleted_files)
+    total_count = added_display_count + mod_count + del_count
+    lines.append(" ─── 文件统计 " + "─" * (BOX_W - 14))
+    lines.append(f"   新增 {added_display_count} 个    修改 {mod_count} 个    删除 {del_count} 个    合计 {total_count} 个")
+    lines.append(" " + "─" * (BOX_W - 2))
     lines.append("")
 
-    # ── 按目录分组输出 ──────────────────────────────────
-    def _group_by_dir(items):
-        """将文件按目录分组，返回 [(目录名, [(文件名, 版本号), ...]), ...]
-        过滤掉子目录条目（无文件扩展名），无实际文件的组不显示。
-        """
+    # ═══════════ 渲染函数 ═══════════
+    def _is_anomalous(name: str) -> bool:
+        parts = name.rsplit(".", 2)
+        return len(parts) == 3 and parts[1] == parts[2]
+
+    def _render_section(emoji: str, title: str, items, is_deleted: bool = False) -> List[str]:
+        sec = []
+        # 按目录分组
         groups: Dict[str, List[Tuple[str, Optional[int]]]] = {}
         if isinstance(items, dict):
             for rel, rev in sorted(items.items()):
@@ -2608,59 +2684,51 @@ def step4_export_files(svn_url: str, revisions: List[int],
                 if d not in groups:
                     groups[d] = []
                 groups[d].append((base, None))
-        result = []
+        sorted_groups = []
         for d in sorted(groups.keys()):
             entry = (d, sorted(groups[d], key=lambda x: x[0]))
             if entry[1]:
-                result.append(entry)
-        return result
+                sorted_groups.append(entry)
+        if not sorted_groups:
+            return sec
 
-    # 新增文件中屏蔽 .meta 文件
-    added_no_meta = {rel: rev for rel, rev in added_files.items()
-                     if not urllib.parse.unquote(rel).endswith(".meta")}
-    added_display_count = len(added_no_meta)
+        file_count = sum(len(f) for _, f in sorted_groups)
+        # Section header
+        section_label = f" {emoji} {title} {file_count} 个 "
+        sec.append(section_label + "━" * (BOX_W - _vw(section_label)))
+        sec.append("")
 
-    if added_no_meta:
-        lines.append("=" * 60)
-        lines.append(f"  ✅ 新增文件 ({added_display_count})")
-        lines.append("=" * 60)
-        lines.append("")
-        for d, files in _group_by_dir(added_no_meta):
-            lines.append(f"  [{d}]  ({len(files)}个)")
-            for base_name, rev in files:
-                lines.append(f"    {base_name}")
-            lines.append("")
+        max_dir_w = max(_vw(d) for d, _ in sorted_groups)
+        count_col_w = 5
 
-    if modified_files:
-        lines.append("=" * 60)
-        lines.append(f"  📝 修改文件 ({len(modified_files)})")
-        lines.append("=" * 60)
-        lines.append("")
-        for d, files in _group_by_dir(modified_files):
-            lines.append(f"  [{d}]  ({len(files)}个)")
-            for base_name, rev in files:
-                lines.append(f"    {base_name}")
-            lines.append("")
+        for d, files in sorted_groups:
+            n = len(files)
+            dir_pad = max_dir_w - _vw(d)
+            sec.append(f" 📁 {d}{' ' * dir_pad} {str(n).rjust(count_col_w)}")
 
-    if deleted_files:
-        lines.append("=" * 60)
-        lines.append(f"  ❌ 删除文件 ({len(deleted_files)})")
-        lines.append("=" * 60)
-        lines.append("")
-        for d, files in _group_by_dir(deleted_files):
-            lines.append(f"  [{d}]  ({len(files)}个)")
             for base_name, _ in files:
-                lines.append(f"    {base_name}")
-            lines.append("")
+                marker = "     ← 文件名疑似异常" if _is_anomalous(base_name) else ""
+                sec.append(f"      {base_name}{marker}")
+            sec.append("")
 
-    lines.append("=" * 60)
-    lines.append("  🛈 说明")
-    lines.append("=" * 60)
+        return sec
+
+    # ═══════════ 渲染各分类 ═══════════
+    lines.extend(_render_section("✅", "新增文件", added_no_meta))
+    lines.extend(_render_section("📝", "修改文件", modified_files))
+    lines.extend(_render_section("❌", "删除文件", deleted_files, is_deleted=True))
+
+    # ═══════════ 底部说明 ═══════════
+    lines.append("━" * BOX_W)
+    lines.append("")
+    lines.append(" ℹ️ 说明")
+    lines.append(" " + "─" * (BOX_W - 2))
     if summary_only:
-        lines.append("  仅生成修改总结，不导出文件")
+        lines.append("   仅生成修改总结，不导出文件")
     else:
-        lines.append("  新增/修改文件已导出到上方目录（保留目录结构）")
-    lines.append("  删除文件仅记录，不导出")
+        lines.append("   新增/修改文件已导出到上方目录（保留目录结构）")
+    lines.append("   删除文件仅记录，不导出")
+    lines.append("   文件名标注 \"← 文件名疑似异常\" 表示可能的双后缀异常，请人工确认")
 
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
@@ -2685,8 +2753,7 @@ def step4_export_files(svn_url: str, revisions: List[int],
 
     def download_file(item: Tuple[str, int]) -> Tuple[str, bool]:
         rel_path, rev = item
-        # 文件 URL = svn_url + / + rel_path（保持 URL 编码）
-        file_url = svn_url.rstrip("/") + "/" + rel_path
+        file_url = base_url + "/" + rel_path
 
         # 文件系统路径需要解码 URL 编码（如 %20 → 空格）
         fs_path = urllib.parse.unquote(rel_path)

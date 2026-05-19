@@ -505,13 +505,15 @@ class SVNCompareGUI(SvnTabMixin, UploadTabMixin, WorkflowTabMixin, TranslateTabM
                    width=8).grid(row=0, column=2, padx=(5, 0), pady=2)
         ttk.Button(lang_frame, text="编辑语言映射", command=self._edit_lang_map,
                    width=10).grid(row=0, column=3, padx=(2, 0), pady=2)
+        ttk.Button(lang_frame, text="高级设置", command=self._open_lang_advanced_settings,
+                   width=8).grid(row=0, column=4, padx=(2, 5), pady=2)
 
-        ttk.Separator(lang_frame, orient="horizontal").grid(row=1, column=0, columnspan=4, sticky="ew", pady=4)
+        ttk.Separator(lang_frame, orient="horizontal").grid(row=1, column=0, columnspan=5, sticky="ew", pady=4)
 
         tk.Label(lang_frame, text="目标语言列（点击勾选）：",
                  font=("微软雅黑", 9)).grid(row=2, column=0, sticky="nw", padx=(5, 0), pady=2)
         tgt_list_frame = tk.Frame(lang_frame)
-        tgt_list_frame.grid(row=2, column=1, columnspan=3, sticky="ew", padx=(5, 5), pady=2)
+        tgt_list_frame.grid(row=2, column=1, columnspan=4, sticky="ew", padx=(5, 5), pady=2)
         tgt_list_frame.columnconfigure(0, weight=1)
         tgt_list_frame.rowconfigure(0, weight=1)
 
@@ -535,7 +537,7 @@ class SVNCompareGUI(SvnTabMixin, UploadTabMixin, WorkflowTabMixin, TranslateTabM
         tgt_info_entry = tk.Entry(lang_frame, textvariable=self.tr_tgt_info_var,
                                    font=("微软雅黑", 9), state="readonly",
                                    bg="#fff8dc", relief="solid", bd=1)
-        tgt_info_entry.grid(row=3, column=1, columnspan=3, sticky="ew", padx=(5, 5), pady=(0, 2))
+        tgt_info_entry.grid(row=3, column=1, columnspan=4, sticky="ew", padx=(5, 5), pady=(0, 2))
 
         # ── 输出设置 ──
         out_frame = tk.Frame(parent)

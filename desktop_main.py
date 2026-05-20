@@ -539,6 +539,7 @@ def _undock_and_center(hwnd):
 
 
 _wnd_proc_fallback_ref = None
+_fallback_original = 0
 
 
 def _fallback_subclass(hwnd):
@@ -563,8 +564,12 @@ def _fallback_subclass(hwnd):
         if msg == 0x0006 and wparam == 1:
             if _docker and _docker.docked:
                 _docker._taskbar_activate = True
-        return ctypes.windll.user32.CallWindowProcW(
-            _fallback_original, hwnd_inner, msg, wparam, lparam
+        if _fallback_original:
+            return ctypes.windll.user32.CallWindowProcW(
+                _fallback_original, hwnd_inner, msg, wparam, lparam
+            )
+        return ctypes.windll.user32.DefWindowProcW(
+            hwnd_inner, msg, wparam, lparam
         )
 
     _wnd_proc_fallback_ref = WNDPROC(_wnd_proc)

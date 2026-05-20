@@ -1483,7 +1483,7 @@ function buildWorkflowTab(panel) {
   let _modalCtx = null;
 
   function _wfModalFields(type, step) {
-    const v = (key) => escapeHtml(step[key]||"");
+    const v = (key) => escapeHtml(Array.isArray(step[key]) ? step[key].join(", ") : step[key]||"");
     const _fb = (label, dataKey, id, browseType) => `
       <div class="form-group"><label>${label}</label>
         <div class="flex-row"><input type="text" class="wf-modal-input" id="${id}" data-key="${dataKey}" value="${v(dataKey)}" style="flex:1" placeholder="${browseType==='dir'?'选择目录':'选择文件'}">
@@ -1545,7 +1545,13 @@ function buildWorkflowTab(panel) {
     if (!step) return;
     modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
       const key = inp.dataset.key;
-      if (key) step[key] = inp.value;
+      if (!key) return;
+      const arrKeys = ["tools","dirs","input_paths","file_paths","update_dirs"];
+      if (arrKeys.includes(key)) {
+        step[key] = inp.value.split(",").map(s => s.trim()).filter(Boolean);
+      } else {
+        step[key] = inp.value;
+      }
     });
     saveConfig({workflows:config.workflows});
     overlay.classList.remove("show");
@@ -1553,6 +1559,9 @@ function buildWorkflowTab(panel) {
     _showToast("步骤设置已保存");
   });
 
+  panel.querySelectorAll("button,input").forEach(el => {
+    el.addEventListener("mousedown", (e) => e.stopPropagation());
+  });
   panel.querySelectorAll(".wf-settings-btn").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1579,8 +1588,6 @@ function buildWorkflowTab(panel) {
     touchStartThreshold: 5,
     ghostClass: "wf-dragging",
     chosenClass: "wf-drag-ghost",
-    filter: "input,button,.wf-settings-btn,.wf-parent-check,.wf-child-check",
-    preventOnFilter: true,
     direction: "vertical",
   };
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """策划工具箱 - Web 版本 (Flask 后端)"""
-import sys, os, json, signal, subprocess, threading, queue, time, shutil, stat
+import sys, os, json, signal, subprocess, threading, queue, time, shutil, stat, tempfile
 from datetime import datetime
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -555,17 +555,16 @@ def _exec_export_text(step, put, task_id=None):
             proc = subprocess.Popen(
                 ["cmd.exe", "/c", tool_path],
                 cwd=os.path.dirname(tool_path) if os.path.isdir(os.path.dirname(tool_path)) else None,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, **_get_subprocess_kwargs())
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             _register_proc(proc, task_id)
             try:
-                stdout, stderr = proc.communicate(timeout=3600)
-                if proc.returncode == 0:
-                    put(f"  完成\n")
-                else:
-                    put(f"  退出码={proc.returncode}\n")
-                    if stderr:
-                        put(stderr[-500:] + "\n")
+                stdout, _ = proc.communicate(input=b"\n", timeout=3600)
+                text = stdout.decode("gbk", errors="replace") if stdout else ""
+                for line in text.split("\n"):
+                    line = line.strip()
+                    if line:
+                        put(f"  {line}\n")
+                put(f"  完成\n")
             finally:
                 _unregister_proc(proc, task_id)
         except subprocess.TimeoutExpired:

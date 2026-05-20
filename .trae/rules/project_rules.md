@@ -1,4 +1,49 @@
-# svn_oneclick_compare.py 开发规则
+## Compare Module（SVN 对比工具）
+- 多进程并行解析 + 下载/解析流水线 + ID Map 缓存 + 预过滤
+- `_parse_sheet` 使用 openpyxl read_only + lxml iterparse 双模式
+- 指纹计算改用 cell 原始内容 Hash（ref:v:type 三元组），不再依赖 sharedStrings
+- 关键配置：`output_cols = ["::ID::", "::SC::", "SubstituteId"]`
+- Texts.xlsm header 列名带 `::` 前后缀（如 `::ID::`、`::SC::`）
+- ID 变更回退逻辑始终执行，不能被 `not output_cols` 跳过
+
+## Desktop Module（桌面版）
+- 启动文件：`策划工具箱.bat` → `desktop_main.py`
+- 技术栈：pywebview + Flask（内嵌 18123）+ pystray 系统托盘
+- 单实例锁：端口 18124 检测
+- 拖拽支持：`_init_dnd()` 使用 pywebview DOM DnD API
+- 窗口子类化：`_subclass_window()` + `_wnd_proc_ref` 防止 GC
+- 限制：单窗口实例，最小化或关闭到托盘
+
+## 工作流（Workflow）模块
+
+### 架构
+- `buildWorkflowTab(panel)` — 在工作流 Tab 被选中时调用，渲染整个面板
+- `wfCreate/wfCopy/wfDelete` — 工具栏 CRUD 操作
+- `runWorkflow()` — 执行勾选步骤，支持多工作流并行
+- ▶ 播放按钮 — 执行本工作流已勾选的步骤，也支持并行
+
+### 数据结构
+`config.workflows`: `[{name, steps: [{type, name, ...字段}]}]`
+步骤类型：`export_text`, `upload_svn`, `merge_table`, `merge_translation`, `export_error_code`, `lock_svn`, `open_tables`
+
+### 数组字段（step[key] 为数组类型）
+- `tools` / `dirs` / `input_paths` / `file_paths` / `update_dirs`
+- 渲染时：`Array.isArray(step[key]) ? step[key].join(", ") : step[key]||""`
+- 保存时：`inp.value.split(",").map(s => s.trim()).filter(Boolean)`
+- ⚠️ 不能用 `step[key]||""` 兜底，数组是 truthy，会传给 escapeHtml 报 `replace is not a function`
+
+### 弹窗设置
+- `_wfModalFields(type, step)` — 按步骤类型生成动态表单
+- `_wfModalAfterOpen()` — 绑定 enablePathDrop + 浏览按钮
+- `_modalCtx = {wfIdx, stepIdx}` — 保存上下文供保存按钮使用
+- 保存后实时写回 config.workflows 并 saveConfig
+
+### 并行执行
+- `_wfRunningTasks` 计数器管理并行任务
+- 带 label 参数时（工作流名）不锁按钮，日志加 `[工作流名]` 蓝色前缀
+- 不带 label 时保持原有单任务模式（SVN/Upload/Translate）
+- 子工作流始终按后端 for 循环顺序执行（单线程）
+
 
 ## AGENT 行为规则
 
@@ -131,45 +176,3 @@ sharedStrings 变了 ≠ sheet 内容变了：
 - 不要删除 `临时辅助文件/` 目录下的文件
 - 不要删除 `__byte_cache/` 下的缓存文件
 - 子进程并发测试：先用路径参数模拟（`_test_pipeline.py` 风格），确认 2/4 worker 全部存活再上线
-
----
-
-## ⚠️ Git 提交规范 — 每次提交前必须执行
-
-**所有代码提交都必须遵循 [git_workflow_rules.md](.trae/rules/git_workflow_rules.md) 中定义的规范。**
-
-### 每次 git commit 前必须执行的三步检查
-
-1. **语法检查：** `python -m py_compile <修改的文件>` — 确保无语法错误
-2. **规范检查：** `flake8 <修改的文件>` — 确保符合 PEP8 规范
-3. **写规范的 commit message：** `<type>(<scope>): <subject>` 格式
-
-### pre-commit 钩子
-
-项目已配置 `.git/hooks/pre-commit`，git commit 时会自动运行 flake8 检查暂存区文件。如果检查到 E/F 级别错误，提交将被阻止。
-
-### 提交信息格式速查
-
-```
-feat(web): 新功能
-fix(cmp): 修复 Bug
-perf(worker): 性能优化
-refactor(gui): 代码重构
-docs(rules): 文档/规则
-chore: 杂项/构建
-```
-
-### 里程碑版本标签
-
-- 语义化版本：`v<major>.<minor>.<patch>`（如 `v1.0`、`v1.1`）
-- 里程碑版本推送 tag 到 GitHub 后需创建 GitHub Release
-- 常规提交（非里程碑）直接 `git push`，不创建 tag
-
-**⚠️ 只改 Web 应用端（Flask 后端 + templates/index.html），不改其他版本。**
-
-- 所有问题、需求、修改都默认只针对 **Web 应用端**（`web_app.py` + `templates/index.html`）
-- **tkinter GUI 桌面版**（`svn_compare_gui.py`、`toolbox_tab_*.py`、`desktop_main.py` 等）不做任何修改
-- **命令行版**（`svn_oneclick_compare.py`、`_cmp_worker.py` 等）不做任何修改
-- **说明书/README** 不做任何修改
-- **纯静态 HTML**（`_rebuild_html.py`、`desktop_shell_demo.py` 等）不做任何修改
-- 所有功能测试只关注 Web 应用端行为

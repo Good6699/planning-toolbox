@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>策划工具箱</title>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <style>
 :root{
   --bg:#0f1115;
@@ -358,61 +359,278 @@ input::placeholder,textarea::placeholder{
   accent-color:var(--accent);
 }
 .wf-layout{
-  display:grid;
-  grid-template-columns:320px minmax(0,1fr);
-  gap:16px;
-}
-.wf-layout>div{
   display:flex;
   flex-direction:column;
+  gap:16px;
 }
-.wf-layout>div>.card{
-  flex:1;
-  min-height:0;
-}
-.wf-list{
+.wf-tree{
   display:flex;
   flex-direction:column;
   gap:6px;
-  flex:1;
-  min-height:0;
 }
-.card:has(.wf-list){
-  display:flex;
-  flex-direction:column;
-}
-.card:has(.wf-list)>.flex-row{
-  margin-top:10px;
-}
-.wf-item{
-  padding:10px;
-  border-radius:8px;
+.wf-parent{
   background:rgba(255,255,255,.02);
-  border:1px solid rgba(255,255,255,.04);
-  cursor:pointer;
-  transition:.18s;
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:10px;
+  overflow:hidden;
+  transition:.2s;
 }
-.wf-item:hover{
-  background:rgba(255,255,255,.04);
+.wf-parent.expanded{
+  background:rgba(94,162,255,.04);
   border-color:rgba(94,162,255,.2);
 }
-.wf-item.selected{
-  background:linear-gradient(135deg,rgba(94,162,255,.16),rgba(94,162,255,.06));
-  border-color:rgba(94,162,255,.3);
-}
-.wf-step{
+.wf-parent-header{
   display:flex;
   align-items:center;
   gap:10px;
-  padding:8px 12px;
-  border-radius:10px;
-  margin-bottom:8px;
-  background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.015));
-  border:1px solid rgba(255,255,255,.05);
-  transition:border-color .18s ease;
+  padding:12px 14px;
+  cursor:pointer;
+  user-select:none;
+  transition:.18s;
 }
-.wf-step:hover{
-  border-color:rgba(255,255,255,.08);
+.wf-parent-header:hover{
+  background:rgba(255,255,255,.03);
+}
+.wf-parent.expanded .wf-parent-header{
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.wf-arrow{
+  width:18px;
+  height:18px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--dim);
+  transition:transform .22s ease;
+  font-size:11px;
+  flex-shrink:0;
+}
+.wf-parent.expanded .wf-arrow{
+  transform:rotate(90deg);
+}
+.wf-parent-check{
+  width:16px;
+  height:16px;
+  accent-color:var(--accent);
+  cursor:pointer;
+  flex-shrink:0;
+}
+.wf-parent-name{
+  flex:1;
+  font-weight:600;
+  font-size:14px;
+}
+.wf-parent-badge{
+  font-size:11px;
+  color:var(--dim);
+  background:rgba(255,255,255,.05);
+  padding:2px 8px;
+  border-radius:5px;
+}
+.wf-play-btn{
+  width:26px;
+  height:26px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:none;
+  background:rgba(94,162,255,.1);
+  border-radius:6px;
+  color:var(--accent);
+  cursor:pointer;
+  font-size:12px;
+  transition:.15s;
+  flex-shrink:0;
+  padding:0;
+  line-height:1;
+}
+.wf-play-btn:hover{
+  background:rgba(94,162,255,.25);
+  color:#fff;
+  transform:scale(1.12);
+}
+.wf-children{
+  display:none;
+  padding:8px 14px 12px;
+  gap:6px;
+}
+.wf-parent.expanded .wf-children{
+  display:flex;
+  flex-direction:column;
+}
+.wf-child{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:9px 12px;
+  border-radius:8px;
+  background:rgba(255,255,255,.025);
+  border:1px solid rgba(255,255,255,.04);
+  transition:.18s;
+}
+.wf-child:hover{
+  background:rgba(255,255,255,.04);
+  border-color:rgba(94,162,255,.15);
+}
+.wf-child-check{
+  width:14px;
+  height:14px;
+  accent-color:var(--accent);
+  cursor:pointer;
+  flex-shrink:0;
+}
+.wf-child-type{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  font-size:11px;
+  padding:2px 8px;
+  border-radius:4px;
+  font-weight:600;
+  flex-shrink:0;
+}
+.wf-child-type.export_text{background:rgba(94,162,255,.15);color:#7cb8ff;}
+.wf-child-type.upload_svn{background:rgba(82,210,115,.15);color:#52d273;}
+.wf-child-type.merge_table{background:rgba(255,184,102,.15);color:#ffb866;}
+.wf-child-type.merge_translation{background:rgba(200,150,255,.15);color:#c896ff;}
+.wf-child-type.export_error_code{background:rgba(255,99,125,.15);color:#ff637d;}
+.wf-child-type.lock_svn{background:rgba(255,140,0,.15);color:#ff8c00;}
+.wf-child-type.open_tables{background:rgba(100,200,255,.15);color:#64c8ff;}
+.wf-child-name{
+  flex:1;
+  font-size:13px;
+  color:var(--text);
+}
+.wf-child-name small{
+  color:var(--dim);
+  font-size:11px;
+  margin-left:6px;
+}
+.wf-settings-btn{
+  width:28px;
+  height:28px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:none;
+  background:rgba(255,255,255,.04);
+  border-radius:6px;
+  color:var(--dim);
+  cursor:pointer;
+  transition:.15s;
+  flex-shrink:0;
+  font-size:14px;
+}
+.wf-settings-btn:hover{
+  background:rgba(94,162,255,.15);
+  color:var(--accent);
+}
+.wf-toolbar{
+  display:flex;
+  gap:8px;
+  margin-top:4px;
+}
+.wf-toolbar .btn{
+  height:var(--btn-h);
+  font-size:12px;
+  flex:1;
+}
+.wf-dragging{
+  border:2px dashed var(--accent) !important;
+  background:rgba(94,162,255,.06) !important;
+  border-radius:10px;
+  opacity:.5;
+}
+.wf-drag-ghost{
+  opacity:.7;
+  box-shadow:0 0 0 1px rgba(94,162,255,.3);
+}
+.wf-drop-line{
+  height:3px;
+  background:var(--accent);
+  border-radius:2px;
+  margin:-1px 0;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity .15s;
+}
+.wf-drop-line.show{
+  opacity:1;
+}
+.wf-modal-overlay{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.5);
+  z-index:1000;
+  justify-content:center;
+  align-items:center;
+}
+.wf-modal-overlay.show{
+  display:flex;
+}
+.wf-modal{
+  background:var(--bg2);
+  border:1px solid var(--line);
+  border-radius:14px;
+  width:480px;
+  max-width:90vw;
+  max-height:80vh;
+  overflow:auto;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);
+  padding:20px;
+}
+.wf-modal-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:16px;
+}
+.wf-modal-header h3{
+  margin:0;
+  font-size:16px;
+}
+.wf-modal-close{
+  width:32px;
+  height:32px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:none;
+  background:rgba(255,255,255,.05);
+  border-radius:7px;
+  color:var(--dim);
+  cursor:pointer;
+  font-size:16px;
+  transition:.15s;
+}
+.wf-modal-close:hover{
+  background:rgba(255,255,255,.1);
+  color:#fff;
+}
+.wf-modal-body{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.wf-modal-body .form-group label{
+  display:block;
+  margin-bottom:4px;
+  font-size:12px;
+  color:var(--sub);
+  font-weight:500;
+}
+.wf-modal-body .form-group input,
+.wf-modal-body .form-group select{
+  width:100%;
+  height:var(--btn-h);
+  border-radius:7px;
+  font-size:12px;
+}
+.wf-modal-body .form-hint{
+  font-size:11px;
+  color:var(--dim);
+  margin-top:2px;
 }
 .translate-layout{
   display:grid;
@@ -1149,26 +1367,46 @@ function runUpload() {
   runTask("/api/upload/run", {src_dir:src, tgt_dir:tgt, files}, document.querySelector("[data-action='run-upload']"), "upload_log");
 }
 function buildWorkflowTab(panel) {
+  const wfs = config.workflows || [];
+  const typeCn = {export_text:"导出文字表",upload_svn:"上传SVN",merge_table:"合并表格",merge_translation:"合并翻译",export_error_code:"导出错误码",lock_svn:"锁定SVN",open_tables:"打开表格"};
+  const typeIcon = {export_text:"📄",upload_svn:"📤",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",lock_svn:"🔒",open_tables:"📂"};
+  const isEmpty = !wfs.length;
   panel.innerHTML = `
     <div class="wf-layout">
-      <div>
-        <div class="card">
-          <div class="card-title">工作流列表</div>
-          <div class="wf-list" id="wf_list"></div>
-          <div class="flex-row" style="margin-top:1rem">
-            <button class="btn btn-primary" style="flex:1" data-action="wf-create">+ 新建</button>
-            <button class="btn btn-normal" data-action="wf-copy">复制</button>
-            <button class="btn btn-normal" data-action="wf-delete">删除</button>
-          </div>
+      <div class="card">
+        <div class="card-title">工作流列表</div>
+        <div class="wf-tree" id="wf_tree">
+          ${isEmpty ? '<div class="empty-state" style="padding:32px 16px;color:var(--dim)">暂无工作流，点击"新建"创建</div>'
+          : wfs.map((wf, i) => `
+            <div class="wf-parent" data-idx="${i}">
+              <div class="wf-parent-header">
+                <span class="wf-arrow">▶</span>
+                <input type="checkbox" class="wf-parent-check">
+                <span class="wf-parent-name">${escapeHtml(wf.name)}</span>
+                <button class="wf-play-btn" title="执行本工作流勾选的步骤">▶</button>
+                <span class="wf-parent-badge">${(wf.steps||[]).length} 步骤</span>
+              </div>
+              <div class="wf-children">
+                ${(wf.steps||[]).map((s, j) => `
+                  <div class="wf-child" data-step="${j}">
+                    <input type="checkbox" class="wf-child-check">
+                    <span class="wf-child-type ${s.type}">${typeIcon[s.type]||''} ${typeCn[s.type]||s.type}</span>
+                    <span class="wf-child-name">${escapeHtml(s.name)}</span>
+                    <button class="wf-settings-btn" title="步骤设置">⚙</button>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="wf-toolbar">
+          <button class="btn btn-normal" data-action="wf-create">+ 新建</button>
+          <button class="btn btn-normal" data-action="wf-copy">复制</button>
+          <button class="btn btn-normal" data-action="wf-delete">删除</button>
         </div>
       </div>
-      <div>
-        <div class="card" id="wf_detail">
-          <div class="empty-state">请从左侧选择一个工作流</div>
-        </div>
-        <div class="action-center">
-          <button class="btn btn-primary" data-action="run-workflow">执行工作流</button>
-        </div>
+      <div class="action-center">
+        <button class="btn btn-primary" data-action="run-workflow">执行选中步骤</button>
       </div>
       <div class="wf-log-wrap">
         <div class="card">
@@ -1180,110 +1418,266 @@ function buildWorkflowTab(panel) {
         </div>
       </div>
     </div>
-  `;
-  refreshWorkflowList();
-  S.workflow.logEl = document.getElementById("wf_log");
-}
-function refreshWorkflowList() {
-  const list = document.getElementById("wf_list");
-  const wfs = config.workflows || [];
-  list.innerHTML = wfs.map((w,i) => `
-    <div class="wf-item ${wfSelectedIdx===i?'selected':''}" data-idx="${i}">
-      <div style="font-weight:600">${w.name||"工作流"+(i+1)}</div>
-      <div style="color:var(--dim);font-size:0.8125rem">${(w.steps||[]).length} 步骤</div>
-    </div>
-  `).join("");
-}
-let wfSelectedIdx = -1;
-function wfSelect(idx, el) {
-  wfSelectedIdx = idx;
-  document.querySelectorAll(".wf-item").forEach(e=>e.classList.remove("selected"));
-  if (el) el.classList.add("selected");
-  renderWfDetail(idx);
-}
-function renderWfDetail(idx) {
-  const wf = (config.workflows||[])[idx];
-  if (!wf) return;
-  const detail = document.getElementById("wf_detail");
-  const steps = wf.steps || [];
-  const stepTypes = {export_text:"导出文字表",upload_svn:"上传SVN",merge_table:"合并表格",merge_translation:"合并翻译",export_error_code:"导出错误码",lock_svn:"锁定SVN",open_tables:"打开表格"};
-  detail.innerHTML = `
-    <div class="card-title">工作流详情</div>
-    <div class="form-group">
-      <label>名称</label>
-      <input type="text" id="wf_name" value="${escapeHtml(wf.name||"")}" placeholder="输入工作流名称">
-    </div>
-    <div class="form-group">
-      <label>执行步骤</label>
-      <div id="wf_steps">
-        ${steps.map((s,i) => `
-          <div class="wf-step">
-            <div style="flex:1">${i+1}. ${stepTypes[s.type]||s.type}</div>
-            <input type="text" value="${escapeHtml(s.name||"")}" placeholder="步骤名称" style="width:8.75rem">
-            <button class="btn btn-normal btn-sm" data-action="wf-del-step" data-wf="${idx}" data-step="${i}">删除</button>
-          </div>
-        `).join("") || '<div style="color:var(--dim);text-align:center;padding:1.25rem">暂无步骤</div>'}
+    <div class="wf-modal-overlay" id="wf_modal_overlay">
+      <div class="wf-modal">
+        <div class="wf-modal-header">
+          <h3>步骤设置 · <span id="wf_modal_title">-</span></h3>
+          <button class="wf-modal-close" id="wf_modal_close">✕</button>
+        </div>
+        <div class="wf-modal-body" id="wf_modal_body"></div>
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-normal" id="wf_modal_cancel">取消</button>
+          <button class="btn btn-primary" id="wf_modal_save">保存</button>
+        </div>
       </div>
     </div>
-    <div class="flex-row">
-      <select id="wf_step_type" style="flex:1">
-        ${Object.entries(stepTypes).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}
-      </select>
-      <input type="text" id="wf_step_name" placeholder="步骤名称" style="width:7.5rem">
-      <button class="btn btn-primary" data-action="wf-add-step" data-wf="${idx}">+ 添加</button>
-    </div>
   `;
+  let expandedIdx = -1;
+  const parents = panel.querySelectorAll(".wf-parent");
+  parents.forEach((el, i) => {
+    const header = el.querySelector(".wf-parent-header");
+    header.addEventListener("click", (e) => {
+      if (e.target.closest(".wf-parent-check,.wf-play-btn")) return;
+      if (expandedIdx === i) {
+        el.classList.remove("expanded");
+        expandedIdx = -1;
+      } else {
+        parents.forEach(p => p.classList.remove("expanded"));
+        el.classList.add("expanded");
+        expandedIdx = i;
+      }
+    });
+    const parentCheck = el.querySelector(".wf-parent-check");
+    const childChecks = el.querySelectorAll(".wf-child-check");
+    parentCheck.addEventListener("change", () => {
+      childChecks.forEach(c => c.checked = parentCheck.checked);
+    });
+    childChecks.forEach(c => {
+      c.addEventListener("change", () => {
+        const allChecked = [...childChecks].every(cc => cc.checked);
+        const noneChecked = [...childChecks].every(cc => !cc.checked);
+        parentCheck.checked = allChecked;
+        parentCheck.indeterminate = !allChecked && !noneChecked;
+      });
+    });
+    const playBtn = el.querySelector(".wf-play-btn");
+    playBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const children = el.querySelector(".wf-children");
+      const checkedSteps = el.querySelectorAll(".wf-child-check:checked");
+      const stepIndices = [];
+      checkedSteps.forEach(cb => {
+        const child = cb.closest(".wf-child");
+        const stepIdx = [...children.children].indexOf(child);
+        if (stepIdx >= 0) stepIndices.push(stepIdx);
+      });
+      if (!stepIndices.length) { _showToast("请先勾选要执行的步骤"); return; }
+      const wfName = el.querySelector(".wf-parent-name").textContent;
+      runTask("/api/workflow/run", {wf_idx: Number(el.dataset.idx), step_indices: stepIndices}, null, "wf_log", wfName);
+    });
+  });
+
+  const overlay = document.getElementById("wf_modal_overlay");
+  const modalBody = document.getElementById("wf_modal_body");
+  const modalTitle = document.getElementById("wf_modal_title");
+  let _modalCtx = null;
+
+  function _wfModalFields(type, step) {
+    const v = (key) => escapeHtml(step[key]||"");
+    const _fb = (label, dataKey, id, browseType) => `
+      <div class="form-group"><label>${label}</label>
+        <div class="flex-row"><input type="text" class="wf-modal-input" id="${id}" data-key="${dataKey}" value="${v(dataKey)}" style="flex:1" placeholder="${browseType==='dir'?'选择目录':'选择文件'}">
+        <button class="btn btn-normal btn-sm" data-wf-browse="${browseType}:${id}">浏览</button></div></div>`;
+    const m = {
+      export_text: `
+        ${_fb("主文件路径","input_file","wf_m_input_file","file")}
+        <div class="form-group"><label>工具目录（逗号分隔多个）</label><input type="text" class="wf-modal-input" id="wf_m_tools" data-key="tools" value="${v("tools")}" placeholder="多个路径用,分隔"></div>
+        <div class="form-group"><label>语言列表</label><input type="text" class="wf-modal-input" id="wf_m_lang" data-key="lang_codes" value="${v("lang_codes")}" placeholder="zh,en,ja"></div>`,
+      upload_svn: `
+        <div class="form-group"><label>源目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_dirs" data-key="dirs" value="${v("dirs")}" placeholder="多个目录用,分隔"></div>`,
+      merge_table: `
+        <div class="form-group"><label>输入文件（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_input_paths" data-key="input_paths" value="${v("input_paths")}" placeholder="多个文件用,分隔"></div>
+        ${_fb("输出目录","target_dir","wf_m_target_dir","dir")}
+        <div class="form-group"><label>合并前缀</label><input type="text" class="wf-modal-input" id="wf_m_prefixes" data-key="merge_prefixes" value="${v("merge_prefixes")}"></div>
+        <div class="form-group"><label>标题行</label><input type="text" class="wf-modal-input" id="wf_m_title_rows" data-key="title_rows" value="${v("title_rows")}"></div>
+        <div class="form-group"><label>ID列</label><input type="text" class="wf-modal-input" id="wf_m_id_col" data-key="id_col" value="${v("id_col")}"></div>`,
+      merge_translation: `
+        ${_fb("翻译文件","input_file","wf_m_tr_input","file")}
+        ${_fb("原始文件","original_file","wf_m_orig_file","file")}
+        <div class="form-group"><label>Sheet名称</label><input type="text" class="wf-modal-input" id="wf_m_sheet" data-key="sheet_name" value="${v("sheet_name")}"></div>`,
+      export_error_code: `
+        ${_fb("根目录","root_dir","wf_m_root_dir","dir")}
+        <div class="form-group"><label>语言代码</label><input type="text" class="wf-modal-input" id="wf_m_ec_lang" data-key="lang_codes" value="${v("lang_codes")}"></div>`,
+      lock_svn: `
+        ${_fb("目标文件路径","target_path","wf_m_target_path","file")}
+        <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="多个目录用,分隔"></div>
+        <div class="form-group"><label>锁定消息</label><input type="text" class="wf-modal-input" id="wf_m_lock_msg" data-key="lock_msg" value="${v("lock_msg")}"></div>`,
+      open_tables: `
+        <div class="form-group"><label>文件路径（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_file_paths" data-key="file_paths" value="${v("file_paths")}" placeholder="多个文件用,分隔"></div>`,
+    };
+    return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
+  }
+
+  function _wfModalAfterOpen() {
+    modalBody.querySelectorAll("[id^=wf_m_]").forEach(inp => {
+      if (inp.id) enablePathDrop(inp.id);
+    });
+    modalBody.querySelectorAll("[data-wf-browse]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const spec = btn.dataset.wfBrowse;
+        if (!spec) return;
+        const parts = spec.split(":");
+        const mode = parts[0];
+        const targetId = parts.slice(1).join(":");
+        if (mode === "file") browseFile(targetId);
+        else if (mode === "dir") browseDir(targetId);
+      });
+    });
+  }
+
+  document.getElementById("wf_modal_close").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; });
+  document.getElementById("wf_modal_cancel").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; });
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) { overlay.classList.remove("show"); _modalCtx = null; } });
+  document.getElementById("wf_modal_save").addEventListener("click", () => {
+    if (!_modalCtx) return;
+    const { wfIdx, stepIdx } = _modalCtx;
+    const step = config.workflows[wfIdx]?.steps?.[stepIdx];
+    if (!step) return;
+    modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
+      const key = inp.dataset.key;
+      if (key) step[key] = inp.value;
+    });
+    saveConfig({workflows:config.workflows});
+    overlay.classList.remove("show");
+    _modalCtx = null;
+    _showToast("步骤设置已保存");
+  });
+
+  panel.querySelectorAll(".wf-settings-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const child = btn.closest(".wf-child");
+      const parent = btn.closest(".wf-parent");
+      if (!child || !parent) return;
+      const wfIdx = Number(parent.dataset.idx);
+      const stepIdx = [...parent.querySelector(".wf-children").children].indexOf(child);
+      const step = config.workflows[wfIdx]?.steps?.[stepIdx];
+      if (!step) return;
+      const typeCn = {export_text:"导出文字表",upload_svn:"上传SVN",merge_table:"合并表格",merge_translation:"合并翻译",export_error_code:"导出错误码",lock_svn:"锁定SVN",open_tables:"打开表格"};
+      modalTitle.textContent = typeCn[step.type] || step.type;
+      modalBody.innerHTML = _wfModalFields(step.type, step);
+      _modalCtx = { wfIdx, stepIdx };
+      overlay.classList.add("show");
+      setTimeout(() => _wfModalAfterOpen(), 50);
+    });
+  });
+
+  const sortableOptions = {
+    animation: 150,
+    delay: 300,
+    delayOnTouchOnly: false,
+    touchStartThreshold: 5,
+    ghostClass: "wf-dragging",
+    chosenClass: "wf-drag-ghost",
+    filter: "input,button,.wf-settings-btn,.wf-parent-check,.wf-child-check",
+    preventOnFilter: true,
+    direction: "vertical",
+  };
+
+  _wfSortables = [];
+  _wfSortables.push(Sortable.create(document.getElementById("wf_tree"), {
+    ...sortableOptions,
+    onStart(evt) {
+      const el = evt.item;
+      if (el.classList.contains("wf-parent") && el.classList.contains("expanded")) {
+        el.classList.remove("expanded");
+      }
+    },
+    onEnd() {
+      const newOrder = [...document.querySelectorAll("#wf_tree > .wf-parent")].map(el => Number(el.dataset.idx));
+      config.workflows = newOrder.map(i => config.workflows[i]);
+      saveConfig({workflows:config.workflows});
+    },
+  }));
+
+  document.querySelectorAll("#wf_tree .wf-children").forEach((container) => {
+    _wfSortables.push(Sortable.create(container, {
+      ...sortableOptions,
+      group: "wf-children",
+      onEnd() {
+          const parent = container.closest(".wf-parent");
+          const wfIdx = Number(parent.dataset.idx);
+          const wf = config.workflows[wfIdx];
+          if (!wf) return;
+          const newSteps = [...container.children].map(el => wf.steps[Number(el.dataset.step)]);
+          wf.steps = newSteps;
+          saveConfig({workflows:config.workflows});
+        },
+    }));
+  });
+
+  S.workflow.logEl = document.getElementById("wf_log");
 }
-function escapeHtml(s){
-  return (s||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-}
-function wfUpdateName(idx, name) {
-  config.workflows[idx].name = name;
-  saveConfig({workflows:config.workflows});
-  refreshWorkflowList();
-}
-function wfAddStep(wfIdx) {
-  const type = document.getElementById("wf_step_type").value;
-  const name = document.getElementById("wf_step_name").value.trim();
-  if (!name) return;
-  config.workflows[wfIdx].steps = config.workflows[wfIdx].steps || [];
-  config.workflows[wfIdx].steps.push({type, name});
-  saveConfig({workflows:config.workflows});
-  renderWfDetail(wfIdx);
-  refreshWorkflowList();
-}
-function wfDelStep(wfIdx, stepIdx) {
-  config.workflows[wfIdx].steps.splice(stepIdx,1);
-  saveConfig({workflows:config.workflows});
-  renderWfDetail(wfIdx);
-  refreshWorkflowList();
+let _wfSortables = [];
+function _wfRebuild() {
+  _wfSortables.forEach(s => s.destroy());
+  _wfSortables = [];
+  buildWorkflowTab(S.workflow.panel);
 }
 function wfCreate() {
   config.workflows = config.workflows || [];
   config.workflows.push({name:"新工作流",steps:[]});
   saveConfig({workflows:config.workflows});
-  refreshWorkflowList();
+  _wfRebuild();
 }
 function wfCopy() {
-  if (wfSelectedIdx<0) return;
-  const orig = JSON.parse(JSON.stringify(config.workflows[wfSelectedIdx]));
+  const sel = document.querySelector(".wf-parent.selected");
+  if (!sel) return;
+  const idx = Number(sel.dataset.idx);
+  const orig = JSON.parse(JSON.stringify(config.workflows[idx]));
   orig.name = (orig.name||"工作流") + " (副本)";
-  config.workflows.splice(wfSelectedIdx+1,0,orig);
+  config.workflows.splice(idx+1, 0, orig);
   saveConfig({workflows:config.workflows});
-  refreshWorkflowList();
+  _wfRebuild();
 }
 function wfDelete() {
-  if (wfSelectedIdx<0) return;
-  if (!confirm("确定删除此工作流？")) return;
-  config.workflows.splice(wfSelectedIdx,1);
-  wfSelectedIdx = -1;
+  const sel = document.querySelector(".wf-parent.selected");
+  if (!sel) return;
+  const idx = Number(sel.dataset.idx);
+  const name = config.workflows[idx]?.name || "未命名";
+  if (!confirm(`确定删除工作流「${name}」？`)) return;
+  config.workflows.splice(idx, 1);
   saveConfig({workflows:config.workflows});
-  refreshWorkflowList();
-  document.getElementById("wf_detail").innerHTML = '<div class="empty-state">请从左侧选择一个工作流</div>';
+  _wfRebuild();
 }
 function runWorkflow() {
-  if (wfSelectedIdx < 0) { alert("请先选择一个工作流"); return; }
-  runTask("/api/workflow/run", {wf_idx: wfSelectedIdx}, document.querySelector("[data-action='run-workflow']"), "wf_log");
+  const pairs = [];
+  document.querySelectorAll(".wf-parent").forEach((parent) => {
+    const wfIdx = Number(parent.dataset.idx);
+    const checks = parent.querySelectorAll(".wf-child-check:checked");
+    checks.forEach(cb => {
+      const child = cb.closest(".wf-child");
+      const stepIdx = [...parent.querySelector(".wf-children").children].indexOf(child);
+      if (stepIdx >= 0) pairs.push({wf_idx: wfIdx, step_idx: stepIdx});
+    });
+  });
+  if (!pairs.length) { _showToast("请勾选要执行的步骤"); return; }
+  const byWf = {};
+  pairs.forEach(p => {
+    if (!byWf[p.wf_idx]) byWf[p.wf_idx] = [];
+    byWf[p.wf_idx].push(p.step_idx);
+  });
+  const keys = Object.keys(byWf).map(Number).sort();
+  const wfNames = {};
+  document.querySelectorAll(".wf-parent").forEach(el => {
+    wfNames[Number(el.dataset.idx)] = el.querySelector(".wf-parent-name").textContent;
+  });
+  keys.forEach(wfIdx => {
+    runTask("/api/workflow/run", {wf_idx: wfIdx, step_indices: byWf[wfIdx]}, null, "wf_log", wfNames[wfIdx] || `工作流${wfIdx}`);
+  });
+}
+function escapeHtml(s){
+  return (s||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 function buildTranslateTab(panel) {
   const api_url = config.tr_api_url||"https://api.openai.com/v1/chat/completions";
@@ -1534,23 +1928,49 @@ function saveTrLangAdvSettings() {
     btn.disabled = false;
   });
 }
-async function runTask(url, body, btn, logId) {
-  if (!btn.dataset.orig) btn.dataset.orig = btn.textContent;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>执行中...';
+let _wfRunningTasks = 0;
+async function runTask(url, body, btn, logId, label) {
   const logEl = document.getElementById(logId);
-  logEl.innerHTML = "";
-  const statusBar = document.getElementById("status_bar");
-  statusBar.classList.add("running");
-  statusBar.querySelector("span").textContent = "运行中";
+  if (label) {
+    if (_wfRunningTasks === 0) {
+      logEl.innerHTML = "";
+      const statusBar = document.getElementById("status_bar");
+      statusBar.classList.add("running");
+      statusBar.querySelector("span").textContent = "运行中";
+    }
+    _wfRunningTasks++;
+  } else {
+    if (!btn.dataset.orig) btn.dataset.orig = btn.textContent;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>执行中...';
+    logEl.innerHTML = "";
+    const statusBar = document.getElementById("status_bar");
+    statusBar.classList.add("running");
+    statusBar.querySelector("span").textContent = "运行中";
+  }
   const r = await fetch(url, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const d = await r.json();
+
+  function _done() {
+    if (label) {
+      _wfRunningTasks--;
+      if (_wfRunningTasks <= 0) {
+        const sb = document.getElementById("status_bar");
+        sb.classList.remove("running");
+        sb.querySelector("span").textContent = "系统空闲";
+      }
+    } else {
+      btn.disabled = false;
+      btn.textContent = btn.dataset.orig;
+      const sb = document.getElementById("status_bar");
+      sb.classList.remove("running");
+      sb.querySelector("span").textContent = "系统空闲";
+    }
+  }
+
   if (d.error) {
     logEl.innerHTML = '<span class="error">❌ '+escapeHtml(d.error)+'</span>';
-    btn.disabled=false;
-    btn.textContent=btn.dataset.orig;
-    statusBar.classList.remove("running");
-    statusBar.querySelector("span").textContent = "系统空闲";
+    _done();
     return;
   }
   const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
@@ -1558,10 +1978,7 @@ async function runTask(url, body, btn, logId) {
   evtSrc.onmessage = (e) => {
     if (e.data === "[DONE]") {
       evtSrc.close();
-      btn.disabled = false;
-      btn.textContent = btn.dataset.orig;
-      statusBar.classList.remove("running");
-      statusBar.querySelector("span").textContent = "系统空闲";
+      _done();
       if (_outputPath) {
         fetch("/api/open/folder", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:_outputPath})}).then(r=>r.json()).then(d=>{
           if (!d.ok) console.warn("打开文件夹失败:", d);
@@ -1583,6 +2000,9 @@ async function runTask(url, body, btn, logId) {
         tag = (m[2] || "").toLowerCase();
         msg = `<span class="ts">${m[1]}</span> ${msg}`;
       }
+      if (label) {
+        msg = `<span style="color:var(--accent);font-weight:600">[${escapeHtml(label)}]</span> ${msg}`;
+      }
       const cls = {"error":"error","warn":"warn","ok":"success","success":"success","info":"info"}[tag] || "";
       const div = document.createElement("div");
       div.className = cls;
@@ -1598,10 +2018,7 @@ async function runTask(url, body, btn, logId) {
   };
   evtSrc.onerror = () => {
     evtSrc.close();
-    btn.disabled = false;
-    btn.textContent = btn.dataset.orig;
-    statusBar.classList.remove("running");
-    statusBar.querySelector("span").textContent = "系统空闲";
+    _done();
     logEl.innerHTML += "\n⚠ 日志连接中断\n";
   };
 }
@@ -1847,6 +2264,9 @@ document.addEventListener("click",e=>{
     case "run-upload": runUpload(); break;
     case "run-translate": runTranslate(); break;
     case "run-workflow": runWorkflow(); break;
+    case "wf-create": wfCreate(); break;
+    case "wf-copy": wfCopy(); break;
+    case "wf-delete": wfDelete(); break;
     case "svn-today": {
       const today = `${cy}-${String(cm).padStart(2,"0")}-${String(cd).padStart(2,"0")}`;
       document.getElementById("svn_start").value = today;
@@ -1907,11 +2327,6 @@ document.addEventListener("click",e=>{
     case "refresh-files": refreshFiles(); break;
     case "select-all": selectAllFiles(true); break;
     case "select-none": selectAllFiles(false); break;
-    case "wf-create": wfCreate(); break;
-    case "wf-copy": wfCopy(); break;
-    case "wf-delete": wfDelete(); break;
-    case "wf-add-step": wfAddStep(Number(target.dataset.wf)); break;
-    case "wf-del-step": wfDelStep(Number(target.dataset.wf), Number(target.dataset.step)); break;
     case "browse-tr-src": browseFile("tr_src"); break;
     case "browse-tr-ref": browseFile("tr_ref"); break;
     case "browse-tr-out": browseDir("tr_out"); break;
@@ -1944,13 +2359,6 @@ document.addEventListener("click",e=>{
   item.classList.toggle("selected", file._sel);
 });
 document.addEventListener("click",e=>{
-  const item = e.target.closest("[data-idx]");
-  if(item && !item.classList.contains("file-item")){
-    if(item.classList.contains("wf-item")){
-      wfSelect(Number(item.dataset.idx), item);
-      return;
-    }
-  }
   const navItem = e.target.closest("[data-key]");
   if(navItem){
     const key = navItem.dataset.key;
@@ -1966,9 +2374,7 @@ document.addEventListener("click",e=>{
   toggle.classList.add("active");
 });
 document.addEventListener("input",e=>{
-  if(e.target.id === "wf_name"){
-    wfUpdateName(wfSelectedIdx, e.target.value);
-  }
+  // wf_name handler removed - workflow name editing now done via settings modal
 });
 let _suggests = {};
 let _activeInputId = null;
@@ -2158,7 +2564,7 @@ function _showToast(msg) {
 function browseFile(inputId) {
   const input = document.createElement("input");
   input.type = "file";
-  input.accept = ".xlsx,.xls";
+  input.accept = ".xlsx,.xls,.xlsm";
   input.onchange = () => {
     if (input.files[0]) {
       document.getElementById(inputId).value = input.files[0].path || input.files[0].name;

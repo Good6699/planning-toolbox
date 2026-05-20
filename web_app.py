@@ -464,6 +464,7 @@ def api_workflow_save():
 def api_workflow_run():
     data = request.get_json(force=True)
     wf_idx = data.get("wf_idx", -1)
+    step_indices = data.get("step_indices", None)
     cfg = load_config()
     wfs = cfg.get("workflows", [])
     if wf_idx < 0 or wf_idx >= len(wfs):
@@ -472,6 +473,15 @@ def api_workflow_run():
     steps = wf.get("steps", [])
     if not steps:
         return jsonify({"error": "工作流没有步骤"}), 400
+
+    if step_indices is not None:
+        filtered = []
+        for si in step_indices:
+            if 0 <= si < len(steps):
+                filtered.append(steps[si])
+        if not filtered:
+            return jsonify({"error": "未选中有效步骤"}), 400
+        steps = filtered
 
     task_id = _get_next_task_id()
     q = queue.Queue()

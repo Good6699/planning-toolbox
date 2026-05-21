@@ -42,7 +42,7 @@
           "file_paths": [
             "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
           ],
-          "name": "1",
+          "name": "Texts.xlsm",
           "type": "open_tables"
         }
       ]
@@ -52,7 +52,7 @@
       "steps": [
         {
           "lock_msg": "锁定中，请勿修改",
-          "name": "3",
+          "name": "Texts.xlsm",
           "target_path": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
           "type": "lock_svn",
           "update_dirs": [
@@ -62,7 +62,8 @@
         },
         {
           "input_file": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
-          "name": "1",
+          "lang_codes": "",
+          "name": "Texts.xlsm",
           "tools": [
             "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat",
             "G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
@@ -74,7 +75,7 @@
             "G:\\D3_KR2\\gameData",
             "G:\\D3_KR2\\Client\\Assets\\StreamingAssets"
           ],
-          "name": "2",
+          "name": "gameData,StreamingAssets",
           "type": "upload_svn"
         }
       ],
@@ -108,7 +109,7 @@
       "steps": [
         {
           "lock_msg": "锁定中，请勿修改",
-          "name": "2",
+          "name": "Texts.xlsm",
           "target_path": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
           "type": "lock_svn",
           "update_dirs": [
@@ -118,7 +119,7 @@
         },
         {
           "input_file": "C:\\Users\\admin\\.qclaw\\workspace\\输出\\翻译_多语言翻译表_韩文.xlsx",
-          "name": "1",
+          "name": "Texts.xlsm",
           "original_file": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
           "sheet_name": "",
           "type": "merge_translation"
@@ -130,7 +131,7 @@
       "steps": [
         {
           "lang_codes": "ZH_CN,KO_KR",
-          "name": "1",
+          "name": "ZH_CN,KO_KR",
           "root_dir": "G:\\D3_KR2\\gameData",
           "type": "export_error_code"
         },
@@ -139,7 +140,7 @@
             "G:\\D3_KR2\\gameData",
             "G:\\D3_KR2\\Client\\Assets\\StreamingAssets"
           ],
-          "name": "gameData&StreamingAssets",
+          "name": "gameData,StreamingAssets",
           "type": "upload_svn"
         }
       ]
@@ -152,38 +153,36 @@
           "input_paths": [
             "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\裂隙\\道具相关.xlsm"
           ],
-          "merge_prefixes": [
-            "新增_"
-          ],
-          "name": "Data",
+          "merge_prefixes": "新增_",
+          "name": "道具相关.xlsm",
           "target_dir": "G:\\D3_Asia\\gameData",
           "title_rows": "3",
           "type": "merge_table"
         },
         {
+          "id_col": "",
           "input_paths": [
             "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\裂隙\\Text\\Texts.xlsm"
           ],
-          "merge_prefixes": [
-            "新增_"
-          ],
-          "name": "Text",
+          "merge_prefixes": "新增_",
+          "name": "Texts.xlsm",
           "target_dir": "G:/D3_Asia/gameData",
           "title_rows": "1",
           "type": "merge_table"
         },
         {
           "input_file": "G:\\D3_Asia\\gameData\\Text\\Texts.xlsm",
-          "name": "Text",
+          "name": "Texts.xlsm",
           "tools": [
             "G:\\D3_Asia\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
             "G:\\D3_Asia\\gameData\\Text\\服务器文字表导出_替换文本引用.bat"
           ],
-          "type": "export_text"
+          "type": "export_text",
+          "lang_codes": ""
         },
         {
           "lang_codes": "TH_TH,ZH_CN,ZH_TW,MS_MY,IN_ID",
-          "name": "5",
+          "name": "TH_TH,ZH_CN,ZH_TW,MS_MY,IN_ID",
           "root_dir": "G:\\D3_Asia\\gameData\\Language",
           "type": "export_error_code"
         },
@@ -192,7 +191,7 @@
             "G:\\D3_Asia\\gameData",
             "G:\\D3_Asia\\Client\\Assets\\StreamingAssets"
           ],
-          "name": "gameData&StreamingAssets",
+          "name": "gameData,StreamingAssets",
           "type": "upload_svn"
         }
       ]
@@ -202,7 +201,7 @@
       "steps": [
         {
           "lock_msg": "锁定中，请勿修改",
-          "name": "4",
+          "name": "Texts.xlsm",
           "target_path": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
           "type": "lock_svn",
           "update_dirs": [
@@ -215,27 +214,28 @@
           "input_paths": [
             "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\职业\\Texts.xlsm"
           ],
-          "merge_prefixes": [],
-          "name": "1",
+          "merge_prefixes": "",
+          "name": "Texts.xlsm",
           "target_dir": "G:\\D3_JP\\gameData\\Text",
           "title_rows": "1",
           "type": "merge_table"
         },
         {
           "input_file": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
-          "name": "2",
+          "name": "Texts.xlsm",
           "tools": [
             "G:\\D3_JP\\gameData\\Text\\服务器文字表导出_替换文本引用.bat",
             "G:\\D3_JP\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
           ],
-          "type": "export_text"
+          "type": "export_text",
+          "lang_codes": ""
         },
         {
           "dirs": [
             "G:\\D3_JP\\gameData",
             "G:\\D3_JP\\Client\\Assets\\StreamingAssets"
           ],
-          "name": "3",
+          "name": "gameData,StreamingAssets",
           "type": "upload_svn"
         }
       ]

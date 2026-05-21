@@ -1557,7 +1557,8 @@ function buildWorkflowTab(panel) {
     overlay.classList.remove("show");
     _modalCtx = null;
     _wfSaving = false;
-    _wfRebuild();
+    const childEl = document.querySelector(`.wf-parent[data-idx="${wfIdx}"] .wf-child[data-step="${stepIdx}"] .wf-child-name`);
+    if (childEl) childEl.textContent = step.name;
     _showToast("步骤设置已保存");
   }
 

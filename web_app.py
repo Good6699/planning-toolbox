@@ -1442,6 +1442,8 @@ def api_translate_run():
             q.put(f"{'='*50}\n")
             q.put(f"[输出路径] {out_dir}\n")
             q.put(f"翻译完成! 输出文件: {out_path}\n")
+        except PermissionError:
+            q.put("翻译过程出错: 输出文件被占用，请关闭 Excel 中已打开的文件后重试\n")
         except Exception as e:
             import traceback
             q.put(f"翻译过程出错: {e}\n")

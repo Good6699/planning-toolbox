@@ -9,18 +9,26 @@
 - Excel对比工作偏好：按行对比，关注ID和SC列的变化，操作类型区分为新增和修改
 - 中文Windows批处理也可用纯GBK编码替代UTF-8（与代码页936一致），无需chcp 65001
 - **2026-04-16**：记忆系统启用
-- **2026-05-12**：Web版策划工具箱UI全面重构 + 后端工作流接入
+- **2026-05-12**：桌面版UI全面重构 + 后端工作流接入
+- **2026-05-20**：文件浏览全面改用 pywebview 原生对话框 + 工作流模态框自动保存
 
 ## 当前项目与关注
 
 - SVN版本对比工具（v9+）：多进程并行解析 + 下载/解析流水线 + ID Map缓存 + 预过滤；Python GUI (svn_compare_gui.py)
 - SVN工具GUI已改为Python实现（svn_compare_gui.py），配置持久化到svn_gui_config.json
-- **Web版策划工具箱**：Flask单文件SPA (`web_app.py` + `templates/index.html`)，端口18123
+- **策划工具箱桌面版**：pywebview(内嵌WebView2) + Flask后端 + SPA前端，端口18123
 
-## Web版策划工具箱架构 (2026-05-12)
+## 策划工具箱桌面版架构
+
+### 入口
+```
+策划工具箱.bat → desktop_main.py → pywebview(WinForms) → 内嵌WebView2加载 http://127.0.0.1:18123
+                                  → 启动Flask后端(web_app.py, 端口18123)
+                                  → 系统托盘(pystray)
+```
 
 ### 后端 (`web_app.py`)
-- Flask直接运行，端口18123，SSE日志流 `/api/log/stream/<task_id>`
+- Flask，端口18123，SSE日志流 `/api/log/stream/<task_id>`
 - 路由清单：`GET /` `GET/POST /api/config` `POST /api/svn/run` `POST /api/upload/run` `POST /api/translate/run` `POST /api/workflow/run` `POST /api/files/list` `POST /api/dir/browse` `GET /api/log/stream/<id>` `GET /api/static/<path>`
 - 工作流后端 `POST /api/workflow/run` 支持7种步骤类型：lock_svn/export_text/upload_svn/open_tables（已实现）、export_error_code/merge_translation/merge_table（需桌面版）
 - SSE心跳15s，超时断开保护
@@ -54,13 +62,19 @@
 - SVN地址下拉列表聚焦时显示全部缓存（非过滤匹配），打字时实时过滤
 - saveConfig() 先更新本地config再发请求，避免竞态
 - 配置从GitHub远程恢复（`svn_gui_config.json` 含7条SVN地址、7个工作流等）
+- **工作流模态框浏览文件后自动保存**：2026-05-20 修复`browseFile()`/`browseDir()` 选完后只填值不保存的问题。在 pywebview API 分支设置 input value 后调用 `_wfModalAutoSave()`，立即保存并关闭弹窗
+- **工作流模态框保存防重复**：`_wfModalDoSave()` 使用 `_wfSaving` 布尔锁防止 Enter 键或多次点击导致保存逻辑执行两次。`_wfSaving = true` 时直接 return，保存完成后重置为 false
 
 ### 核心文件位置
-- 启动：`web_launcher.py`
-- 后端：`web_app.py`
-- 前端：`templates/index.html`
-- 配置：`svn_gui_config.json`
-- 规范：`.trae/skills/toolbox-ui/SKILL.md`
+
+| 类别 | 文件 | 说明 |
+|------|------|------|
+| 桌面入口 | `desktop_main.py` | pywebview 桌面壳（`策划工具箱.bat` 启动） |
+| 纯Web调试 | `web_launcher.py` | 浏览器直接访问，无 pywebview API |
+| 后端 | `web_app.py` | Flask API + 路由 |
+| 前端 | `templates/index.html` | 单文件 SPA |
+| 配置 | `svn_gui_config.json` | 用户配置持久化 |
+| 规范 | `.trae/skills/toolbox-ui/SKILL.md` | UI 开发规范 |
 - 知识图谱：`graphify-out/`（`graphify_quick.py --no-viz` 增量更新）
 
 ## 经验与决策
@@ -70,6 +84,24 @@
 - **多进程解析Excel**：openpyxl read_only模式 + ProcessPoolExecutor 并行解析，比串行pandas快30倍
 - **下载/解析流水线**：下载批次后立即提交解析任务，不等待全部下载完成，总时间=max(下载,解析)而非相加
 - **ID Map缓存**：对比阶段预构建ID→SC映射并缓存，避免每次对比都重建，对比提速约50%
+- **pywebview 文件浏览最佳实践**：
+  - 在 pywebview(WebView2) 中，`<input type="file">` 的 `file.path` 属性不可用（非标准扩展），fallback 到 `file.name` 导致只能获取文件名，完整路径丢失
+  - 正确做法：通过 `window.pywebview.api`（JS-Python 桥）调用 Python 端的 `ResizeApi` 方法，Python 端再调用 `window.create_file_dialog(webview.OPEN_DIALOG, ...)` 打开原生 Windows 文件对话框，返回的路径是完整的绝对路径
+  - 文件类型格式必须为 `('Description (*.ext)', ...)` 字符串元组，不是 `[('Description', '*.ext')]` 列表
+  - 目录选择：`window.create_file_dialog(webview.FOLDER_DIALOG)` → 返回 `tuple[str]`（选中文件夹的完整路径）
+  - JS 侧调用方式：`const path = await window.pywebview.api.browseFile()`，path 为完整绝对路径
+  - 路由对应：`create_file_dialog` 是 `Window` 实例方法，必须通过 `webview.windows[0]` 获取窗口实例调用
+  - `webview.OPEN_DIALOG` 和 `webview.FOLDER_DIALOG` 是模块级常量，均存在
+- **工作流模态框浏览按钮修复**：2026-05-20 工作流步骤设置弹窗的"浏览"按钮无法触发文件对话框。根因：① `_fb()` 模板中的 `file_types` 传了 `[('Excel Files', '*.*')]`（元组列表），pywebview 要求 `('Excel Files (*.xlsm)', ...)`（格式化字符串），导致 `parse_file_type` 抛出 ValueError 并被 `except Exception: pass` 吞掉；② `addEventListener` 在 WebView2 模态框 overlay 中不触发，改为 `onclick` IIFE 直接绑定。涉及文件：`desktop_main.py`（file_types 格式 + 异常打印）、`index.html`（按钮绑定改为 onclick 内联 IIFE）
+- **浏览对话框初始目录**：2026-05-20 点击"浏览"时，文件对话框默认打开输入框中已有路径的父目录，而不是系统"最近使用的目录"。`ResizeApi.browseFile(directory)` 和 `browseDir(directory)` 接受 `directory` 参数传给 `create_file_dialog`；前端 IIFE 从 input value 中提取路径（file 类型截取 `lastIndexOf('\')` 父目录），JS 端传给 `pywebview.api.browseFile(initialDir)`。涉及文件：`desktop_main.py`（directory 参数）、`index.html`（IIFE 传初始路径 + browseFile/browseDir 形参）
+- **全局函数不能调用闭包内函数**：2026-05-20 `browseFile()` 是全局函数，调用 `_wfModalAutoSave()` 时报 `is not defined`，因为它是工作流页签闭包内的局部变量。修复：`window._wfModalAutoSave = _wfModalAutoSave` 暴露到 window 对象；调用处 `window._wfModalAutoSave()` 并加 `typeof` 安全判断。经验：通过 `window.xxx` 将闭包内函数暴露为全局，是 pywebview JS 桥调用闭包变量的标准做法
+- **合并翻译工作流支持**：2026-05-20 `web_app.py` 中 `_exec_merge_translation` 从仅打印"合并翻译功能请使用桌面版"的桩函数替换为完整的合并翻译逻辑（读取翻译文件 → 按 ID 匹配 → 差异对比 → VBScript 写入原文件）。涉及文件：`web_app.py`（新增大约 250 行实现）、`xlsm_zipper.py`（已有）
+- **合并翻译跳过中文列**：2026-05-20 合并翻译时会把所有语言列都写入原文件，导致中文列也被覆盖。第1版：硬编码中文列名列表；第2版（修正）：从`svn_gui_config.json`的`tr_lang_id_map`加载语言配置，筛选出所有key含"中文"、"chinese"的语言对应的ID标识符集合，用该动态集合代替硬编码列表跳过中文列。如果语言配置为空则 fallback 到硬编码列表。涉及文件：`web_app.py`、`toolbox_tab_workflow.py`
+- **导出错误码工作流支持**：2026-05-20 `web_app.py` 中 `_exec_export_error_code` 从仅打印"导出错误码功能请使用桌面版"的桩函数替换为完整实现（解析根目录 → 查找 Language 目录 → 遍历语言代码 → 调用 ExcelTool2.py 导出）。涉及文件：`web_app.py`
+- **上传SVN流程统一改为 TortoiseSVN 手动提交**：2026-05-20 ① 工作流 `upload_svn` 去掉 `svn update` 操作，之前 workflow 会先用 `svn update --accept theirs-full` 更新目录再弹 TortoiseSVN；② 上传SVN页签改为先 `svn update` 再弹 TortoiseSVN，删除了原有的自动 `svn add + svn commit` 备选路径（`_show_svn_confirm_dialog` 和 `_do_svn_commit` 两个方法共约 160 行），未安装 TortoiseSVN 时直接提示报错。涉及文件：`web_app.py`（删 svn update）、`toolbox_tab_upload.py`（加 svn update + 删自动提交）
+- **pywebview 拖拽修复**：2026-05-20 `_init_dnd()` 中当 pywebview drop event 的 `target_id` 为空时，fallback 到 JS 侧 `_lastDropTargetId` 变量（在 `enablePathDrop` 中记录的 hover input id），修复 modal 弹窗内拖拽无法识别目标 input 导致路径没保存的问题；同时 `blur` → `change` 事件确保拖拽后能正确触发保存
+- **文档清理**：2026-05-20 将 `AGENTS.md` 和 `MEMORY.md` 中的"Web版"独立版本概念全部清理，统一为"桌面版唯一版本，web_app.py 是其内置后端"；`desktop_main.py` 为入口，`web_launcher.py` 仅为调试工具
+- **toolbox-run Skill 改桌面版**：2026-05-20 一键重启改为 `python desktop_main.py`，项目结构以 `desktop_main.py` 为首，停止方式增加托盘退出说明
 - **Windows批处理编码陷阱**：
   - `write` 工具默认写入UTF-8无BOM，中文Windows批处理必须用Python以`utf-8-sig`格式写入
   - 通过管道执行批处理时（如`echo input | script.bat`），反斜杠会被当作转义符，导致`\.q`被解析为命令
@@ -91,6 +123,47 @@
 - **边界判定问题先确认。** 遇到日期范围、临界值、逻辑可能有歧义的问题时，先与用户确认再修复，不要自行假设。
 - **每次修改文件后必须跑这3步，不跳步**：①改代码 → ②node语法检查 → ③graphify update。2026-05-10因漏跑graphify导致知识图谱落后于代码，教训：复杂重构时注意力集中在逻辑上容易跳过收尾步骤，必须用原子化流程防遗漏。
 - **解决问题前先查网络和Skill**：接到技术问题后，先用WebSearch查网上有没有更好的方案、库、工具，再用Skill工具查看是否有匹配的技能可用，最后综合外部信息+项目现有代码给出方案。不要闭门造车。
+
+## 外部研究知识（2026-05-20 整理）
+
+### pywebview 桌面开发
+- **渲染器选择**：Windows 下优先使用 Edge Chromium（自动检测），比 MSHTML 性能好、支持硬件加速。项目当前 `desktop_main.py` 未指定 gui 参数，pywebview 会自动选 edgechromium
+- **create_file_dialog 返回值**：`OPEN_DIALOG` 返回 `tuple[str]`（选中文件路径），`FOLDER_DIALOG` 同样返回 `tuple`。Windows 下返回类型与 macOS 不同（Win 返回字符串，macOS 返回 tuple），pywebview 5.x 已统一为 tuple
+- **JS-Python 桥线程安全**：`js_api` 暴露的函数在**独立线程**中执行，不是主线程。多个 JS 调用可并发执行，需要在 Python 侧加锁保护共享数据
+- **窗口事件**：`events.loaded`（页面加载完）适合绑定 DOM 事件，`events.shown`（窗口显示）适合操作窗口 HWND
+- **WebView2 启动优化**：首次启动较慢（冷启动），因为 Chromium 需要创建子进程。项目已通过 Flask 预热 + pywebview 内嵌 url 缓解。WebView2 运行时版本需 ≥ 86.0.622.0
+- **AllowDrop 冲突**：pywebview WinForms 默认启用 WebView2 的 AllowDrop，与自定义 DnD 冲突。项目已通过 `wv.AllowDrop = False` 关闭
+
+### Flask SSE 长连接
+- **连接断开检测**：客户端断开时 Flask 生成器会收到 `GeneratorExit` 异常（不总是可靠），更可靠的方法是用 `request.is_disconnected()` 轮询
+- **心跳机制**：每 15-30s 发一条 `: heartbeat\n\n` 注释行，防止反向代理（Nginx）超时断开连接。项目当前心跳 15s 合理
+- **queue.Queue 模式**：每个 SSE 连接使用独立 `queue.Queue`，后台任务 `put()` 事件，SSE 生成器 `get(timeout=...)` 消费。用 `threading.Lock` 保护 `_log_queues` 字典
+- **不依赖 Redis**：单实例场景直接用 Python `queue.Queue` 即可，不需要 Redis pub/sub。项目当前的模式（`_log_queues[task_id]` 字典 + queue）是标准做法
+- **连接清理**：Flask 开发服务器不支持长连接高并发，但桌面版单用户场景没事。注意 `finally` 块必须从 `_log_queues` 移除已断开连接的队列
+
+### openpyxl 大文件处理
+- **read_only 模式**：`load_workbook(read_only=True)` 按行流式读取，内存从几百MB降到 ~50MB。项目已全面使用
+- **lxml 加速**：安装 `lxml` 后 openpyxl 自动使用它做 XML 解析，比标准 xml.etree 快 2-3 倍。项目已依赖 lxml
+- **data_only 模式**：`load_workbook(data_only=True)` 读取公式计算结果而非公式本身。写入后重新打开需确保文件已保存
+- **write_only 模式**：创建大文件用 `Workbook(write_only=True)`，追加行用 `ws.append()`，内存恒定。注意 write_only 不支持修改已有文件
+- **close() 必须调**：read_only 模式打开的文件必须调 `wb.close()` 释放文件句柄，否则文件被锁定。项目代码中 `_cmp_worker.py` 已在用 `try/finally` 确保关闭
+
+### subprocess Windows 最佳实践
+- **隐藏控制台窗口**：`STARTUPINFO(dwFlags=STARTF_USESHOWWINDOW, wShowWindow=SW_HIDE)` + `creationflags=CREATE_NO_WINDOW`。项目 `_get_subprocess_kwargs()` 已正确实现
+- **communicate() 防死锁**：`Popen` 用 `stdout=PIPE` 时，如果父进程不读输出而子进程写满管道 buffer（默认 64KB），子进程会阻塞死锁。必须用 `proc.communicate()` 或逐行读取。项目已使用 `iter(proc.stdout.readline, "")` 逐行读取
+- **编码问题**：Windows 控制台默认编码可能是 GBK（cp936）或系统 OEM 编码。`subprocess.Popen` 用 `text=True, encoding="utf-8", errors="replace"` 自动处理。如果子进程输出 GBK 编码，需指定 `encoding="gbk"`
+- **进程泄露预防**：`Popen` 对象在 `with` 语句中使用（`with Popen(...) as proc:`），退出时自动关闭管道。使用 `preexec_fn`（POSIX）或 `creationflags`（Windows）确保子进程不继承父进程句柄
+
+### SPA 前端开发通用建议
+- **事件委托**：项目已使用事件委托模式（`panel.querySelectorAll("button,input").forEach(el => el.addEventListener(...)）`），避免动态元素重复绑定
+- **配置状态管理**：项目使用全局 `config` 对象 + `saveConfig()` 的"先改本地再发请求"模式，避免了请求竞态——这是正确的做法
+- **CSS 设计系统**：CSS 变量 + 8px 网格 + 统一 class 替换 inline style，项目已在使用，继续保持
+- **深色主题**：Windows Chromium 下不要用 `-webkit-font-smoothing: antialiased`（已踩坑），使用默认字体渲染
+
+### Excel 对比（xlsm 格式）
+- **sharedStrings 解析**：ss.xml 可能非常大（24万条），纯正则 `_SS_TEXT_RE` 比 lxml iterparse 快且内存低。项目已使用纯正则
+- **xlsm 是 zip 包**：直接用 `zipfile` 操作 .xlsm 文件，无需解压。项目 `_cmp_worker.py` 已用 `zipfile.ZipFile` 读取
+- **ID 列作为唯一键**：使用 `::ID::` 列作为行标识（带::前后缀）。项目已确认此命名规则
 
 ## Excel 对比工具核心问题 (2026-05-14)
 

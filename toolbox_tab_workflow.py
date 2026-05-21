@@ -3,7 +3,7 @@
 """策划工具箱 - SVN工作流页签"""
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, font as tkfont
-import json, os, subprocess, sys as _sys, threading, re, shutil, stat, copy
+import json, os, subprocess, sys as _sys, threading, re, shutil, stat, copy, concurrent.futures
 from datetime import datetime
 from toolbox_platform import _DropTarget, _check_office_lock, _get_subprocess_kwargs, _get_svn_path
 from toolbox_config import CONFIG_FILE, SCRIPT_DIR, MAIN_SCRIPT, DEFAULT_OUTPUT_DIR, load_config, save_config, int_or
@@ -1407,60 +1407,50 @@ class WorkflowTabMixin:
         return True
 
     def _wf_execute_export_text(self, step):
-        input_file = step.get("input_file", "").strip()
         tools = step.get("tools", [])
-        if not input_file or not os.path.exists(input_file):
-            self._wlog("输入文件无效: " + str(input_file), "error")
-            return False
         if not tools:
             self._wlog("未配置工具，跳过", "warn")
             return True
-        self._wlog("输入文件: " + os.path.basename(input_file), "info")
-        self._wlog("使用 " + str(len(tools)) + " 个工具并行处理...", "info")
 
-        results = []
-        def _run(tool_path):
+        input_file = step.get("input_file", "").strip()
+        if input_file:
+            self._wlog("输入文件: " + os.path.basename(input_file), "info")
+        self._wlog("使用 " + str(len(tools)) + " 个工具并行执行...", "info")
+
+        def _run_one(tool_path):
+            tool_path = tool_path.strip()
+            if not tool_path or not os.path.exists(tool_path):
+                self._wlog("工具不存在: " + str(tool_path), "warn")
+                return
             try:
                 ext = os.path.splitext(tool_path)[1].lower()
-                self._wlog("  " + os.path.basename(tool_path) + "...", "info")
                 if ext in (".bat", ".cmd"):
                     proc = subprocess.Popen(
                         ["cmd.exe", "/c", tool_path],
                         cwd=os.path.dirname(tool_path),
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        encoding="utf-8", errors="replace",
-                        **_get_subprocess_kwargs())
+                        stdin=subprocess.PIPE,
+                        creationflags=subprocess.CREATE_NEW_CONSOLE)
                 else:
-                    proc = subprocess.Popen([tool_path], shell=False,
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        encoding="utf-8", errors="replace",
-                        **_get_subprocess_kwargs())
-                stdout, _ = proc.communicate(timeout=3600)
-                results.append((tool_path, proc.returncode, stdout))
+                    proc = subprocess.Popen(
+                        [tool_path],
+                        stdin=subprocess.PIPE,
+                        creationflags=subprocess.CREATE_NEW_CONSOLE)
+                proc.communicate(input=b"\n", timeout=3600)
+                self._wlog("  " + os.path.basename(tool_path) + " 已完成", "ok")
             except subprocess.TimeoutExpired:
-                proc.kill()
-                results.append((tool_path, -1, "超时"))
+                try:
+                    proc.kill()
+                    proc.communicate(timeout=5)
+                except:
+                    pass
+                self._wlog("  " + os.path.basename(tool_path) + " 超时", "error")
             except Exception as e:
-                results.append((tool_path, -2, str(e)))
+                self._wlog("  " + os.path.basename(tool_path) + " 失败: " + str(e), "error")
 
-        threads = []
-        for t in tools:
-            th = threading.Thread(target=_run, args=(t,), daemon=True)
-            th.start()
-            threads.append(th)
-        for th in threads:
-            th.join()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(tools)) as executor:
+            futures = [executor.submit(_run_one, t) for t in tools]
+            concurrent.futures.wait(futures)
 
-        ok = sum(1 for _, c, _ in results if c == 0)
-        self._wlog("工具执行完成: " + str(ok) + "/" + str(len(tools)), "ok")
-        for t, c, out in results:
-            if c != 0:
-                self._wlog(os.path.basename(t) + " 退出码=" + str(c), "warn")
-                if out:
-                    for line in out.strip().splitlines()[-3:]:
-                        self._wlog("  " + str(line[:200]), "warn")
         self._wf_clear_caches()
         self._wlog("缓存已清除", "ok")
         return True
@@ -1579,6 +1569,16 @@ class WorkflowTabMixin:
 
         import openpyxl
 
+        _cfg = load_config()
+        _lang_id_map = _cfg.get("tr_lang_id_map", {})
+        _chinese_ids = set()
+        for _ln, _ids in _lang_id_map.items():
+            if "中文" in _ln or _ln.strip().lower() in ("chinese", "简体中文", "中文"):
+                for _id in _ids:
+                    _chinese_ids.add(_id.strip().lower())
+        if not _chinese_ids:
+            _chinese_ids = {"zh", "zh_cn", "zh-cn", "zh cn", "chinese", "简体中文", "中文", "简中", "cn"}
+
         try:
             trans_wb = openpyxl.load_workbook(excel_file, data_only=True)
             orig_wb = openpyxl.load_workbook(original_file)
@@ -1677,6 +1677,8 @@ class WorkflowTabMixin:
                     for h_name, t_col in trans_headers.items():
                         if t_col == trans_id_col:
                             continue
+                        if h_name in _chinese_ids:
+                            continue
                         for o_sn, oh in orig_headers_by_sheet.items():
                             if h_name in oh:
                                 header_col_map.setdefault(o_sn, {})[t_col] = oh[h_name]
@@ -1750,6 +1752,8 @@ class WorkflowTabMixin:
                     header_col_map = {}
                     for h_name, t_col in trans_headers.items():
                         if t_col == trans_id_col:
+                            continue
+                        if h_name in _chinese_ids:
                             continue
                         if h_name in orig_headers:
                             header_col_map[t_col] = orig_headers[h_name]
@@ -1842,138 +1846,56 @@ class WorkflowTabMixin:
         if not dirs:
             self._wlog("未配置上传目录，跳过", "warn")
             return True
+
         svn_exe = _get_svn_path()
+        tortoise = self._get_tortoise_proc_path()
+        if not tortoise:
+            self._wlog("未找到 TortoiseSVN，无法提交。请安装 TortoiseSVN 后重试", "error")
+            return False
+
         for d in dirs:
             d = d.strip()
-            if not os.path.isdir(d):
-                self._wlog("目录不存在: " + d, "warn")
+            if not os.path.exists(d):
+                self._wlog("路径不存在: " + d, "warn")
                 continue
+            if os.path.isfile(d):
+                d = os.path.dirname(d)
             self._wlog("检查目录: " + d, "info")
-            r = subprocess.run(
-                [svn_exe, "info", "--show-item", "wc-root", d],
-                capture_output=True, text=True,
-                encoding="utf-8", errors="replace",
-                timeout=15, **_get_subprocess_kwargs()
-            )
-            if r.returncode != 0:
-                self._wlog(d + " 不是SVN工作副本", "warn")
-                continue
-            wc_root = r.stdout.strip()
-            if not wc_root or not os.path.isdir(wc_root):
-                self._wlog("无法获取SVN根路径: " + d, "warn")
-                continue
-            self._wlog("SVN根目录: " + wc_root, "info")
-            self._wf_show_upload_confirm_dialog(d)
-        return True
 
-    def _wf_show_upload_confirm_dialog(self, target_dir):
-        """弹 TortoiseSVN 原生提交对话框（参照用户配的目录），不做任何svn add"""
-        tortoise = self._get_tortoise_proc_path()
-        if tortoise:
+            if svn_exe:
+                self._wlog("正在更新目录: " + d, "info")
+                _svn_enc = "gbk" if _sys.platform == "win32" else "utf-8"
+                try:
+                    r = subprocess.run(
+                        [svn_exe, "update", "--accept", "theirs-full", d],
+                        capture_output=True, text=True,
+                        encoding=_svn_enc, errors="replace",
+                        timeout=120, **_get_subprocess_kwargs()
+                    )
+                    if r.returncode == 0:
+                        for line in r.stdout.strip().splitlines():
+                            line = line.strip()
+                            if line:
+                                self._wlog("  " + line, "info")
+                        self._wlog("✅ 更新完成: " + d, "ok")
+                    else:
+                        err = r.stderr.strip()
+                        self._wlog("❌ 更新失败: " + err, "error")
+                        return False
+                except subprocess.TimeoutExpired:
+                    self._wlog("❌ 更新超时（超过2分钟）", "error")
+                    return False
+                except Exception as e:
+                    self._wlog("❌ 更新异常: " + str(e), "error")
+                    return False
+
             try:
-                subprocess.Popen([tortoise, "/command:commit", "/path:" + target_dir])
-                self._wlog("TortoiseSVN 提交对话框已打开", "ok")
-                return
+                subprocess.Popen([tortoise, "/command:commit", "/path:" + d])
+                self._wlog("TortoiseSVN 提交对话框已打开: " + d, "ok")
             except Exception as e:
-                self._wlog("TortoiseSVN 启动失败: " + str(e) + "，使用备选弹窗", "warn")
-
-        self._wf_show_custom_upload_dialog(target_dir)
-
-    def _wf_show_custom_upload_dialog(self, target_dir):
-        """备选：自定义确认弹窗，默认全部不勾选"""
-        svn_exe = _get_svn_path()
-        try:
-            r = subprocess.run(
-                [svn_exe, "status", target_dir],
-                capture_output=True, text=True,
-                encoding="utf-8", errors="replace",
-                timeout=60, **_get_subprocess_kwargs()
-            )
-            all_files = []
-            for line in r.stdout.splitlines():
-                if len(line) < 8:
-                    continue
-                status_char = line[0]
-                fpath = line[8:].strip()
-                if not fpath or status_char == " ":
-                    continue
-                full = os.path.join(target_dir, fpath) if not os.path.isabs(fpath) else fpath
-                all_files.append((status_char, full))
-            if not all_files:
-                self._wlog("工作副本无变更文件", "warn")
-                return
-        except Exception as e:
-            self._wlog("扫描异常: " + str(e), "error")
-            return
-        dialog = tk.Toplevel(self.root)
-        dialog.title("SVN 上传确认")
-        dialog.resizable(True, True)
-        dialog.minsize(600, 450)
-        dialog.transient(self.root)
-        dialog.grab_set()
-
-        main_frame = tk.Frame(dialog, padx=15, pady=10)
-        main_frame.pack(fill="both", expand=True)
-        main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(1, weight=1)
-
-        tk.Label(main_frame, text="请选择要上传的文件：",
-                 font=("微软雅黑", 10, "bold"), anchor="w").grid(row=0, column=0, sticky="w", pady=(0, 8))
-
-        tree_frame = tk.Frame(main_frame)
-        tree_frame.grid(row=1, column=0, sticky="nsew")
-        tree_frame.columnconfigure(0, weight=1)
-        tree_frame.rowconfigure(0, weight=1)
-
-        columns = ("check", "status", "path")
-        tree = ttk.Treeview(tree_frame, columns=columns, show="headings", height=15)
-        tree.heading("check", text="勾选")
-        tree.heading("status", text="状态")
-        tree.heading("path", text="文件路径")
-        tree.column("check", width=50, anchor="center", minwidth=40)
-        tree.column("status", width=60, anchor="center")
-        tree.column("path", width=450, minwidth=300)
-        tree.grid(row=0, column=0, sticky="nsew")
-
-        tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
-        tree_scroll.grid(row=0, column=1, sticky="ns")
-        tree.configure(yscrollcommand=tree_scroll.set)
-
-        state_map = {"M": "修改", "A": "新增", "D": "删除", "?": "未版本", "!": "缺失", "~": "冲突"}
-        checked = {}
-        item_data = {}
-        for status_char, full in all_files:
-            rel = os.path.relpath(full, target_dir)
-            sid = tree.insert("", "end", values=("", state_map.get(status_char, status_char), rel))
-            item_data[sid] = full
-            checked[sid] = False
-
-        def toggle_check(event):
-            item = tree.identify_row(event.y)
-            if item:
-                checked[item] = not checked[item]
-                tree.set(item, "check", "☑" if checked[item] else "")
-
-        tree.bind("<Button-1>", toggle_check)
-
-        btn_frame = tk.Frame(main_frame)
-        btn_frame.grid(row=2, column=0, pady=(10, 0))
-
-        def _on_confirm():
-            selected = [item_data[sid] for sid, chk in checked.items() if chk]
-            if not selected:
-                messagebox.showwarning("提示", "请勾选要上传的文件")
-                return
-            dialog.destroy()
-            self._wlog("待上传 " + str(len(selected)) + " 个文件", "info")
-            self.root.after(0, lambda: self._do_wf_svn_commit(target_dir, selected))
-
-        ttk.Button(btn_frame, text="确认上传", command=_on_confirm, width=12).pack(side="left", padx=6)
-        ttk.Button(btn_frame, text="取消", command=dialog.destroy, width=8).pack(side="left", padx=6)
-
-        x = self.root.winfo_rootx() + (self.root.winfo_width() - 600) // 2
-        y = self.root.winfo_rooty() + (self.root.winfo_height() - 450) // 2
-        dialog.geometry(f"+{x}+{y}")
+                self._wlog("TortoiseSVN 启动失败: " + str(e), "error")
+                return False
+        return True
 
     def _ulog(self, msg, level="info"):
         """上传SVN日志"""

@@ -525,6 +525,26 @@ input::placeholder,textarea::placeholder{
   background:rgba(94,162,255,.15);
   color:var(--accent);
 }
+.wf-child-del-btn{
+  width:28px;
+  height:28px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:none;
+  background:transparent;
+  border-radius:6px;
+  color:var(--dim);
+  cursor:pointer;
+  transition:.15s;
+  flex-shrink:0;
+  font-size:14px;
+  margin-left:-6px;
+}
+.wf-child-del-btn:hover{
+  background:rgba(255,80,80,.15);
+  color:#ff5050;
+}
 .wf-toolbar{
   display:flex;
   gap:8px;
@@ -1393,6 +1413,7 @@ function buildWorkflowTab(panel) {
                     <span class="wf-child-type ${s.type}">${typeIcon[s.type]||''} ${typeCn[s.type]||s.type}</span>
                     <span class="wf-child-name">${escapeHtml(s.name)}</span>
                     <button class="wf-settings-btn" title="步骤设置">⚙</button>
+                    <button class="wf-child-del-btn" title="删除步骤">✕</button>
                   </div>
                 `).join('')}
               </div>
@@ -1481,13 +1502,44 @@ function buildWorkflowTab(panel) {
   const modalBody = document.getElementById("wf_modal_body");
   const modalTitle = document.getElementById("wf_modal_title");
   let _modalCtx = null;
+  let _wfSaving = false;
+
+  function _wfModalDoSave() {
+    if (_wfSaving) return;
+    if (!_modalCtx) return;
+    _wfSaving = true;
+    const { wfIdx, stepIdx } = _modalCtx;
+    const step = config.workflows[wfIdx]?.steps?.[stepIdx];
+    if (!step) { _wfSaving = false; return; }
+    modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
+      const key = inp.dataset.key;
+      if (!key) return;
+      const arrKeys = ["tools","dirs","input_paths","file_paths","update_dirs"];
+      if (arrKeys.includes(key)) {
+        step[key] = inp.value.split(",").map(s => s.trim()).filter(Boolean);
+      } else {
+        step[key] = inp.value;
+      }
+    });
+    saveConfig({workflows:config.workflows});
+    overlay.classList.remove("show");
+    _modalCtx = null;
+    _wfSaving = false;
+    _showToast("步骤设置已保存");
+  }
+
+  function _wfModalAutoSave() {
+    if (!_modalCtx) return;
+    _wfModalDoSave();
+  }
+  window._wfModalAutoSave = _wfModalAutoSave;
 
   function _wfModalFields(type, step) {
     const v = (key) => escapeHtml(Array.isArray(step[key]) ? step[key].join(", ") : step[key]||"");
     const _fb = (label, dataKey, id, browseType) => `
       <div class="form-group"><label>${label}</label>
         <div class="flex-row"><input type="text" class="wf-modal-input" id="${id}" data-key="${dataKey}" value="${v(dataKey)}" style="flex:1" placeholder="${browseType==='dir'?'选择目录':'选择文件'}">
-        <button class="btn btn-normal btn-sm" data-wf-browse="${browseType}:${id}">浏览</button></div></div>`;
+        <button class="btn btn-normal btn-sm" onclick="(function(t,i){var v=document.getElementById(i).value.trim(),d=v.substring(0,v.lastIndexOf('\\\\'));if(!d)d=v;if(t==='file')browseFile(i,d||'');else browseDir(i,null,d||'');})('${browseType.replace(/'/g,"\\'")}','${id}')">浏览</button></div></div>`;
     const m = {
       export_text: `
         ${_fb("主文件路径","input_file","wf_m_input_file","file")}
@@ -1522,42 +1574,12 @@ function buildWorkflowTab(panel) {
     modalBody.querySelectorAll("[id^=wf_m_]").forEach(inp => {
       if (inp.id) enablePathDrop(inp.id);
     });
-    modalBody.querySelectorAll("[data-wf-browse]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const spec = btn.dataset.wfBrowse;
-        if (!spec) return;
-        const parts = spec.split(":");
-        const mode = parts[0];
-        const targetId = parts.slice(1).join(":");
-        if (mode === "file") browseFile(targetId);
-        else if (mode === "dir") browseDir(targetId);
-      });
-    });
   }
 
   document.getElementById("wf_modal_close").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; });
   document.getElementById("wf_modal_cancel").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; });
   overlay.addEventListener("click", (e) => { if (e.target === overlay) { overlay.classList.remove("show"); _modalCtx = null; } });
-  document.getElementById("wf_modal_save").addEventListener("click", () => {
-    if (!_modalCtx) return;
-    const { wfIdx, stepIdx } = _modalCtx;
-    const step = config.workflows[wfIdx]?.steps?.[stepIdx];
-    if (!step) return;
-    modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
-      const key = inp.dataset.key;
-      if (!key) return;
-      const arrKeys = ["tools","dirs","input_paths","file_paths","update_dirs"];
-      if (arrKeys.includes(key)) {
-        step[key] = inp.value.split(",").map(s => s.trim()).filter(Boolean);
-      } else {
-        step[key] = inp.value;
-      }
-    });
-    saveConfig({workflows:config.workflows});
-    overlay.classList.remove("show");
-    _modalCtx = null;
-    _showToast("步骤设置已保存");
-  });
+  document.getElementById("wf_modal_save").addEventListener("click", _wfModalDoSave);
 
   panel.querySelectorAll("button,input").forEach(el => {
     el.addEventListener("mousedown", (e) => e.stopPropagation());
@@ -1578,6 +1600,22 @@ function buildWorkflowTab(panel) {
       _modalCtx = { wfIdx, stepIdx };
       overlay.classList.add("show");
       setTimeout(() => _wfModalAfterOpen(), 50);
+    });
+  });
+  panel.querySelectorAll(".wf-child-del-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const child = btn.closest(".wf-child");
+      const parent = btn.closest(".wf-parent");
+      if (!child || !parent) return;
+      const wfIdx = Number(parent.dataset.idx);
+      const stepIdx = [...parent.querySelector(".wf-children").children].indexOf(child);
+      const step = config.workflows[wfIdx]?.steps?.[stepIdx];
+      if (!step) return;
+      if (!confirm(`确定删除步骤「${step.name}」？`)) return;
+      config.workflows[wfIdx].steps.splice(stepIdx, 1);
+      saveConfig({workflows:config.workflows});
+      _wfRebuild();
     });
   });
 
@@ -1638,7 +1676,7 @@ function wfCreate() {
   _wfRebuild();
 }
 function wfCopy() {
-  const sel = document.querySelector(".wf-parent.selected");
+  const sel = document.querySelector(".wf-parent.expanded");
   if (!sel) return;
   const idx = Number(sel.dataset.idx);
   const orig = JSON.parse(JSON.stringify(config.workflows[idx]));
@@ -1648,7 +1686,7 @@ function wfCopy() {
   _wfRebuild();
 }
 function wfDelete() {
-  const sel = document.querySelector(".wf-parent.selected");
+  const sel = document.querySelector(".wf-parent.expanded");
   if (!sel) return;
   const idx = Number(sel.dataset.idx);
   const name = config.workflows[idx]?.name || "未命名";
@@ -2030,7 +2068,16 @@ async function runTask(url, body, btn, logId, label) {
   };
 }
 let dirModal = null;
-function browseDir(inputId, callback, initialPath) {
+async function browseDir(inputId, callback, initialPath) {
+  if (window.pywebview && pywebview.api && pywebview.api.browseDir) {
+    const path = await pywebview.api.browseDir(initialPath || "");
+    if (path) {
+      document.getElementById(inputId).value = path;
+      if (typeof window._wfModalAutoSave === "function") window._wfModalAutoSave();
+      if (callback) callback();
+    }
+    return;
+  }
   if (!dirModal) {
     dirModal = document.createElement("div");
     dirModal.style.cssText = "position:fixed;top:6.25rem;left:50%;transform:translateX(-50%);width:35rem;max-height:43.75rem;background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:1.25rem;z-index:1000;display:none;flex-direction:column;box-shadow:0 1.25rem 3.75rem rgba(0,0,0,.5)";
@@ -2517,6 +2564,7 @@ function _initDirHistory(inputId, configKey, callback){
     if (callback) callback();
   });
 }
+let _lastDropTargetId = null;
 function enablePathDrop(inputId, opts){
   opts = opts || {};
   const input = document.getElementById(inputId);
@@ -2525,6 +2573,7 @@ function enablePathDrop(inputId, opts){
     e.preventDefault();
     e.stopPropagation();
     input.classList.add("drag-over");
+    _lastDropTargetId = inputId;
   });
   input.addEventListener("dragleave", ()=>{
     input.classList.remove("drag-over");
@@ -2532,6 +2581,7 @@ function enablePathDrop(inputId, opts){
   input.addEventListener("drop", e=>{
     e.preventDefault();
     input.classList.remove("drag-over");
+    _lastDropTargetId = inputId;
   });
 }
 document.addEventListener("dragend", ()=>{
@@ -2568,16 +2618,28 @@ function _showToast(msg) {
   document.body.appendChild(t);
   setTimeout(()=>{t.style.opacity="0";setTimeout(()=>t.remove(),300);},2000);
 }
-function browseFile(inputId) {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".xlsx,.xls,.xlsm";
-  input.onchange = () => {
-    if (input.files[0]) {
-      document.getElementById(inputId).value = input.files[0].path || input.files[0].name;
+async function browseFile(inputId, initialDir) {
+  if (window.pywebview && pywebview.api && pywebview.api.browseFile) {
+    try {
+      const path = await pywebview.api.browseFile(initialDir || "");
+      if (path) {
+        document.getElementById(inputId).value = path;
+        if (typeof window._wfModalAutoSave === "function") window._wfModalAutoSave();
+      }
+    } catch (e) {
+      _showToast("pywebview error: " + e.message);
     }
-  };
-  input.click();
+  } else {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".xlsx,.xls,.xlsm";
+    input.onchange = () => {
+      if (input.files[0]) {
+        document.getElementById(inputId).value = input.files[0].path || input.files[0].name;
+      }
+    };
+    input.click();
+  }
 }
 function getBrowserZoom() {
   if (window.visualViewport && window.visualViewport.scale) {

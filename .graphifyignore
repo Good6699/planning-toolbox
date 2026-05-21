@@ -9,6 +9,12 @@ __pycache__/
 .cursor/
 .trae/
 *.egg-info/
+_github_backup/
+临时辅助文件/
+__parse_cache/
+__ss_cache/
+__byte_cache/
+输出/
 
 # 二进制 / 日志 / 临时输出
 **/*.exe

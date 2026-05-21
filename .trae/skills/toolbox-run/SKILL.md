@@ -1,116 +1,119 @@
 ---
 name: "toolbox-run"
-description: "启动、停止、诊断 策划工具箱 Flask 开发服务器。Invoke when user asks to start/stop/restart the server, run the app, check server status, or diagnose runtime issues."
+description: "启动、停止、重启 策划工具箱桌面版（pywebview + Flask）。Invoke when user asks to start/stop/restart the app, run the desktop, check status, or diagnose runtime issues."
 ---
 
-# 策划工具箱 运行管理
+# 策划工具箱 桌面版运行管理
+
+## 🚀 一键重启
+
+```powershell
+# 杀掉旧进程 + 启动桌面版
+$p = (netstat -ano | findstr :18123 | findstr LISTENING); if ($p) { $pid = ($p -split '\s+')[-1]; taskkill /PID $pid /F *>$null }; Start-Sleep 1; python desktop_main.py
+```
 
 ## 项目结构
 
 ```
 workspace/
-├── web_launcher.py          # 入口：启动 Flask + 自动打开浏览器
-├── web_app.py               # Flask 后端（所有 API）
+├── desktop_main.py           # ⭐ 入口：pywebview 桌面壳 + 内嵌 Flask
+├── 策划工具箱.bat             # 桌面快捷方式 → python desktop_main.py
+├── 策划工具箱GUI.vbs          # VBS 桌面入口（双击 + 环境自动检测）
+│
+├── web_app.py                # Flask 后端（所有 API + 前端 SPA 路由）
 ├── templates/
-│   └── index.html           # 单文件 SPA 前端
-├── toolbox_config.py        # 配置读写
-├── toolbox_platform.py      # 平台工具（子进程管理）
-├── toolbox_tab_svn.py       # SVN Tab 后端逻辑
-├── toolbox_tab_upload.py    # 上传 Tab 后端逻辑
-├── toolbox_tab_workflow.py  # 工作流 Tab 后端逻辑
-├── toolbox_tab_translate.py # 翻译 Tab 后端逻辑
-├── 策划工具箱GUI.vbs         # VBS 桌面入口（双击启动）
-└── py_modules/              # 本地 Python 依赖
+│   └── index.html            # 前端界面（单文件 SPA）
+│
+├── toolbox_config.py         # 配置读写（svn_gui_config.json）
+├── toolbox_platform.py       # 平台工具（_DropTarget 拖拽、子进程管理）
+├── toolbox_tab_svn.py        # SVN 记录页签
+├── toolbox_tab_upload.py     # 上传 SVN 页签
+├── toolbox_tab_workflow.py   # SVN 工作流页签
+├── toolbox_tab_translate.py  # 翻译页签
+├── svn_compare_gui.py        # 旧版 tkinter 桌面入口（被 desktop_main.py 取代）
+├── svn_launcher.py           # 旧版启动器
+├── web_launcher.py           # 纯 Web 调试入口（浏览器访问，无 pywebview）
+│
+└── py_modules/               # 本地 Python 依赖
 ```
 
-## 启动服务器
+## 启动桌面版
 
-### 方式 1: Python 直接启动（推荐开发时用）
+### 方式 1: 一键重启（推荐）
+
+```powershell
+python desktop_main.py
+```
+
+- 架构：pywebview（WinForms）→ 内嵌 WebView2 → 加载 `http://127.0.0.1:18123`
+- Flask 后端 `web_app.py` 自动随桌面壳启动
+- 关闭窗口 → 最小化到系统托盘（非退出）
+- 右键托盘图标 → 退出，完全终止进程
+
+### 方式 2: 快捷方式
+
+```
+双击 策划工具箱.bat      → python desktop_main.py
+双击 策划工具箱GUI.vbs    → VBS 环境检测 → pythonw.exe 静默启动
+```
+
+### 方式 3: 纯 Web 调试（无桌面壳）
 
 ```powershell
 python web_launcher.py
 ```
 
-- 端口: `18123`
-- 地址: `http://127.0.0.1:18123`
-- Flask debug=False，支持 `TEMPLATES_AUTO_RELOAD`
-- 自动在 0.5 秒后打开浏览器
+- 浏览器打开 `http://127.0.0.1:18123`
+- **没有** `pywebview.api`（浏览文件弹窗、拖拽 DnD 等不可用）
+- 仅用于快速调试前端样式或后端 API
 
-### 方式 2: VBS 桌面入口
-
-```powershell
-cscript 策划工具箱GUI.vbs
-```
-
-- 自动扫描文件系统中的 Python（含 py_modules）
-- 运行 `setup_checker.py` 环境检查
-- 以 pythonw.exe 无控制台模式启动
-
-### 方式 3: 手动 Flask
+## 检查状态
 
 ```powershell
-python -c "from web_app import app; app.run(host='127.0.0.1', port=18123, debug=True)"
-```
-
-## 检查服务器状态
-
-```powershell
-# 检查端口是否被占用
+# 端口是否已占用
 netstat -ano | findstr :18123
 
-# 快速 HTTP 探活
+# HTTP 探活
 curl -s http://127.0.0.1:18123/api/config
 ```
 
-## 停止服务器
+## 停止
 
+### 正常退出
+- 右键系统托盘图标 → 退出
+
+### 强制终止（卡死 / 端口占用）
+使用 **kill-all** Skill 一键关闭所有进程，或手动执行：
 ```powershell
-# 找到 PID 并结束
-$p = (netstat -ano | findstr :18123 | findstr LISTENING); if ($p) { $pid = ($p -split '\s+')[-1]; taskkill /PID $pid /F }
+$ports = netstat -ano | Select-String ":18123" | ForEach-Object { $_ -split '\s+' | Select-Object -Last 1 }
+if ($ports) { $ports | Select-Object -Unique | ForEach-Object { taskkill /PID $_ /F *>$null } }
 ```
 
-或者直接关掉运行 `web_launcher.py` 的终端窗口。
+## 常见问题
 
-## API 速查
+### 页面加载但按钮点了没反应
+- 确认运行的是 `desktop_main.py`（有 pywebview API），不是 `web_launcher.py`
+- 打开浏览器 DevTools（F12）→ Console 看 JS 报错
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/` | 渲染 index.html |
-| GET | `/api/config` | 读取配置 JSON |
-| POST | `/api/config` | 更新配置 |
-| POST | `/api/browse` | 浏览文件夹对话框 |
-| POST | `/api/svn/run` | 执行 SVN 任务 |
-| POST | `/api/upload/list` | 列出上传目录文件 |
-| POST | `/api/upload/run` | 执行上传任务 |
-| POST | `/api/workflow/run` | 执行工作流任务 |
-| POST | `/api/translate/run` | 执行翻译任务 |
-| GET | `/api/task/<id>/stream` | SSE 日志流 |
-
-## 常见问题诊断
-
-### "端口被占用"
+### 模板修改后不生效
 ```powershell
-netstat -ano | findstr :18123
-# 找到 PID 后 taskkill /PID <pid> /F
+# 重启即可，Flask TEMPLATES_AUTO_RELOAD = True
+# 如果仍不生效，清理 WebView2 缓存：
+# 桌面版按 Ctrl+Shift+R 或重启整个应用
 ```
 
-### "页面加载但 API 无响应"
-- 检查 `web_app.py` 是否正常运行
-- 查看终端是否有 Python 报错
-- 确认 `py_modules/` 里的 Flask 等依赖可用
+### 浏览文件对话框 / 拖拽不工作
+- 必须通过 `desktop_main.py` 启动，纯 Web 模式无 pywebview API
+- 检查 `desktop_main.py` 的 `ResizeApi.browseFile()` 方法是否有异常
 
-### "模板修改后不生效"
-- Flask 已设置 `TEMPLATES_AUTO_RELOAD = True`
-- 如果仍不生效，手动重启服务器
-- 清除浏览器缓存: Ctrl+Shift+R
-
-### "Python 找不到模块"
+### Python 找不到模块
 ```powershell
 python -c "import sys; print('\n'.join(sys.path))"
 # 确认 workspace 和 py_modules 在 path 中
 ```
 
-## 依赖清单
+## 依赖
 - Python 3.10+
-- Flask（`py_modules/` 内）
-- 系统需有 SVN 命令行工具（`svn` 在 PATH 中）
+- pywebview（桌面壳）
+- Flask（后端 API）
+- SVN 命令行工具（`svn` 在 PATH 中）

@@ -153,6 +153,30 @@ Your goal is to build products that are:
 
 只有当模拟用户操作不可行（如窗口尚未创建、没有 HWND）时，才退回到内部函数调用或轮询方案。
 
+## 功能开发优先级：桌面版为主
+
+本项目是桌面版应用，架构为：
+```
+策划工具箱.bat → desktop_main.py → pywebview(内嵌WebView2) → Flask后端(web_app.py)
+                                                             → templates/index.html 前端SPA
+```
+
+`web_app.py` 是桌面版内置的 Flask 后端，不存在独立的"Web 版"。
+
+修改规则：
+1. 功能代码写在 `web_app.py`（后端API）+ `templates/index.html`（前端UI）
+2. `web_launcher.py` 仅为纯Web调试入口（浏览器直接访问，无 pywebview API），日常不涉及
+3. 后台逻辑写入 `toolbox_tab_*.py` 等工具模块
+
+## 修改代码必须先确认（硬性要求）
+
+任何修改正式代码（`.py` / `.html` / `.js` / `.css` 等非文档文件）的操作，**必须先向用户寻求同意**。
+
+即使问题看起来很简单、很明确，也必须：
+1. 向用户说明你要改什么、怎么改
+2. 等用户确认后再动手
+
+目的：确保理解一致，避免方向错误导致反复修改。
 ---
 
 # Problem Solving Protocol
@@ -351,7 +375,10 @@ When a capability is needed:
 |-------|------|---------|
 | **toolbox-ui** | `.trae/skills/toolbox-ui/SKILL.md` | UI 开发规范：CSS 设计系统、尺寸规范、禁止事项、JS 架构。当修改 `templates/index.html` 或任何 UI 相关代码时自动调用。 |
 | **toolbox-run** | `.trae/skills/toolbox-run/SKILL.md` | 运行管理：启动/停止服务器、端口诊断、API 速查。当需要启动或测试服务器时自动调用。 |
+| **github-push** | `.trae/skills/github-push/SKILL.md` | 一键提交并推送 GitHub：git status → 确认 message → flake8 → commit → push。当用户说"push/推送/提交/上传/保存"时自动调用。 |
+| **kill-all** | `.trae/skills/kill-all/SKILL.md` | 一键关闭策划工具箱桌面端所有进程（Flask端口18123 + Python进程）。当用户说"关闭/退出/杀掉/kill/关掉工具箱/停止"或端口被占用需清理时自动调用。 |
 | **step-by-step** | `.trae/skills/step-by-step/SKILL.md` | 步骤化实施：将实现任务分解为精确变更点，每个变更点包含文件路径、before/after 代码、依赖关系。当实现多步功能或修复复杂 bug 时自动调用。 |
+| **lesson-log** | `.trae/skills/lesson-log/SKILL.md` | 将开发中遇到的问题、踩坑记录、修复方案写入 MEMORY.md 知识库。用户说"记下来/写到知识库"时或解决复杂问题后主动调用。 |
 | **problem-solver** | `.trae/skills/problem-solver/SKILL.md` | 结构化根因分析：Fishbone 图 + 5 Whys。在诊断 bug、分析非预期行为时 PROACTIVELY 调用，不得跳过根因直接改代码。 |
 
 Operational/local information such as:

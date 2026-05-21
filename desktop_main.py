@@ -482,6 +482,36 @@ class ResizeApi:
         _is_dragging = False
         self._active = False
 
+    def browseFile(self, directory=""):
+        try:
+            w = webview.windows[0]
+            if w:
+                result = w.create_file_dialog(
+                    webview.OPEN_DIALOG,
+                    directory=directory,
+                    allow_multiple=False,
+                    file_types=('Excel Files (*.xlsm;*.xlsx;*.xls)', 'All Files (*.*)'),
+                )
+                if result:
+                    return result[0]
+        except Exception as e:
+            print("[browseFile]", e)
+        return ""
+
+    def browseDir(self, directory=""):
+        try:
+            w = webview.windows[0]
+            if w:
+                result = w.create_file_dialog(
+                    webview.FOLDER_DIALOG,
+                    directory=directory,
+                )
+                if result:
+                    return result[0]
+        except Exception as e:
+            print("[browseDir]", e)
+        return ""
+
 
 def _tray_thread():
     global _tray_icon
@@ -547,6 +577,13 @@ def _fallback_subclass(hwnd):
     GWLP_WNDPROC = -4
 
     WNDPROC = ctypes.WINFUNCTYPE(
+        ctypes.c_longlong, ctypes.c_longlong, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong
+    )
+
+    ctypes.windll.user32.DefWindowProcW.argtypes = (
+        ctypes.c_longlong, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong
+    )
+    ctypes.windll.user32.CallWindowProcW.argtypes = (
         ctypes.c_longlong, ctypes.c_longlong, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong
     )
 
@@ -653,12 +690,17 @@ def _init_dnd(window):
         if not path:
             return
         if not target_id:
+            try:
+                target_id = window.evaluate_js('_lastDropTargetId || ""')
+            except Exception:
+                pass
+        if not target_id:
             return
         js_path = json.dumps(path)
         if target_id == 'svn_url':
             js = f"document.getElementById('{target_id}').value={js_path};onSvnUrlPicked();"
         else:
-            js = f"document.getElementById('{target_id}').value={js_path};document.getElementById('{target_id}').dispatchEvent(new Event('blur',{{bubbles:true}}));"
+            js = f"document.getElementById('{target_id}').value={js_path};document.getElementById('{target_id}').dispatchEvent(new Event('change',{{bubbles:true}}));"
         def _inj():
             try:
                 window.evaluate_js(js)

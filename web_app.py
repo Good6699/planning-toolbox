@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """策划工具箱 - Web 版本 (Flask 后端)"""
-import sys, os, json, signal, subprocess, threading, queue, time, shutil, stat, tempfile
+import sys, os, json, signal, subprocess, threading, queue, time, shutil, stat, tempfile, concurrent.futures
 from datetime import datetime
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -15,7 +15,8 @@ from toolbox_config import (
     SCRIPT_DIR, MAIN_SCRIPT, CONFIG_FILE, DEFAULT_OUTPUT_DIR,
     load_config, save_config, int_or
 )
-from toolbox_platform import _get_subprocess_kwargs, _get_svn_path
+from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock
+from xlsm_zipper import apply_via_excel
 
 if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
     if len(sys.argv) < 3:
@@ -548,39 +549,56 @@ def _exec_export_text(step, put, task_id=None):
         put("未配置工具，跳过\n")
         return True
     put(f"输入文件: {os.path.basename(input_file) if input_file else 'N/A'}\n")
-    for tool_path in tools:
-        put(f"  执行: {os.path.basename(tool_path)}...\n")
-        proc = None
+    put(f"使用 {len(tools)} 个工具并行执行...\n")
+
+    def _run_one(tool_path):
+        proc = subprocess.Popen(
+            ["cmd.exe", "/c", tool_path],
+            cwd=os.path.dirname(tool_path) if os.path.isdir(os.path.dirname(tool_path)) else None,
+            stdin=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NEW_CONSOLE)
+        _register_proc(proc, task_id)
         try:
-            proc = subprocess.Popen(
-                ["cmd.exe", "/c", tool_path],
-                cwd=os.path.dirname(tool_path) if os.path.isdir(os.path.dirname(tool_path)) else None,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            _register_proc(proc, task_id)
-            try:
-                stdout, _ = proc.communicate(input=b"\n", timeout=3600)
-                text = stdout.decode("gbk", errors="replace") if stdout else ""
-                for line in text.split("\n"):
-                    line = line.strip()
-                    if line:
-                        put(f"  {line}\n")
-                put(f"  完成\n")
-            finally:
-                _unregister_proc(proc, task_id)
+            proc.communicate(input=b"\n", timeout=3600)
+            put(f"  {os.path.basename(tool_path)} 已完成\n")
         except subprocess.TimeoutExpired:
-            if proc:
-                try:
-                    proc.kill()
-                    proc.communicate(timeout=5)
-                except:
-                    pass
-                _unregister_proc(proc, task_id)
-            put(f"  超时\n")
+            try:
+                proc.kill()
+                proc.communicate(timeout=5)
+            except:
+                pass
+            put(f"  {os.path.basename(tool_path)} 超时\n")
         except Exception as e:
-            if proc:
-                _unregister_proc(proc, task_id)
-            put(f"  错误: {e}\n")
+            put(f"  {os.path.basename(tool_path)} 错误: {e}\n")
+        finally:
+            _unregister_proc(proc, task_id)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(tools)) as executor:
+        futures = [executor.submit(_run_one, t) for t in tools]
+        concurrent.futures.wait(futures)
+
     return True
+
+
+def _get_tortoise_proc_path():
+    """查找 TortoiseProc.exe"""
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                            r"SOFTWARE\TortoiseSVN") as key:
+            path, _ = winreg.QueryValueEx(key, "ProcPath")
+            if path and os.path.exists(path):
+                return path
+    except (OSError, FileNotFoundError):
+        pass
+    candidates = [
+        r"C:\Program Files\TortoiseSVN\bin\TortoiseProc.exe",
+        r"C:\Program Files (x86)\TortoiseSVN\bin\TortoiseProc.exe",
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return None
 
 
 def _exec_upload_svn(step, put, task_id=None):
@@ -588,43 +606,26 @@ def _exec_upload_svn(step, put, task_id=None):
     if not dirs:
         put("未配置上传目录\n")
         return True
-    svn = _get_svn_path()
+
+    tortoise = _get_tortoise_proc_path()
+    if not tortoise:
+        put("未找到 TortoiseSVN，无法提交。请安装 TortoiseSVN 后重试\n")
+        return False
+
     for d in dirs:
-        if not os.path.isdir(d):
-            put(f"目录不存在: {d}\n")
+        d = d.strip()
+        if not os.path.exists(d):
+            put(f"路径不存在: {d}\n")
             continue
-        put(f"SVN 添加: {d}\n")
-        proc = None
+        if os.path.isfile(d):
+            d = os.path.dirname(d)
+
+        put(f"打开 TortoiseSVN 提交对话框: {d}\n")
         try:
-            proc = subprocess.Popen([svn, "add", "--force", d],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, **_get_subprocess_kwargs())
-            _register_proc(proc, task_id)
-            try:
-                proc.communicate(timeout=300)
-            finally:
-                _unregister_proc(proc, task_id)
-        except:
-            if proc:
-                _unregister_proc(proc, task_id)
-        proc = None
-        try:
-            proc = subprocess.Popen([svn, "commit", "-m", f"工作流自动提交: {os.path.basename(d)}", d],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, **_get_subprocess_kwargs())
-            _register_proc(proc, task_id)
-            try:
-                stdout, stderr = proc.communicate(timeout=300)
-                if proc.returncode == 0:
-                    put(f"  提交成功\n")
-                else:
-                    put(f"  提交失败: {stderr[-200:]}\n")
-            finally:
-                _unregister_proc(proc, task_id)
+            subprocess.Popen([tortoise, "/command:commit", "/path:" + d])
         except Exception as e:
-            if proc:
-                _unregister_proc(proc, task_id)
-            put(f"  提交异常: {e}\n")
+            put("TortoiseSVN 启动失败: " + str(e) + "\n")
+            return False
     return True
 
 
@@ -677,13 +678,342 @@ def _exec_open_tables(step, put):
 
 
 def _exec_export_error_code(step, put):
-    put("导出错误码功能请使用桌面版\n")
-    return True
+    root_dir = step.get("root_dir", "").strip()
+    lang_codes = step.get("lang_codes", "").strip()
+    if not root_dir:
+        put("未指定根目录\n")
+        return False
+    if not lang_codes:
+        put("未指定语言列表\n")
+        return False
+
+    def _resolve_language_dir(base):
+        base = os.path.abspath(base)
+        if base.endswith("Language") and os.path.isdir(base):
+            return base
+        test = os.path.join(base, "Language")
+        if os.path.isdir(test):
+            return test
+        test = os.path.join(base, "gameData", "Language")
+        if os.path.isdir(test):
+            return test
+        return None
+
+    lang_dir = _resolve_language_dir(root_dir)
+    if not lang_dir:
+        put("无法找到 gameData\\Language 目录: " + root_dir + "\n")
+        return False
+
+    codes = [c.strip() for c in lang_codes.split(",") if c.strip()]
+    if not codes:
+        put("语言列表为空\n")
+        return False
+
+    put("Language 目录: " + lang_dir + "\n")
+    put("处理语言: " + ", ".join(codes) + "\n")
+
+    import subprocess as _sp
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    et2_path = os.path.join(script_dir, "ExcelTool2.py")
+    et2_python = sys.executable
+
+    results = []
+
+    for code in codes:
+        lang_path = os.path.join(lang_dir, code)
+        xlsm_file = os.path.join(lang_path, "Data2", "ErrorMessage.xlsm")
+
+        if not os.path.isfile(xlsm_file):
+            results.append((code, False, "ErrorMessage.xlsm 未找到"))
+            put("  [" + code + "] SKIP: xlsm 未找到\n")
+            continue
+
+        cmd = [et2_python, et2_path, "ErrorMessage", "--lang-dir", lang_path]
+        try:
+            r = _sp.run(cmd, capture_output=True, text=True, timeout=120,
+                        **_get_subprocess_kwargs())
+            if r.returncode == 0:
+                last_line = r.stdout.strip().split("\n")[-1]
+                put("  [" + code + "] " + last_line + "\n")
+                results.append((code, True, "导出成功"))
+            else:
+                err = (r.stderr or r.stdout or "").strip()[:200]
+                put("  [" + code + "] FAIL: " + err + "\n")
+                results.append((code, False, err))
+        except Exception as e:
+            put("  [" + code + "] ERROR: " + str(e) + "\n")
+            results.append((code, False, str(e)))
+
+    ok_count = sum(1 for _, ok, _ in results if ok)
+    put("导出错误码完成: " + str(ok_count) + "/" + str(len(codes)) + "\n")
+    if ok_count == len(codes):
+        put("全部语言导出成功\n")
+    return ok_count == len(codes)
 
 
 def _exec_merge_translation(step, put):
-    put("合并翻译功能请使用桌面版\n")
-    return True
+    excel_file = step.get("input_file", "").strip()
+    original_file = step.get("original_file", "").strip()
+    sheet_name = step.get("sheet_name", "").strip()
+
+    if not excel_file or not os.path.exists(excel_file):
+        put("翻译文件无效: " + str(excel_file) + "\n")
+        return False
+    if not original_file or not os.path.exists(original_file):
+        put("原文件无效: " + str(original_file) + "\n")
+        return False
+
+    put("翻译文件: " + excel_file + "\n")
+    put("原文件: " + original_file + "\n")
+
+    import openpyxl
+
+    try:
+        trans_wb = openpyxl.load_workbook(excel_file, data_only=True)
+        orig_wb = openpyxl.load_workbook(original_file)
+
+        id_keys = ["id", "i_d", "编号", "key"]
+
+        _cfg = load_config()
+        _lang_id_map = _cfg.get("tr_lang_id_map", {})
+        _chinese_ids = set()
+        for _ln, _ids in _lang_id_map.items():
+            if "中文" in _ln or _ln.strip().lower() in ("chinese", "简体中文", "中文"):
+                for _id in _ids:
+                    _chinese_ids.add(_id.strip().lower())
+        if not _chinese_ids:
+            _chinese_ids = {"zh", "zh_cn", "zh-cn", "zh cn", "chinese", "简体中文", "中文", "简中", "cn"}
+
+        if sheet_name:
+            if sheet_name not in trans_wb.sheetnames:
+                put("翻译文件中无 Sheet: " + sheet_name + "\n")
+                trans_wb.close(); orig_wb.close()
+                return False
+            if sheet_name not in orig_wb.sheetnames:
+                put("原文件中无 Sheet: " + sheet_name + "\n")
+                trans_wb.close(); orig_wb.close()
+                return False
+            process_sheets = [sheet_name]
+        else:
+            process_sheets = [sn for sn in trans_wb.sheetnames if sn in orig_wb.sheetnames]
+
+        global_mode = False
+        if not process_sheets:
+            put("两文件无共有 Sheet，启用跨 Sheet ID 匹配模式\n")
+            global_mode = True
+
+            orig_headers_by_sheet = {}
+            orig_global_id_map = {}
+
+            def _find_header_row(ws):
+                for r in range(1, min(ws.max_row, 6) + 1):
+                    count = 0
+                    for c in range(1, min(ws.max_column, 20) + 1):
+                        v = ws.cell(row=r, column=c).value
+                        if v is not None and isinstance(v, str) and v.strip():
+                            count += 1
+                    if count >= 3:
+                        return r
+                return 1
+
+            def _clean_header(name):
+                return name.strip().lower().strip(":").strip()
+
+            for orig_sn in orig_wb.sheetnames:
+                orig_ws = orig_wb[orig_sn]
+                hdr_row = _find_header_row(orig_ws)
+                oh = {}
+                for col in range(1, orig_ws.max_column + 1):
+                    h = orig_ws.cell(row=hdr_row, column=col).value
+                    if h is not None:
+                        cleaned = _clean_header(str(h))
+                        if cleaned:
+                            oh[cleaned] = col
+                orig_headers_by_sheet[orig_sn] = oh
+
+                orig_id_col_gs = None
+                for k in id_keys:
+                    if k in oh:
+                        orig_id_col_gs = oh[k]
+                        break
+                if orig_id_col_gs is None:
+                    continue
+
+                for row in range(hdr_row + 1, orig_ws.max_row + 1):
+                    val = orig_ws.cell(row=row, column=orig_id_col_gs).value
+                    if val is not None:
+                        key = str(val).strip()
+                        if key and key not in orig_global_id_map:
+                            orig_global_id_map[key] = (orig_sn, row)
+
+            process_sheets = trans_wb.sheetnames
+            put("  扫描原文件 " + str(len(orig_headers_by_sheet)) + " 个 Sheet, " + str(len(orig_global_id_map)) + " 个 ID\n")
+
+        sheet_ops = []
+
+        for sn in process_sheets:
+            trans_ws = trans_wb[sn]
+
+            trans_headers = {}
+            for col in range(1, trans_ws.max_column + 1):
+                h = trans_ws.cell(row=1, column=col).value
+                if h is not None:
+                    cleaned = str(h).strip().lower().strip(":").strip()
+                    if cleaned:
+                        trans_headers[cleaned] = col
+
+            trans_id_col = None
+            for k in id_keys:
+                if k in trans_headers:
+                    trans_id_col = trans_headers[k]
+                    break
+            if trans_id_col is None and trans_headers:
+                first_key = next(iter(trans_headers))
+                trans_id_col = trans_headers[first_key]
+
+            if global_mode:
+                header_col_map = {}
+                for h_name, t_col in trans_headers.items():
+                    if t_col == trans_id_col:
+                        continue
+                    if h_name in _chinese_ids:
+                        continue
+                    for o_sn, oh in orig_headers_by_sheet.items():
+                        if h_name in oh:
+                            header_col_map.setdefault(o_sn, {})[t_col] = oh[h_name]
+                if not header_col_map:
+                    put("  Sheet " + sn + ": 无匹配的翻译列\n")
+                    continue
+
+                updates_by_orig_sheet = {}
+                matched_rows = 0
+                for row in range(2, trans_ws.max_row + 1):
+                    id_val = trans_ws.cell(row=row, column=trans_id_col).value
+                    if id_val is None:
+                        continue
+                    id_key = str(id_val).strip()
+                    if not id_key or id_key not in orig_global_id_map:
+                        continue
+                    matched_rows += 1
+                    orig_sn, orig_row = orig_global_id_map[id_key]
+                    if orig_sn not in header_col_map:
+                        continue
+                    col_map = header_col_map[orig_sn]
+                    orig_ws_local = orig_wb[orig_sn]
+                    for t_col, o_col in col_map.items():
+                        val = trans_ws.cell(row=row, column=t_col).value
+                        if val is not None:
+                            val_str = str(val)
+                            orig_current = orig_ws_local.cell(row=orig_row, column=o_col).value
+                            orig_current_str = str(orig_current or "")
+                            if val_str.strip() != orig_current_str.strip():
+                                updates_by_orig_sheet.setdefault(orig_sn, []).append((orig_row, o_col, val))
+
+                for o_sn, upds in updates_by_orig_sheet.items():
+                    sheet_ops.append({"sheet": o_sn, "updates": upds, "inserts": []})
+                total_upd = sum(len(v) for v in updates_by_orig_sheet.values())
+                if total_upd > 0:
+                    put("  Sheet " + sn + ": 匹配 " + str(matched_rows) + " 行, " + str(total_upd) + " 个单元格待更新（跨 " + str(len(updates_by_orig_sheet)) + " 个原Sheet）\n")
+                else:
+                    put("  Sheet " + sn + ": 匹配 " + str(matched_rows) + " 行, 无变更\n")
+            else:
+                orig_ws = orig_wb[sn]
+
+                orig_headers = {}
+                for col in range(1, orig_ws.max_column + 1):
+                    h = orig_ws.cell(row=1, column=col).value
+                    if h is not None:
+                        cleaned = str(h).strip().lower().strip(":").strip()
+                        if cleaned:
+                            orig_headers[cleaned] = col
+
+                orig_id_col = None
+                for k in id_keys:
+                    if k in trans_headers and k in orig_headers:
+                        orig_id_col = orig_headers[k]
+                        break
+                if orig_id_col is None:
+                    common = [k for k in trans_headers if k in orig_headers]
+                    if common:
+                        orig_id_col = orig_headers[common[0]]
+                    else:
+                        put("  Sheet " + sn + ": 无共有表头列，跳过\n")
+                        continue
+
+                orig_id_map = {}
+                for row in range(2, orig_ws.max_row + 1):
+                    val = orig_ws.cell(row=row, column=orig_id_col).value
+                    if val is not None:
+                        key = str(val).strip()
+                        if key:
+                            orig_id_map[key] = row
+
+                header_col_map = {}
+                for h_name, t_col in trans_headers.items():
+                    if t_col == trans_id_col:
+                        continue
+                    if h_name in _chinese_ids:
+                        continue
+                    if h_name in orig_headers:
+                        header_col_map[t_col] = orig_headers[h_name]
+
+                if not header_col_map:
+                    put("  Sheet " + sn + ": 无匹配的翻译列\n")
+                    continue
+
+                updates = []
+                matched_rows = 0
+                for row in range(2, trans_ws.max_row + 1):
+                    id_val = trans_ws.cell(row=row, column=trans_id_col).value
+                    if id_val is None:
+                        continue
+                    id_key = str(id_val).strip()
+                    if not id_key or id_key not in orig_id_map:
+                        continue
+                    matched_rows += 1
+                    orig_row = orig_id_map[id_key]
+                    for t_col, o_col in header_col_map.items():
+                        val = trans_ws.cell(row=row, column=t_col).value
+                        if val is not None:
+                            val_str = str(val)
+                            orig_current = orig_ws.cell(row=orig_row, column=o_col).value
+                            orig_current_str = str(orig_current or "")
+                            if val_str.strip() != orig_current_str.strip():
+                                updates.append((orig_row, o_col, val))
+
+                if updates:
+                    sheet_ops.append({"sheet": sn, "updates": updates, "inserts": []})
+                    put("  Sheet " + sn + ": 匹配 " + str(matched_rows) + " 行, " + str(len(updates)) + " 个单元格待更新\n")
+                else:
+                    put("  Sheet " + sn + ": 匹配 " + str(matched_rows) + " 行, 无变更\n")
+
+        trans_wb.close()
+        orig_wb.close()
+
+        if not sheet_ops:
+            put("没有需要更新的内容\n")
+            return True
+
+        if _check_office_lock(original_file):
+            put("原文件被 WPS/Excel 锁定，无法保存\n")
+            return False
+
+        put("Excel 后台写入中...\n")
+        ok, err_msg = apply_via_excel(original_file, sheet_ops)
+        if ok:
+            total_updates = sum(len(ops["updates"]) for ops in sheet_ops)
+            put("已保存: " + os.path.basename(original_file) + "\n")
+            put("合并翻译完成: 更新 " + str(total_updates) + " 个单元格\n")
+            return True
+        else:
+            put("Excel 写入失败: " + err_msg + "\n")
+            return False
+
+    except Exception as e:
+        put("处理失败: " + str(e) + "\n")
+        import traceback
+        put(traceback.format_exc() + "\n")
+        return False
 
 
 def _exec_merge_table(step, put):

@@ -9,15 +9,6 @@ from toolbox_platform import _DropTarget, _check_office_lock, _get_subprocess_kw
 from toolbox_config import CONFIG_FILE, SCRIPT_DIR, MAIN_SCRIPT, DEFAULT_OUTPUT_DIR, load_config, save_config, int_or
 
 class UploadTabMixin:
-    def _do_wf_svn_commit(self, target_dir, file_paths):
-        """工作流上传备选：传给 TortoiseSVN 提交对话框"""
-        tortoise = self._get_tortoise_proc_path()
-        if tortoise:
-            subprocess.Popen([tortoise, "/command:commit", "/path:" + target_dir])
-            self._wlog("TortoiseSVN 提交对话框已打开", "ok")
-        else:
-            self._wlog("未找到 TortoiseSVN", "warn")
-
     def _clear_upload_log(self):
         """清空上传日志"""
         self.upload_log_text.config(state="normal")
@@ -514,14 +505,38 @@ class UploadTabMixin:
                         pass
                 self._ulog(f"   🏷️ {cl_ok}/{len(modified_files)} 个文件已标记 changelist", "ok")
 
+                self._ulog("正在更新 SVN 工作副本...\n", "info")
+                try:
+                    r = subprocess.run(
+                        [svn_exe, "update", "--accept", "theirs-full", wc_root],
+                        capture_output=True, text=True,
+                        encoding="utf-8", errors="replace",
+                        timeout=120,
+                        **_get_subprocess_kwargs()
+                    )
+                    if r.returncode == 0:
+                        for line in r.stdout.strip().splitlines():
+                            line = line.strip()
+                            if line:
+                                self._ulog("  " + line, "info")
+                        self._ulog("SVN 更新完成", "ok")
+                    else:
+                        err = r.stderr.strip()
+                        self._ulog("SVN 更新失败: " + err, "warn")
+                except subprocess.TimeoutExpired:
+                    self._ulog("SVN 更新超时（超过2分钟）", "warn")
+                except Exception as e:
+                    self._ulog("SVN 更新异常: " + str(e), "warn")
+
                 tortoise = self._get_tortoise_proc_path()
                 if tortoise:
                     self._ulog(f"🖥️ 正在打开 TortoiseSVN 提交对话框 ({len(modified_files)} 个文件)...", "info")
                     self.root.after(0, lambda: self._launch_tortoise_commit(
                         tortoise, wc_root, modified_files))
                 else:
-                    self.root.after(0, lambda: self._show_svn_confirm_dialog(
-                        target_dir, to_add, to_commit))
+                    self._ulog("⚠️ 未找到 TortoiseSVN，SVN 上传需要安装 TortoiseSVN", "warn")
+                    self.root.after(0, lambda: self.upload_run_btn.config(
+                        state="normal", text="▶  上传SVN"))
 
             except FileNotFoundError:
                 self._ulog("⚠️ 未找到 svn 命令，请确认 SVN 已安装", "warn")
@@ -566,169 +581,6 @@ class UploadTabMixin:
             )
         except Exception:
             pass
-
-    def _show_svn_confirm_dialog(self, target_dir, to_add, to_commit):
-        """显示SVN上传确认弹窗"""
-        dialog = tk.Toplevel(self.root)
-        dialog.title("SVN 上传确认")
-        dialog.resizable(True, True)
-        dialog.minsize(550, 400)
-        dialog.transient(self.root)
-        dialog.grab_set()
-
-        main_frame = tk.Frame(dialog, padx=15, pady=10)
-        main_frame.pack(fill="both", expand=True)
-
-        tk.Label(main_frame, text="以下文件将上传到 SVN，请确认：",
-                 font=("微软雅黑", 10, "bold"), anchor="w").pack(anchor="w")
-
-        tk.Label(main_frame, text=f"目标目录: {target_dir}",
-                 font=("Consolas", 9), fg="#555").pack(anchor="w", pady=(2, 8))
-
-        # 文件列表
-        text_frame = tk.Frame(main_frame)
-        text_frame.pack(fill="both", expand=True)
-        text_frame.columnconfigure(0, weight=1)
-        text_frame.rowconfigure(0, weight=1)
-
-        file_text = tk.Text(text_frame, font=("Consolas", 9),
-                            bg="#f5f5f5", wrap="none",
-                            state="disabled")
-        file_text.grid(row=0, column=0, sticky="nsew")
-
-        file_scroll_v = ttk.Scrollbar(text_frame, orient="vertical",
-                                       command=file_text.yview)
-        file_scroll_v.grid(row=0, column=1, sticky="ns")
-        file_scroll_h = ttk.Scrollbar(text_frame, orient="horizontal",
-                                       command=file_text.xview)
-        file_scroll_h.grid(row=1, column=0, sticky="ew")
-        file_text.configure(yscrollcommand=file_scroll_v.set,
-                            xscrollcommand=file_scroll_h.set)
-
-        file_text.tag_config("add", foreground="#e67e22")
-        file_text.tag_config("commit", foreground="#2980b9")
-        file_text.tag_config("sep", foreground="#aaa")
-
-        file_text.config(state="normal")
-        if to_add:
-            file_text.insert("end", f"── 新增文件（{len(to_add)} 个） ──\n", "sep")
-            for f in to_add:
-                rel = os.path.relpath(f, target_dir)
-                file_text.insert("end", f"  + {rel}\n", "add")
-        if to_commit:
-            if to_add:
-                file_text.insert("end", "\n")
-            file_text.insert("end", f"── 修改文件（{len(to_commit)} 个） ──\n", "sep")
-            for f in to_commit:
-                rel = os.path.relpath(f, target_dir)
-                file_text.insert("end", f"  M {rel}\n", "commit")
-        file_text.config(state="disabled")
-
-        # 备注输入
-        msg_frame = tk.Frame(main_frame)
-        msg_frame.pack(fill="x", pady=(10, 0))
-
-        tk.Label(msg_frame, text="提交备注：",
-                 font=("微软雅黑", 9)).pack(anchor="w")
-
-        msg_var = tk.StringVar(value="上传SVN")
-        msg_entry = ttk.Entry(msg_frame, textvariable=msg_var,
-                               font=("微软雅黑", 9))
-        msg_entry.pack(fill="x", pady=(2, 0))
-        msg_entry.select_range(0, "end")
-        msg_entry.focus_set()
-
-        # 按钮
-        btn_frame = tk.Frame(main_frame)
-        btn_frame.pack(pady=(12, 0))
-
-        def _on_confirm():
-            commit_msg = msg_var.get().strip()
-            if not commit_msg:
-                messagebox.showwarning("提示", "请输入提交备注")
-                return
-            dialog.destroy()
-            self._do_svn_commit(target_dir, to_add, to_commit, commit_msg)
-
-        def _on_cancel():
-            dialog.destroy()
-            self._ulog("⏹ 用户取消SVN上传", "warn")
-            self.upload_run_btn.config(state="normal", text="▶  上传SVN")
-
-        ttk.Button(btn_frame, text="确认上传",
-                   command=_on_confirm, width=12).pack(side="left", padx=8)
-        ttk.Button(btn_frame, text="取消",
-                   command=_on_cancel, width=8).pack(side="left", padx=8)
-
-        dialog.protocol("WM_DELETE_WINDOW", _on_cancel)
-
-        x = self.root.winfo_rootx() + (self.root.winfo_width() - 550) // 2
-        y = self.root.winfo_rooty() + (self.root.winfo_height() - 400) // 2
-        dialog.geometry(f"+{x}+{y}")
-
-    def _do_svn_commit(self, target_dir, to_add, to_commit, commit_msg):
-        """执行 svn add + svn commit（只提交本次复制的文件）"""
-        svn_exe = _get_svn_path()
-        self._ulog("─" * 40, "head")
-        self._ulog("开始上传SVN", "head")
-
-        import threading as _th
-
-        def _commit():
-            svn_ok = True
-            for f in to_add:
-                try:
-                    r = subprocess.run(
-                        [svn_exe, "add", f, "--force"],
-                        capture_output=True, text=True,
-                        encoding="utf-8", errors="replace",
-                        timeout=30,
-                        **_get_subprocess_kwargs()
-                    )
-                    if r.returncode == 0:
-                        rel = os.path.relpath(f, target_dir)
-                        self._ulog(f"   📄 svn add: {rel}", "ok")
-                    else:
-                        rel = os.path.relpath(f, target_dir)
-                        err = r.stderr.strip()
-                        self._ulog(f"   ⚠️ svn add 失败 [{rel}]: {err}", "warn")
-                except Exception as e:
-                    self._ulog(f"   ❌ svn add 异常: {e}", "error")
-                    svn_ok = False
-
-            if not svn_ok:
-                self._ulog("❌ SVN add 阶段出错，中止提交", "error")
-                self.root.after(0, lambda: self.upload_run_btn.config(
-                    state="normal", text="▶  上传SVN"))
-                return
-
-            all_changed = to_add + to_commit
-            try:
-                cmd = [svn_exe, "commit", "-m", commit_msg] + all_changed
-                r = subprocess.run(
-                    cmd,
-                    capture_output=True, text=True,
-                    encoding="utf-8", errors="replace",
-                    timeout=120,
-                    **_get_subprocess_kwargs()
-                )
-                if r.returncode == 0:
-                    self._ulog(f"✅ SVN 提交成功！", "ok")
-                    for line in r.stdout.strip().splitlines():
-                        if line.strip():
-                            self._ulog(f"   {line.strip()}", "info")
-                else:
-                    err = r.stderr.strip()
-                    self._ulog(f"❌ SVN 提交失败: {err}", "error")
-            except subprocess.TimeoutExpired:
-                self._ulog("❌ SVN 提交超时（超过2分钟）", "error")
-            except Exception as e:
-                self._ulog(f"❌ SVN 提交异常: {e}", "error")
-
-            self.root.after(0, lambda: self.upload_run_btn.config(
-                state="normal", text="▶  上传SVN"))
-
-        _th.Thread(target=_commit, daemon=True).start()
 
     def _on_tgt_list_click(self, event):
         lb = self.tr_tgt_listbox

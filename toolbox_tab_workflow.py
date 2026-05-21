@@ -17,6 +17,7 @@ from xlsm_zipper import apply_via_excel
 
 class WorkflowTabMixin:
     def _wf_clear_detail(self):
+        self._wf_edit_ctx = None
         for w in self.wf_detail_frame.winfo_children():
             w.destroy()
         self.wf_detail_frame.columnconfigure(0, weight=1)
@@ -192,6 +193,7 @@ class WorkflowTabMixin:
 
         self._selected_wf = wf_idx
         self._selected_step = step_idx
+        self._wf_edit_ctx = (wf_idx, step_idx, step)
 
     def _wf_show_export_text_config(self, wf_idx, step_idx, step):
         grp2 = tk.LabelFrame(self.wf_detail_frame, text="  导出文字表设置  ",
@@ -224,6 +226,7 @@ class WorkflowTabMixin:
         def _save_input(*_):
             step["input_file"] = input_var.get()
             self._wf_save_config()
+            self._wf_update_step_name_auto(wf_idx, step_idx, step)
         input_var.trace_add("write", lambda *_: _save_input())
         ttk.Button(grp2, text="浏览...", command=_browse_input, width=6
                    ).grid(row=row, column=2, padx=(5, 0))
@@ -903,6 +906,47 @@ class WorkflowTabMixin:
         tk.Label(grp2, text="按ID匹配行，按表头名匹配列，将翻译内容写入原文件对应单元格",
                  font=("微软雅黑", 8), fg="#888").grid(row=row, column=0, columnspan=3, sticky="w", padx=(5, 0))
 
+    @staticmethod
+    def _wf_auto_name(step):
+        st = step.get("type", "")
+        if st == "open_tables":
+            paths = step.get("file_paths", [])
+            parts = [os.path.basename(p) for p in paths if p]
+            return ",".join(parts) if parts else ""
+        if st == "lock_svn":
+            p = step.get("target_path", "")
+            return os.path.basename(p) if p else ""
+        if st == "export_text":
+            p = step.get("input_file", "")
+            return os.path.basename(p) if p else ""
+        if st == "upload_svn":
+            dirs = step.get("dirs", [])
+            parts = [os.path.basename(d.rstrip("/\\")) for d in dirs if d]
+            return ",".join(parts) if parts else ""
+        if st == "merge_translation":
+            p = step.get("original_file", "")
+            return os.path.basename(p) if p else ""
+        if st == "export_error_code":
+            codes = step.get("lang_codes", "")
+            return codes if codes else ""
+        if st == "merge_table":
+            paths = step.get("input_paths", [])
+            parts = [os.path.basename(p) for p in paths if p]
+            return ",".join(parts) if parts else ""
+        return ""
+
+    def _wf_update_step_name_auto(self, wf_idx, step_idx, step):
+        name = self._wf_auto_name(step)
+        if name:
+            step["name"] = name
+            self._wf_save_config()
+            self._wf_update_step_listbox(wf_idx)
+            iid = "wf_" + str(wf_idx) + "_step_" + str(step_idx)
+            if hasattr(self, "wf_tree") and self.wf_tree.exists(iid):
+                st = step.get("type", "")
+                t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "open_tables": "打开表格"}.get(st, st)
+                self.wf_tree.item(iid, text=str(step_idx + 1) + ". " + t + " - " + step.get("name", ""))
+
     def _wf_update_step_listbox(self, wf_idx, select_idx=None):
         if hasattr(self, "wf_step_listbox") and self.wf_step_listbox.winfo_exists():
             self.wf_step_listbox.delete(0, "end")
@@ -926,21 +970,20 @@ class WorkflowTabMixin:
         if len(steps) >= 20:
             self._wlog("最多20个步骤", "warn")
             return
-        n = len(steps) + 1
         if step_type == "export_text":
-            steps.append({"type": "export_text", "name": str(n), "input_file": "", "tools": []})
+            steps.append({"type": "export_text", "name": "", "input_file": "", "tools": []})
         elif step_type == "upload_svn":
-            steps.append({"type": "upload_svn", "name": str(n), "dirs": []})
+            steps.append({"type": "upload_svn", "name": "", "dirs": []})
         elif step_type == "export_error_code":
-            steps.append({"type": "export_error_code", "name": str(n), "root_dir": "", "lang_codes": ""})
+            steps.append({"type": "export_error_code", "name": "", "root_dir": "", "lang_codes": ""})
         elif step_type == "lock_svn":
-            steps.append({"type": "lock_svn", "name": str(n), "target_path": "", "update_dirs": [], "lock_msg": "锁定中，请勿修改"})
+            steps.append({"type": "lock_svn", "name": "", "target_path": "", "update_dirs": [], "lock_msg": "锁定中，请勿修改"})
         elif step_type == "merge_translation":
-            steps.append({"type": "merge_translation", "name": str(n), "input_file": "", "original_file": "", "sheet_name": ""})
+            steps.append({"type": "merge_translation", "name": "", "input_file": "", "original_file": "", "sheet_name": ""})
         elif step_type == "open_tables":
-            steps.append({"type": "open_tables", "name": str(n), "file_paths": []})
+            steps.append({"type": "open_tables", "name": "", "file_paths": []})
         else:
-            steps.append({"type": "merge_table", "name": str(n), "input_paths": [], "target_dir": "", "merge_prefixes": [], "title_rows": "1", "id_col": "1"})
+            steps.append({"type": "merge_table", "name": "", "input_paths": [], "target_dir": "", "merge_prefixes": [], "title_rows": "1", "id_col": "1"})
         self._wf_refresh_tree(select_iid="wf_" + str(wf_idx) + "_step_" + str(len(steps) - 1))
         self._wf_save_config()
         self._wlog("已添加步骤: " + steps[-1]["name"], "ok")
@@ -990,6 +1033,19 @@ class WorkflowTabMixin:
         self.config["workflows"] = self._wf_data
         save_config(self.config)
         self.config = load_config()
+        if hasattr(self, "_wf_edit_ctx") and self._wf_edit_ctx:
+            wf_idx, step_idx, step = self._wf_edit_ctx
+            name = self._wf_auto_name(step)
+            if name and step.get("name", "") != name:
+                step["name"] = name
+                save_config(self.config)
+                self.config = load_config()
+                self._wf_update_step_listbox(wf_idx)
+                iid = "wf_" + str(wf_idx) + "_step_" + str(step_idx)
+                if hasattr(self, "wf_tree") and self.wf_tree.exists(iid):
+                    st = step.get("type", "")
+                    t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "open_tables": "打开表格"}.get(st, st)
+                    self.wf_tree.item(iid, text=str(step_idx + 1) + ". " + t + " - " + step.get("name", ""))
 
     def _wf_refresh_tree(self, select_iid=None):
         sel = self.wf_tree.selection()

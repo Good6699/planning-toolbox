@@ -1090,7 +1090,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 const S = {};
 const nav = [
   {key:"svn",label:"SVN 记录"},
-  {key:"upload",label:"上传 SVN"},
+  {key:"upload",label:"复制上传"},
   {key:"workflow",label:"工作流"},
   {key:"translate",label:"翻译"},
 ];
@@ -1123,7 +1123,7 @@ async function saveConfig(updates) {
 }
 const tabMeta = {
   svn:{title:"SVN 记录",sub:"修改摘要、版本对比与导出工具"},
-  upload:{title:"上传 SVN",sub:"批量文件上传到 SVN 工作目录"},
+  upload:{title:"复制上传",sub:"批量文件复制上传到 SVN 工作目录"},
   workflow:{title:"工作流",sub:"自动化 SVN 操作编排"},
   translate:{title:"翻译",sub:"Excel 多语言批量翻译工作台"},
 };
@@ -1205,12 +1205,10 @@ function buildSvnTab(panel) {
           <div class="form-group">
             <label>关键词过滤</label>
             <input type="text" id="svn_keyword" placeholder="按SVN提交备注过滤" autocomplete="off">
-            <div class="svn-drop-hint">回车保存搜索历史</div>
           </div>
           <div class="form-group">
             <label>提交者过滤</label>
             <input type="text" id="svn_author" placeholder="按作者过滤" autocomplete="off">
-            <div class="svn-drop-hint">回车保存搜索历史</div>
           </div>
           <div class="form-group">
             <label>输出目录</label>
@@ -1236,7 +1234,6 @@ function buildSvnTab(panel) {
             <span style="font-weight:600">执行日志</span>
             <div style="margin-left:auto;display:flex;gap:8px">
               <button class="btn btn-normal btn-sm" data-action="svn-clear-cache">清除缓存</button>
-              <button class="btn btn-normal btn-sm" data-action="svn-clear">清空日志</button>
             </div>
           </div>
           <div class="log" id="svn_log"></div>
@@ -1361,7 +1358,7 @@ function buildUploadTab(panel) {
         <div class="card">
           <div class="card-header compact">
             <span style="font-weight:600">执行日志</span>
-            <button class="btn btn-normal btn-sm" data-action="upload-clear">清空</button>
+            <button class="btn btn-normal btn-sm" data-action="clear-changelist">清理changelist</button>
           </div>
           <div class="log" id="upload_log"></div>
         </div>
@@ -1460,7 +1457,6 @@ function buildWorkflowTab(panel) {
         <div class="card">
           <div class="card-header compact">
             <span style="font-weight:600">执行日志</span>
-            <button class="btn btn-normal btn-sm" data-action="wf-clear">清空</button>
           </div>
           <div class="log" id="wf_log"></div>
         </div>
@@ -1555,10 +1551,13 @@ function buildWorkflowTab(panel) {
         step[key] = inp.value;
       }
     });
+    const autoName = _wfAutoName(step);
+    if (autoName) step.name = autoName;
     saveConfig({workflows:config.workflows});
     overlay.classList.remove("show");
     _modalCtx = null;
     _wfSaving = false;
+    _wfRebuild();
     _showToast("步骤设置已保存");
   }
 
@@ -1769,6 +1768,41 @@ function runWorkflow() {
 function escapeHtml(s){
   return (s||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
+function _wfAutoName(step) {
+  if (!step || !step.type) return "";
+  const t = step.type;
+  if (t === "open_tables") {
+    const paths = step.file_paths || [];
+    return paths.map(p => { const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/")); return i >= 0 ? p.substring(i+1) : p; }).filter(Boolean).join(",");
+  }
+  if (t === "lock_svn") {
+    const p = step.target_path || "";
+    const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
+    return i >= 0 ? p.substring(i+1) : p;
+  }
+  if (t === "export_text") {
+    const p = step.input_file || "";
+    const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
+    return i >= 0 ? p.substring(i+1) : p;
+  }
+  if (t === "upload_svn") {
+    const dirs = step.dirs || [];
+    return dirs.map(d => { const s = d.replace(/[\/\\]$/,""); const i = Math.max(s.lastIndexOf("\\"), s.lastIndexOf("/")); return i >= 0 ? s.substring(i+1) : s; }).filter(Boolean).join(",");
+  }
+  if (t === "merge_translation") {
+    const p = step.original_file || "";
+    const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
+    return i >= 0 ? p.substring(i+1) : p;
+  }
+  if (t === "export_error_code") {
+    return step.lang_codes || "";
+  }
+  if (t === "merge_table") {
+    const paths = step.input_paths || [];
+    return paths.map(p => { const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/")); return i >= 0 ? p.substring(i+1) : p; }).filter(Boolean).join(",");
+  }
+  return "";
+}
 function buildTranslateTab(panel) {
   const api_url = config.tr_api_url||"https://api.openai.com/v1/chat/completions";
   const model = config.tr_model||"gpt-4o-mini";
@@ -1853,7 +1887,6 @@ function buildTranslateTab(panel) {
         <div class="card">
           <div class="card-header compact">
             <span style="font-weight:600">执行日志</span>
-            <button class="btn btn-normal btn-sm" data-action="tr-clear">清空</button>
           </div>
           <div class="log" id="tr_log"></div>
         </div>
@@ -2376,7 +2409,6 @@ document.addEventListener("click",e=>{
     case "save-adv-settings": saveAdvSettings(); break;
     case "adv-save-preset": saveAdvFilePreset(); break;
     case "adv-del-preset": delAdvFilePreset(); break;
-    case "svn-clear": document.getElementById("svn_log").innerHTML = ""; break;
     case "svn-clear-cache":
       fetch("/api/cache/clear", {method:"POST"}).then(r=>r.json()).then(d=>{
         const el = document.getElementById("svn_log");
@@ -2384,12 +2416,19 @@ document.addEventListener("click",e=>{
         div.textContent = `${d.ok ? "🗑 已清除" : "⚠ 清除失败"} ${d.count||0} 个缓存文件`;
         el.appendChild(div);
       }); break;
-    case "upload-clear": document.getElementById("upload_log").innerHTML = ""; break;
-    case "tr-clear": document.getElementById("tr_log").innerHTML = ""; break;
+    case "clear-changelist": {
+      const tgt = document.getElementById("upload_tgt").value.trim();
+      if (!tgt) { _showToast("请先选择目标SVN目录"); break; }
+      fetch("/api/svn/clear-changelist", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({target_dir:tgt})})
+        .then(r=>r.json()).then(d=>{
+          if (d.ok) { _showToast("✅ changelist 已清理"); }
+          else { _showToast("❌ "+ (d.error||"清理失败")); }
+        });
+      break;
+    }
     case "tr-lang-adv-settings": openTrLangAdvSettings(); break;
     case "tr-lang-close-adv": closeTrLangAdvSettings(); break;
     case "tr-lang-save-adv": saveTrLangAdvSettings(); break;
-    case "wf-clear": document.getElementById("wf_log").innerHTML = ""; break;
     case "browse-svn-output": browseDir("svn_output"); break;
     case "browse-svn-url": {
       const v = document.getElementById("svn_url").value.trim();

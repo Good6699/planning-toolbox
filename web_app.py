@@ -188,6 +188,57 @@ def api_save_config():
 # ═══════════════════════════════════════════════════════════
 
 
+def _run_svn_task(q, svn_url, mode, start_date, end_date, keyword, author, output, cfg, task_id):
+    q.put(f"{'='*50}\n")
+    q.put("开始执行\n")
+    q.put(f"模式: {mode}\n")
+    q.put(f"SVN URL: {svn_url}\n")
+    q.put(f"日期范围: {start_date} ~ {end_date}\n")
+    q.put(f"输出: {output}\n")
+
+    cmd = [sys.executable, MAIN_SCRIPT, "--url", svn_url,
+           "--start", start_date, "--end", end_date, "--output", output]
+    if mode == "export":
+        cmd += ["--export", "--export-dir", output]
+        exclude = cfg.get("exclude_dirs", "").strip()
+        if exclude:
+            cmd += ["--exclude-dirs", exclude]
+    elif mode == "summary":
+        cmd += ["--summary", "--export-dir", output]
+        exclude = cfg.get("exclude_dirs", "").strip()
+        if exclude:
+            cmd += ["--exclude-dirs", exclude]
+    if keyword:
+        cmd += ["--keyword", keyword]
+    if author:
+        cmd += ["--author", author]
+
+    svn_user = cfg.get("svn_user", "").strip()
+    svn_pass = cfg.get("svn_pass", "").strip()
+    if svn_user:
+        cmd += ["--svn-user", svn_user]
+    if svn_pass:
+        from toolbox_config import decrypt_key
+        cmd += ["--svn-pass", decrypt_key(svn_pass)]
+
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, encoding="utf-8", errors="replace",
+                                bufsize=1, **_get_subprocess_kwargs())
+        _register_proc(proc, task_id)
+        try:
+            for line in iter(proc.stdout.readline, ""):
+                q.put(line)
+            proc.wait()
+            q.put(f"\n── 执行完成 (退出码: {proc.returncode}) ──\n")
+        finally:
+            _unregister_proc(proc, task_id)
+    except Exception as e:
+        q.put(f"\n❌ 执行失败: {e}\n")
+    q.put(f"[输出路径] {output}\n")
+    q.put(None)
+
+
 @app.route("/api/svn/run", methods=["POST"])
 def api_svn_run():
     data = request.get_json(force=True)
@@ -202,7 +253,6 @@ def api_svn_run():
     if not svn_url:
         return jsonify({"error": "请输入 SVN URL"}), 400
 
-    # 保存 URL 到历史
     cfg = load_config()
     urls = cfg.get("svn_urls", [])
     if svn_url in urls:
@@ -216,7 +266,6 @@ def api_svn_run():
         output = DEFAULT_OUTPUT_DIR
     os.makedirs(output, exist_ok=True)
 
-    # 清空输出目录
     if is_export_like:
         for fname in os.listdir(output):
             fpath = os.path.join(output, fname)
@@ -231,58 +280,7 @@ def api_svn_run():
     task_id = _get_next_task_id()
     q = queue.Queue()
     _log_queues[task_id] = q
-
-    def _run():
-        q.put(f"{'='*50}\n")
-        q.put("开始执行\n")
-        q.put(f"模式: {mode}\n")
-        q.put(f"SVN URL: {svn_url}\n")
-        q.put(f"日期范围: {start_date} ~ {end_date}\n")
-        q.put(f"输出: {output}\n")
-
-        cmd = [sys.executable, MAIN_SCRIPT, "--url", svn_url,
-               "--start", start_date, "--end", end_date, "--output", output]
-        if mode == "export":
-            cmd += ["--export", "--export-dir", output]
-            exclude = cfg.get("exclude_dirs", "").strip()
-            if exclude:
-                cmd += ["--exclude-dirs", exclude]
-        elif mode == "summary":
-            cmd += ["--summary", "--export-dir", output]
-            exclude = cfg.get("exclude_dirs", "").strip()
-            if exclude:
-                cmd += ["--exclude-dirs", exclude]
-        if keyword:
-            cmd += ["--keyword", keyword]
-        if author:
-            cmd += ["--author", author]
-
-        svn_user = cfg.get("svn_user", "").strip()
-        svn_pass = cfg.get("svn_pass", "").strip()
-        if svn_user:
-            cmd += ["--svn-user", svn_user]
-        if svn_pass:
-            from toolbox_config import decrypt_key
-            cmd += ["--svn-pass", decrypt_key(svn_pass)]
-
-        try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    text=True, encoding="utf-8", errors="replace",
-                                    bufsize=1, **_get_subprocess_kwargs())
-            _register_proc(proc, task_id)
-            try:
-                for line in iter(proc.stdout.readline, ""):
-                    q.put(line)
-                proc.wait()
-                q.put(f"\n── 执行完成 (退出码: {proc.returncode}) ──\n")
-            finally:
-                _unregister_proc(proc, task_id)
-        except Exception as e:
-            q.put(f"\n❌ 执行失败: {e}\n")
-        q.put(f"[输出路径] {output}\n")
-        q.put(None)
-
-    threading.Thread(target=_run, daemon=True).start()
+    threading.Thread(target=_run_svn_task, args=(q, svn_url, mode, start_date, end_date, keyword, author, output, cfg, task_id), daemon=True).start()
     return jsonify({"task_id": task_id})
 
 

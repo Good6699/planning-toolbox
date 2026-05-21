@@ -134,6 +134,70 @@ class EdgeDocker:
                 pass
             time.sleep(0.05)
 
+    def _tick_maybe_undock(self, hwnd):
+        if self._taskbar_activate:
+            self._taskbar_activate = False
+            _undock_and_center(hwnd)
+            return True
+        fg = win32gui.GetForegroundWindow()
+        if fg == hwnd and self._prev_fg != 0 and self._prev_fg != hwnd:
+            _undock_and_center(hwnd)
+            return True
+        self._prev_fg = fg
+        return False
+
+    def _tick_check_released(self, x, r, b, y):
+        released = False
+        if self.docked == "right":
+            if x < self._docked_edge - 80:
+                released = True
+        elif self.docked == "left":
+            if r > self._docked_edge + 80:
+                released = True
+        elif self.docked == "top":
+            if y > self._docked_edge + 80:
+                released = True
+        elif self.docked == "bottom":
+            if b < self._docked_edge - 80:
+                released = True
+        return released
+
+    def _tick_try_slide_out(self, hwnd, x, y, r, b, h, cx, cy):
+        if self.docked in ("right", "left"):
+            edge_x = r if self.docked == "left" else x
+            if abs(cx - edge_x) <= DOCK_VISIBLE + 4 and y - 8 <= cy <= y + h + 8:
+                self._slide_out(hwnd)
+        elif self.docked in ("top", "bottom"):
+            edge_y = self._docked_mt if self.docked == "top" else self._docked_mb
+            if abs(cy - edge_y) <= DOCK_VISIBLE + 4 and x - 8 <= cx <= r + 8:
+                self._slide_out(hwnd)
+
+    def _tick_docked(self, hwnd, x, y, r, b, w, h, cx, cy):
+        if self._tick_maybe_undock(hwnd):
+            return
+        if self._tick_check_released(x, r, b, y):
+            self.docked = None
+        else:
+            self._tick_try_slide_out(hwnd, x, y, r, b, h, cx, cy)
+
+    def _tick_snap_check(self, hwnd, x, y, r, b, w, h, cx, cy, in_window):
+        if in_window or _is_dragging:
+            return
+        ml, mt, mr, mb = self._monitor_bounds(hwnd)
+        mw = mr - ml
+        can_dock_h = (mw - w >= 80)
+        snap = None
+        if can_dock_h and x <= ml + EDGE_THRESHOLD:
+            snap = "left"
+        elif can_dock_h and r >= mr - EDGE_THRESHOLD:
+            snap = "right"
+        elif y <= mt + EDGE_THRESHOLD:
+            snap = "top"
+        elif b >= mb - EDGE_THRESHOLD:
+            snap = "bottom"
+        if snap:
+            self._slide_in(hwnd, snap)
+
     def _tick(self):
         if time.perf_counter() < self._busy_until:
             return
@@ -152,60 +216,12 @@ class EdgeDocker:
         in_window = (x <= cx <= r and y <= cy <= b)
 
         if self.docked:
-            if self._taskbar_activate:
-                self._taskbar_activate = False
-                _undock_and_center(hwnd)
-                return
-            fg = win32gui.GetForegroundWindow()
-            if fg == hwnd and self._prev_fg != 0 and self._prev_fg != hwnd:
-                _undock_and_center(hwnd)
-                return
-            self._prev_fg = fg
-            released = False
-            if self.docked == "right":
-                if x < self._docked_edge - 80:
-                    released = True
-            elif self.docked == "left":
-                if r > self._docked_edge + 80:
-                    released = True
-            elif self.docked == "top":
-                if y > self._docked_edge + 80:
-                    released = True
-            elif self.docked == "bottom":
-                if b < self._docked_edge - 80:
-                    released = True
-
-            if released:
-                self.docked = None
-            else:
-                if self.docked in ("right", "left"):
-                    edge_x = r if self.docked == "left" else x
-                    if abs(cx - edge_x) <= DOCK_VISIBLE + 4 and y - 8 <= cy <= y + h + 8:
-                        self._slide_out(hwnd)
-                elif self.docked in ("top", "bottom"):
-                    edge_y = self._docked_mt if self.docked == "top" else self._docked_mb
-                    if abs(cy - edge_y) <= DOCK_VISIBLE + 4 and x - 8 <= cx <= r + 8:
-                        self._slide_out(hwnd)
-
+            self._tick_docked(hwnd, x, y, r, b, w, h, cx, cy)
             if time.perf_counter() < self._busy_until:
                 return
 
         if not self.docked:
-            if not in_window and not _is_dragging:
-                ml, mt, mr, mb = self._monitor_bounds(hwnd)
-                mw = mr - ml
-                can_dock_h = (mw - w >= 80)
-                snap = None
-                if can_dock_h and x <= ml + EDGE_THRESHOLD:
-                    snap = "left"
-                elif can_dock_h and r >= mr - EDGE_THRESHOLD:
-                    snap = "right"
-                elif y <= mt + EDGE_THRESHOLD:
-                    snap = "top"
-                elif b >= mb - EDGE_THRESHOLD:
-                    snap = "bottom"
-                if snap:
-                    self._slide_in(hwnd, snap)
+            self._tick_snap_check(hwnd, x, y, r, b, w, h, cx, cy, in_window)
 
     def _animate(self, hwnd, start_x, start_y, target_x, target_y, ease_in=True):
         self.animating = True
@@ -673,67 +689,68 @@ def _find_window_hwnd(timeout=5):
     return None
 
 
+def _dnd_on_drop(window, e):
+    target_id = ''
+    target = e.get('target')
+    if target:
+        target_id = target.get('id', '')
+    files = e.get('dataTransfer', {}).get('files', [])
+    if not files:
+        return
+    path = files[0].get('pywebviewFullPath')
+    if not path:
+        return
+    if not target_id:
+        try:
+            target_id = window.evaluate_js('_lastDropTargetId || ""')
+        except Exception:
+            pass
+    if not target_id:
+        return
+    js_path = json.dumps(path)
+    if target_id == 'svn_url':
+        js = f"document.getElementById('{target_id}').value={js_path};onSvnUrlPicked();"
+    else:
+        js = f"document.getElementById('{target_id}').value={js_path};document.getElementById('{target_id}').dispatchEvent(new Event('change',{{bubbles:true}}));"
+
+    def _inj():
+        try:
+            window.evaluate_js(js)
+        except Exception:
+            pass
+    threading.Thread(target=_inj, daemon=True).start()
+
+
+def _dnd_on_loaded(window):
+    try:
+        from webview.dom import DOMEventHandler
+        window.dom.document.events.drop += DOMEventHandler(lambda e: _dnd_on_drop(window, e), True, True)
+    except Exception:
+        pass
+
+
+def _dnd_on_shown(window):
+    try:
+        from webview.platforms.winforms import BrowserView
+        form = BrowserView.instances.get(window.uid)
+        if not form or not hasattr(form, 'browser'):
+            return
+        edge = form.browser
+        wv = getattr(edge, 'webview', None)
+        if wv is None:
+            return
+        try:
+            from System import Action
+            form.Invoke(Action(lambda: setattr(wv, 'AllowDrop', False)))
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 def _init_dnd(window):
-    """用 pywebview DOM DnD API 统一处理所有输入框的拖拽文件路径"""
-    def on_drop(e):
-        target_id = ''
-        target = e.get('target')
-        if target:
-            target_id = target.get('id', '')
-        files = e.get('dataTransfer', {}).get('files', [])
-        if not files:
-            return
-        path = files[0].get('pywebviewFullPath')
-        if not path:
-            return
-        if not target_id:
-            try:
-                target_id = window.evaluate_js('_lastDropTargetId || ""')
-            except Exception:
-                pass
-        if not target_id:
-            return
-        js_path = json.dumps(path)
-        if target_id == 'svn_url':
-            js = f"document.getElementById('{target_id}').value={js_path};onSvnUrlPicked();"
-        else:
-            js = f"document.getElementById('{target_id}').value={js_path};document.getElementById('{target_id}').dispatchEvent(new Event('change',{{bubbles:true}}));"
-
-        def _inj():
-            try:
-                window.evaluate_js(js)
-            except Exception:
-                pass
-        threading.Thread(target=_inj, daemon=True).start()
-
-    def _on_loaded():
-        try:
-            from webview.dom import DOMEventHandler
-            window.dom.document.events.drop += DOMEventHandler(on_drop, True, True)
-        except Exception:
-            pass
-
-    window.events.loaded += _on_loaded
-
-    def _on_shown(window):
-        try:
-            from webview.platforms.winforms import BrowserView
-            form = BrowserView.instances.get(window.uid)
-            if not form or not hasattr(form, 'browser'):
-                return
-            edge = form.browser
-            wv = getattr(edge, 'webview', None)
-            if wv is None:
-                return
-            try:
-                from System import Action
-                form.Invoke(Action(lambda: setattr(wv, 'AllowDrop', False)))
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-    window.events.shown += _on_shown
+    window.events.loaded += lambda: _dnd_on_loaded(window)
+    window.events.shown += _dnd_on_shown
 
 
 def main():

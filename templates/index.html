@@ -448,6 +448,17 @@ input::placeholder,textarea::placeholder{
   color:#fff;
   transform:scale(1.12);
 }
+.wf-copy-btn,.wf-del-btn{
+  width:26px;height:26px;
+  display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;
+  border-radius:6px;color:var(--dim);
+  cursor:pointer;font-size:12px;
+  transition:.15s;flex-shrink:0;
+  padding:0;line-height:1;
+}
+.wf-copy-btn:hover{background:rgba(94,162,255,.1);color:var(--accent);}
+.wf-del-btn:hover{background:rgba(244,71,71,.15);color:var(--danger);}
 .wf-children{
   display:none;
   padding:8px 14px 12px;
@@ -1428,7 +1439,9 @@ function buildWorkflowTab(panel) {
                 <input type="checkbox" class="wf-parent-check">
                 <span class="wf-parent-name">${escapeHtml(wf.name)}</span>
                 <button class="wf-play-btn" title="执行本工作流勾选的步骤">▶</button>
+                <button class="wf-copy-btn" title="复制工作流">📋</button>
                 <span class="wf-parent-badge">${(wf.steps||[]).length} 步骤</span>
+                <button class="wf-del-btn" title="删除工作流">✕</button>
               </div>
               <div class="wf-children">
                 ${(wf.steps||[]).map((s, j) => `
@@ -1446,8 +1459,6 @@ function buildWorkflowTab(panel) {
         </div>
         <div class="wf-toolbar">
           <button class="btn btn-normal" data-action="wf-create">+ 新建</button>
-          <button class="btn btn-normal" data-action="wf-copy">复制</button>
-          <button class="btn btn-normal" data-action="wf-delete">删除</button>
         </div>
       </div>
       <div class="action-center">
@@ -1481,7 +1492,7 @@ function buildWorkflowTab(panel) {
   parents.forEach((el, i) => {
     const header = el.querySelector(".wf-parent-header");
     header.addEventListener("click", (e) => {
-      if (e.target.closest(".wf-parent-check,.wf-play-btn")) return;
+      if (e.target.closest(".wf-parent-check,.wf-play-btn,.wf-copy-btn,.wf-del-btn")) return;
       if (expandedIdx === i) {
         el.classList.remove("expanded");
         expandedIdx = -1;
@@ -1525,6 +1536,26 @@ function buildWorkflowTab(panel) {
       section.innerHTML = `<div class="wf-log-section-header">${escapeHtml(wfName)}</div><div class="wf-log-body" id="${bodyId}"></div>`;
       logContainer.appendChild(section);
       runTask("/api/workflow/run", {wf_idx: wfIdx, step_indices: stepIndices}, null, bodyId, wfName);
+    });
+    const copyBtn = el.querySelector(".wf-copy-btn");
+    copyBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const wfIdx = Number(el.dataset.idx);
+      const orig = JSON.parse(JSON.stringify(config.workflows[wfIdx]));
+      orig.name = (orig.name||"工作流") + " (副本)";
+      config.workflows.splice(wfIdx+1, 0, orig);
+      saveConfig({workflows:config.workflows});
+      _wfRebuild();
+    });
+    const delBtn = el.querySelector(".wf-del-btn");
+    delBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const wfIdx = Number(el.dataset.idx);
+      const name = config.workflows[wfIdx]?.name || "未命名";
+      if (!confirm(`确定删除工作流「${name}」？`)) return;
+      config.workflows.splice(wfIdx, 1);
+      saveConfig({workflows:config.workflows});
+      _wfRebuild();
     });
   });
 
@@ -1706,26 +1737,6 @@ function _wfRebuild() {
 function wfCreate() {
   config.workflows = config.workflows || [];
   config.workflows.push({name:"新工作流",steps:[]});
-  saveConfig({workflows:config.workflows});
-  _wfRebuild();
-}
-function wfCopy() {
-  const sel = document.querySelector(".wf-parent.expanded");
-  if (!sel) return;
-  const idx = Number(sel.dataset.idx);
-  const orig = JSON.parse(JSON.stringify(config.workflows[idx]));
-  orig.name = (orig.name||"工作流") + " (副本)";
-  config.workflows.splice(idx+1, 0, orig);
-  saveConfig({workflows:config.workflows});
-  _wfRebuild();
-}
-function wfDelete() {
-  const sel = document.querySelector(".wf-parent.expanded");
-  if (!sel) return;
-  const idx = Number(sel.dataset.idx);
-  const name = config.workflows[idx]?.name || "未命名";
-  if (!confirm(`确定删除工作流「${name}」？`)) return;
-  config.workflows.splice(idx, 1);
   saveConfig({workflows:config.workflows});
   _wfRebuild();
 }
@@ -2397,8 +2408,6 @@ document.addEventListener("click",e=>{
     case "run-translate": runTranslate(); break;
     case "run-workflow": runWorkflow(); break;
     case "wf-create": wfCreate(); break;
-    case "wf-copy": wfCopy(); break;
-    case "wf-delete": wfDelete(); break;
     case "svn-today": {
       const today = `${cy}-${String(cm).padStart(2,"0")}-${String(cd).padStart(2,"0")}`;
       document.getElementById("svn_start").value = today;

@@ -309,6 +309,11 @@
   - 合并表格 → 显示输入文件路径的文件名，多个逗号分隔
 - **实现**：桌面GUI 用 `_wf_auto_name` 静态方法 + `_wf_save_config` 命名的 `_wf_edit_ctx` 自动触发；Web UI 用 `_wfAutoName` 在模态框保存时执行
 - **涉及文件**：[toolbox_tab_workflow.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_tab_workflow.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### 工作流复制/删除按钮移到父工作流 header
+- **场景**：2026-05-21 用户觉得底部工具栏的复制和删除按钮操作路径太长，要求放到每个父工作流自己的 header 上
+- **解决方案**：底部工具栏只保留"新建"；每个父 header 的 ▶ 播放按钮右边加 📋 复制按钮（直接复制）、右上角加 ✕ 删除按钮（弹窗确认）
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 - **全对判断**：`!q.answered || answerSelectedIndex===undefined` 任一未答即不算全对
 - **脚本位置**：`自动学习/auto_exam.js`
 

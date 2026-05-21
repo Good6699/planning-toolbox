@@ -104,7 +104,7 @@ def _handle_shutdown(signum, frame):
         try:
             proc.kill()
             proc.communicate(timeout=5)
-        except:
+        except Exception:
             pass
     _log_queues.clear()
     sys.exit(0)
@@ -298,7 +298,7 @@ def api_task_cancel():
         try:
             proc.kill()
             proc.communicate(timeout=5)
-        except:
+        except Exception:
             pass
         try:
             _active_subprocesses.remove(proc)
@@ -310,7 +310,7 @@ def api_task_cancel():
         try:
             q.put(json.dumps({"type": "cancelled", "message": "任务已取消"}, ensure_ascii=False))
             q.put(None)
-        except:
+        except Exception:
             pass
 
     return jsonify({"status": "cancelled", "task_id": task_id})
@@ -353,7 +353,7 @@ def api_file_list():
                 else:
                     s = f"{size}B"
                 mtime = datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M")
-            except:
+            except Exception:
                 is_dir = os.path.isdir(fp)
                 s = "-"
                 mtime = "-"
@@ -607,7 +607,7 @@ def _exec_export_text(step, put, task_id=None):
             try:
                 proc.kill()
                 proc.communicate(timeout=5)
-            except:
+            except Exception:
                 pass
             put(f"  {os.path.basename(tool_path)} 超时\n")
         except Exception as e:

@@ -68,7 +68,7 @@ class EdgeDocker:
             if h:
                 self.hwnd = h
                 return h
-        except:
+        except Exception:
             pass
         return None
 
@@ -78,7 +78,7 @@ class EdgeDocker:
             info = win32api.GetMonitorInfo(m)
             rc = info["Monitor"]
             return rc[0], rc[1], rc[2], rc[3]
-        except:
+        except Exception:
             return _VSCREEN_L, _VSCREEN_T, _VSCREEN_R, _VSCREEN_B
 
     def _monitor_v_edges(self, hwnd):
@@ -120,7 +120,7 @@ class EdgeDocker:
                 ty = mt if self.docked == "top" else mb - h
             win32gui.SetWindowPos(hwnd, win32con.HWND_NOTOPMOST, tx, ty, w, h,
                                   win32con.SWP_NOACTIVATE)
-        except:
+        except Exception:
             pass
         finally:
             self.docked = None
@@ -130,7 +130,7 @@ class EdgeDocker:
         while not self._stop.is_set():
             try:
                 self._tick()
-            except:
+            except Exception:
                 pass
             time.sleep(0.05)
 
@@ -145,7 +145,7 @@ class EdgeDocker:
             rect = win32gui.GetWindowRect(hwnd)
             x, y, r, b = rect
             w, h = r - x, b - y
-        except:
+        except Exception:
             return
 
         cx, cy = win32api.GetCursorPos()
@@ -225,7 +225,7 @@ class EdgeDocker:
                 try:
                     win32gui.SetWindowPos(hwnd, 0, cur_x, cur_y, 0, 0,
                                           win32con.SWP_NOSIZE | win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE)
-                except:
+                except Exception:
                     pass
                 elapsed = time.perf_counter() - t0
                 if elapsed < frame_interval:
@@ -238,7 +238,7 @@ class EdgeDocker:
                     w, h = rect[2] - rect[0], rect[3] - rect[1]
                     win32gui.SetWindowPos(hwnd, 0, final_x, final_y, w, h,
                                           win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE)
-                except:
+                except Exception:
                     pass
 
     def _slide_in(self, hwnd, edge):
@@ -282,7 +282,7 @@ class EdgeDocker:
                         ctypes.windll.user32.SwitchToThisWindow(desktop, True)
                         ctypes.windll.user32.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0,
                                                           win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
-                except:
+                except Exception:
                     pass
         except Exception:
             self._busy_until = 0.0
@@ -309,7 +309,7 @@ class EdgeDocker:
                     ctypes.windll.user32.SetWindowLongW(hwnd, -20, ex & ~0x8)
                     win32gui.SetWindowPos(hwnd, win32con.HWND_NOTOPMOST, 0, 0, 0, 0,
                                           win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
-                except:
+                except Exception:
                     pass
         except Exception:
             pass
@@ -421,7 +421,7 @@ class ResizeApi:
             self._win_w = rect.right - rect.left
             self._win_h = rect.bottom - rect.top
             self._cursor_x, self._cursor_y = win32api.GetCursorPos()
-        except:
+        except Exception:
             pass
 
     def start_resize(self, edge):
@@ -439,7 +439,7 @@ class ResizeApi:
             nx = cx - self._cursor_x + self._win_x
             ny = cy - self._cursor_y + self._win_y
             self._window.move(nx, ny)
-        except:
+        except Exception:
             return False
         return True
 
@@ -472,7 +472,7 @@ class ResizeApi:
                 ctypes.windll.user32.FindWindowW(None, "策划工具箱"),
                 0, x, y, w, h, 0x0004
             )
-        except:
+        except Exception:
             return False
         return True
 
@@ -539,7 +539,7 @@ def _get_cursor_screen_center():
         ml, mt, mr, mb = info["Monitor"]
         cx = ml + (mr - ml - WINDOW_W) // 2
         cy = mt + (mb - mt - WINDOW_H) // 2
-    except:
+    except Exception:
         sw = win32api.GetSystemMetrics(0)
         sh = win32api.GetSystemMetrics(1)
         cx = (sw - WINDOW_W) // 2
@@ -562,7 +562,7 @@ def _undock_and_center(hwnd):
     try:
         _center_on_cursor_screen(hwnd)
         win32gui.SetForegroundWindow(hwnd)
-    except:
+    except Exception:
         pass
 
 

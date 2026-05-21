@@ -1470,7 +1470,7 @@ class WorkflowTabMixin:
                 try:
                     proc.kill()
                     proc.communicate(timeout=5)
-                except:
+                except Exception:
                     pass
                 self._wlog("  " + os.path.basename(tool_path) + " 超时", "error")
             except Exception as e:

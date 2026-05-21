@@ -27,7 +27,7 @@ from toolbox_config import (  # noqa: E402
 )
 from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock  # noqa: E402
 from xlsm_zipper import apply_via_excel  # noqa: E402
-from toolbox_merge import svn_log, svn_log_changed_files, svn_merge, open_commit_dialog, resolve_target_path  # noqa: E402
+from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path  # noqa: E402
 
 if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
     if len(sys.argv) < 3:
@@ -1870,7 +1870,7 @@ def api_cache_clear():
 
 @app.route("/api/merge/query", methods=["POST"])
 def api_merge_query():
-    """查询源SVN版本列表及变更文件"""
+    """查询源SVN版本列表及变更文件（SSE实时日志）"""
     data = request.get_json(force=True)
     source_url = data.get("source_url", "").strip()
     start_date = data.get("start_date", "")
@@ -1887,25 +1887,54 @@ def api_merge_query():
     if svn_pass:
         from toolbox_config import decrypt_key
         svn_pass = decrypt_key(svn_pass)
+    task_id = _get_next_task_id()
+    t = threading.Thread(target=_merge_query_worker,
+                         args=(task_id, source_url, start_date, end_date,
+                               author, keyword,
+                               svn_user or None, svn_pass or None),
+                         daemon=True)
+    t.start()
+    return jsonify({"task_id": task_id})
+
+
+def _merge_query_worker(task_id, source_url, start_date, end_date,
+                        author, keyword, svn_user, svn_pass):
+    """后台查询任务线程，使用svn log --verbose 一次获取版本+文件"""
+    q = _log_queues.setdefault(task_id, queue.Queue())
+    ts = datetime.now().strftime("%H:%M:%S")
+
+    def _log(msg, level="info"):
+        tag = f"[{ts}][{level}]" if level != "info" else f"[{ts}]"
+        q.put(f"{tag} {msg}\n")
+
     try:
+        _log("正在查询SVN版本日志...")
+        _log(f"源地址: {source_url}")
+        _log(f"日期范围: {start_date} ~ {end_date}")
+        if author:
+            _log(f"提交者: {author}")
+        if keyword:
+            _log(f"关键词: {keyword}")
+        _log("正在获取版本信息及变更文件（svn log --verbose）...")
         versions = svn_log(source_url, start_date, end_date,
                            author=author, keyword=keyword,
-                           svn_user=svn_user or None,
-                           svn_pass=svn_pass or None)
-        for v in versions:
-            try:
-                files = svn_log_changed_files(
-                    source_url, v["rev"],
-                    svn_user=svn_user or None,
-                    svn_pass=svn_pass or None)
-                v["files"] = files
-            except Exception:
-                v["files"] = []
-        return jsonify({"ok": True, "versions": versions, "total": len(versions)})
+                           svn_user=svn_user, svn_pass=svn_pass,
+                           verbose=True)
+        total = len(versions)
+        _log(f"查询完成，共 {total} 个版本")
+        if total > 0:
+            file_count = sum(len(v.get("files", [])) for v in versions)
+            _log(f"所有版本累计变更文件: {file_count} 个")
+        result = json.dumps({"ok": True, "versions": versions, "total": total})
+        q.put(f"[RESULT]{result}\n")
     except RuntimeError as e:
-        return jsonify({"ok": False, "error": str(e)}), 200
+        err = json.dumps({"ok": False, "error": str(e)})
+        q.put(f"[RESULT]{err}\n")
     except Exception as e:
-        return jsonify({"ok": False, "error": f"查询失败: {e}"}), 200
+        err = json.dumps({"ok": False, "error": f"查询失败: {e}"})
+        q.put(f"[RESULT]{err}\n")
+    finally:
+        q.put(None)
 
 
 def _merge_worker(task_id, source_url, target_path, revisions, files,

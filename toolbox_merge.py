@@ -43,16 +43,18 @@ def _run_svn(cmd, timeout=120):
 
 
 def svn_log(source_url, start_date, end_date, author=None, keyword=None,
-            svn_user=None, svn_pass=None):
-    """查询SVN提交日志，返回版本列表"""
+            svn_user=None, svn_pass=None, verbose=False):
+    """查询SVN提交日志，返回版本列表。verbose=True 时返回文件列表"""
     cmd = ["log", source_url, "--xml", "-r",
            f"{{{start_date}}}:{{{end_date}}}", "--limit", "500"]
     if author:
         cmd += ["--search", author]
     if keyword:
         cmd += ["--search", keyword]
+    if verbose:
+        cmd += ["--verbose"]
     cmd += _build_svn_auth_args(svn_user, svn_pass)
-    raw = _run_svn(cmd, timeout=60)
+    raw = _run_svn(cmd, timeout=120)
     versions = []
     try:
         root = ET.fromstring(raw)
@@ -61,12 +63,23 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
             author_el = entry.find("author")
             date_el = entry.find("date")
             msg_el = entry.find("msg")
-            versions.append({
+            v = {
                 "rev": int(rev) if rev.isdigit() else rev,
                 "author": author_el.text if author_el is not None else "",
                 "date": date_el.text[:19] if date_el is not None and date_el.text else "",
                 "msg": (msg_el.text or "").strip() if msg_el is not None else "",
-            })
+            }
+            if verbose:
+                files = []
+                for path_el in entry.findall(".//path"):
+                    action = path_el.get("action", "M")
+                    action_map = {"A": "add", "M": "mod", "D": "del"}
+                    files.append({
+                        "path": path_el.text or "",
+                        "action": action_map.get(action, action),
+                    })
+                v["files"] = files
+            versions.append(v)
     except ET.ParseError:
         pass
     return versions

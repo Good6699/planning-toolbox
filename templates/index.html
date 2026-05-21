@@ -1155,79 +1155,111 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   grid-column:1/-1;
 }
 .merge-version-list{
-  max-height:400px;
+  max-height:360px;
   overflow-y:auto;
   display:flex;
   flex-direction:column;
-  gap:2px;
+  gap:1px;
+}
+.merge-version-footer{
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  padding:4px 8px;
+  border-top:1px solid var(--panel2);
+  min-height:28px;
+}
+.merge-version-footer .count{
+  color:var(--accent);
+  font-size:12px;
+  font-weight:600;
 }
 .merge-version-item{
   display:flex;
   align-items:center;
-  gap:8px;
-  padding:8px 10px;
-  border-radius:8px;
+  gap:4px;
+  padding:5px 8px;
+  border-radius:6px;
   cursor:pointer;
-  transition:background .15s;
-  font-size:13px;
+  transition:background .1s;
+  font-size:12px;
 }
 .merge-version-item:hover{
   background:var(--panel2);
 }
-.merge-version-item.active{
-  background:rgba(94,162,255,.15);
-  border-left:3px solid var(--accent);
+.merge-version-item.checked{
+  background:rgba(94,162,255,.1);
+  border-left:2px solid var(--accent);
+}
+.merge-version-item input[type="checkbox"]{
+  accent-color:var(--accent);
+  flex-shrink:0;
+  margin:0;
+  width:13px;
+  height:13px;
 }
 .merge-version-item .rev{
   font-weight:600;
   color:var(--accent);
-  min-width:50px;
+  min-width:40px;
 }
 .merge-version-item .date{
   color:var(--dim);
-  font-size:11px;
-  min-width:100px;
+  font-size:10px;
+  min-width:80px;
+}
+.merge-version-item .am-wrap{
+  display:flex;
+  align-items:center;
+  gap:2px;
+  min-width:0;
+  flex:1;
 }
 .merge-version-item .author{
   color:var(--sub);
-  font-size:11px;
-  min-width:60px;
+  font-size:10px;
+  white-space:nowrap;
 }
 .merge-version-item .msg{
   color:var(--text);
-  flex:1;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
+  font-size:12px;
 }
 .merge-file-list{
   max-height:350px;
   overflow-y:auto;
   display:flex;
   flex-direction:column;
-  gap:2px;
-  margin-top:8px;
+  gap:1px;
 }
 .merge-file-item{
   display:flex;
   align-items:center;
-  gap:8px;
-  padding:6px 8px;
+  gap:4px;
+  padding:5px 8px;
   border-radius:6px;
   font-size:12px;
   cursor:pointer;
-  transition:background .15s;
+  transition:background .1s;
 }
 .merge-file-item:hover{
   background:var(--panel2);
 }
-.merge-file-item.selected{
+.merge-file-item.checked{
   background:rgba(94,162,255,.1);
+  border-left:2px solid var(--accent);
 }
 .merge-file-item input[type="checkbox"]{
   accent-color:var(--accent);
+  flex-shrink:0;
+  margin:0;
+  width:13px;
+  height:13px;
 }
-.merge-file-item .action-tag{
+.merge-ops-hidden{display:none!important;}
+  .merge-file-item .action-tag{
   font-size:10px;
   padding:1px 5px;
   border-radius:4px;
@@ -1241,9 +1273,17 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .merge-file-item .path{
   flex:1;
   overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  color:var(--sub);
+  min-width:0;
+}
+.merge-file-item .file-name{
+  color:var(--text);
+  font-weight:600;
+  font-size:12px;
+}
+.merge-file-item .file-dir{
+  color:var(--dim);
+  font-size:10px;
+  margin-left:4px;
 }
 .merge-file-ops{
   display:flex;
@@ -1262,6 +1302,52 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   text-align:center;
   color:var(--dim);
   font-size:13px;
+}
+.merge-settings-modal{
+  position:fixed;
+  top:0;left:0;right:0;bottom:0;
+  background:rgba(0,0,0,.55);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:1000;
+}
+.merge-settings-inner{
+  background:var(--panel);
+  border-radius:16px;
+  padding:24px;
+  min-width:480px;
+  max-width:560px;
+}
+.merge-settings-inner h3{
+  font-size:16px;
+  margin:0 0 4px;
+}
+.merge-settings-inner .sub{
+  font-size:12px;
+  color:var(--dim);
+  margin-bottom:16px;
+}
+.merge-settings-inner textarea{
+  width:100%;
+  min-height:100px;
+  background:var(--bg2);
+  border:1px solid var(--panel2);
+  border-radius:8px;
+  color:var(--text);
+  font-size:12px;
+  padding:8px;
+  resize:vertical;
+  font-family:inherit;
+}
+.merge-settings-inner .hint-text{
+  font-size:11px;
+  color:var(--dim);
+  margin-top:4px;
+}
+.merge-settings-inner .flex-row{
+  margin-top:16px;
+  justify-content:flex-end;
 }
 </style>
 </head>
@@ -1317,10 +1403,10 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 const S = {};
 const nav = [
   {key:"svn",label:"SVN 记录"},
-  {key:"upload",label:"复制上传"},
+  {key:"merge",label:"语义合并"},
+  {key:"upload",label:"复制合并"},
   {key:"workflow",label:"工作流"},
   {key:"translate",label:"翻译"},
-  {key:"merge",label:"SVN 合并"},
 ];
 nav.forEach(n => { S[n.key] = {el:null,built:false,logEl:null}; });
 const sidebarNav = document.getElementById("sidebar_nav");
@@ -1351,10 +1437,10 @@ async function saveConfig(updates) {
 }
 const tabMeta = {
   svn:{title:"SVN 记录",sub:"修改摘要、版本对比与导出工具"},
-  upload:{title:"复制上传",sub:"批量文件复制上传到 SVN 工作目录"},
+  merge:{title:"语义合并",sub:"精准文件级SVN版本合并 — 无需还原、无需清空本地修改"},
+  upload:{title:"复制合并",sub:"批量文件复制上传到 SVN 工作目录"},
   workflow:{title:"工作流",sub:"自动化 SVN 操作编排"},
   translate:{title:"翻译",sub:"Excel 多语言批量翻译工作台"},
-  merge:{title:"SVN 合并",sub:"精准文件级SVN版本合并 — 无需还原、无需清空本地修改"},
 };
 function switchTab(key) {
   nav.forEach(n => {
@@ -1381,10 +1467,10 @@ function buildTab(key) {
   setTimeout(() => {
     switch(key) {
       case "svn": buildSvnTab(panel); break;
+      case "merge": buildMergeTab(panel); break;
       case "upload": buildUploadTab(panel); break;
       case "workflow": buildWorkflowTab(panel); break;
       case "translate": buildTranslateTab(panel); break;
-      case "merge": buildMergeTab(panel); break;
     }
     S[key].built = true;
   }, 20);
@@ -2647,7 +2733,21 @@ function saveAdvSettings() {
       document.querySelector("[data-action='save-adv-settings']").textContent = "保存";
     });
 }
-let _mergeData = {versions:[], selectedRev:null, checkedFiles:{}, totalChecked:0};
+let _mergeData = {versions:[], checkedRevs:{}, checkedFiles:{}, totalChecked:0};
+function _getCheckedVersionFiles() {
+  const allFiles = {};
+  _mergeData.versions.forEach(v => {
+    if (_mergeData.checkedRevs[v.rev] && v.files) {
+      v.files.forEach(f => {
+        if (_isPathExcluded(f.path)) return;
+        if (!allFiles[f.path]) {
+          allFiles[f.path] = f;
+        }
+      });
+    }
+  });
+  return Object.values(allFiles);
+}
 function buildMergeTab(panel) {
   const today = `${cy}-${String(cm).padStart(2,"0")}-${String(cd).padStart(2,"0")}`;
   const yearStart = `${cy}-01-01`;
@@ -2663,9 +2763,7 @@ function buildMergeTab(panel) {
           <label>目标路径（合并落地的本地工作副本路径）</label>
           <input type="text" id="merge_target" placeholder="输入本地SVN工作副本路径，如 D:/workspace/project" autocomplete="off">
         </div>
-      </div>
-      <div class="card">
-        <div class="card-title">筛选条件</div>
+        <div class="card-title" style="margin-top:16px">筛选条件</div>
         <div class="form-group">
           <label>时间范围</label>
           <div class="flex-row" style="align-items:center">
@@ -2683,25 +2781,26 @@ function buildMergeTab(panel) {
           <input type="text" id="merge_keyword" placeholder="按提交备注模糊匹配">
         </div>
       </div>
-      <div class="card">
-        <div class="card-title">SVN 凭证</div>
-        <div class="form-group">
-          <label>用户名</label>
-          <input type="text" id="merge_user" placeholder="SVN账号（默认使用已保存的）" value="${escapeHtml(config.svn_user||"")}">
-        </div>
-        <div class="form-group">
-          <label>密码</label>
-          <input type="password" id="merge_pass" placeholder="SVN密码">
-        </div>
+      <div class="action-center merge-full" style="display:flex;gap:12px;justify-content:center;margin-bottom:0">
+        <button class="btn btn-primary" data-action="merge-query" id="merge_query_btn" style="min-width:180px">筛选查询</button>
+        <button class="btn btn-primary" data-action="merge-run" id="merge_run_btn" style="min-width:180px" disabled>开始合并</button>
       </div>
       <div class="merge-full">
         <div class="card" style="margin-bottom:0">
           <div class="card-header compact">
             <span style="font-weight:600">版本列表</span>
-            <span style="color:var(--dim);font-size:12px" id="merge_version_count"></span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button class="btn btn-normal btn-sm merge-ops-hidden" data-action="merge-ver-select-all" id="merge_ver_all_btn">全选</button>
+              <button class="btn btn-normal btn-sm merge-ops-hidden" data-action="merge-ver-select-invert" id="merge_ver_inv_btn">反选</button>
+              <button class="btn btn-normal btn-sm merge-ops-hidden" data-action="merge-ver-select-clear" id="merge_ver_clr_btn">清空</button>
+              <span style="color:var(--dim);font-size:12px" id="merge_version_count"></span>
+            </div>
           </div>
           <div class="merge-version-list" id="merge_version_list">
             <div class="merge-empty">请配置筛选条件后点击「筛选查询」</div>
+          </div>
+          <div class="merge-version-footer merge-ops-hidden" id="merge_version_footer">
+            <span class="count merge-ops-hidden" id="merge_version_count_bottom">已选 0 个</span>
           </div>
         </div>
       </div>
@@ -2709,22 +2808,19 @@ function buildMergeTab(panel) {
         <div class="card" style="margin-bottom:0">
           <div class="card-header compact">
             <span style="font-weight:600">变更文件</span>
-            <span style="color:var(--dim);font-size:12px" id="merge_file_hint">请先选择一个版本</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button class="btn btn-normal btn-sm merge-ops-hidden" data-action="merge-select-all" id="merge_file_all_btn">全选</button>
+              <button class="btn btn-normal btn-sm merge-ops-hidden" data-action="merge-select-invert" id="merge_file_inv_btn">反选</button>
+              <button class="btn btn-normal btn-sm merge-ops-hidden" data-action="merge-select-clear" id="merge_file_clr_btn">清空</button>
+              <span style="color:var(--dim);font-size:12px" id="merge_file_hint">请先选择一个版本</span>
+              <span class="count merge-ops-hidden" id="merge_file_count">已选 0 个文件</span>
+              <button class="btn btn-normal btn-sm" data-action="merge-file-settings" title="排除路径设置" style="font-size:14px;padding:0 6px">⚙</button>
+            </div>
           </div>
           <div class="merge-file-list" id="merge_file_list">
             <div class="merge-empty">请先在左侧选择一个版本查看变更文件</div>
           </div>
-          <div class="merge-file-ops">
-            <button class="btn btn-normal btn-sm" data-action="merge-select-all">全选</button>
-            <button class="btn btn-normal btn-sm" data-action="merge-select-invert">反选</button>
-            <button class="btn btn-normal btn-sm" data-action="merge-select-clear">清空</button>
-            <span class="count" id="merge_file_count">已选 0 个文件</span>
-          </div>
         </div>
-      </div>
-      <div class="action-center merge-full" style="display:flex;gap:12px;justify-content:center">
-        <button class="btn btn-primary" data-action="merge-query" id="merge_query_btn" style="min-width:180px">筛选查询</button>
-        <button class="btn btn-primary" data-action="merge-run" id="merge_run_btn" style="min-width:180px" disabled>开始精准合并</button>
       </div>
       <div class="merge-full">
         <div class="card">
@@ -2777,6 +2873,8 @@ async function runMergeQuery() {
   btn.disabled = true;
   const orig = btn.textContent;
   btn.innerHTML = '<span class="spinner"></span>查询中...';
+  const logEl = document.getElementById("merge_log");
+  logEl.innerHTML = "";
   try {
     const body = {
       source_url: sourceUrl,
@@ -2784,31 +2882,60 @@ async function runMergeQuery() {
       end_date: endDate,
       author: document.getElementById("merge_author").value.trim() || "",
       keyword: document.getElementById("merge_keyword").value.trim() || "",
-      svn_user: document.getElementById("merge_user").value.trim() || undefined,
-      svn_pass: document.getElementById("merge_pass").value || undefined,
     };
     saveConfig({svn_urls:[sourceUrl, ...(config.svn_urls||[]).filter(u=>u!==sourceUrl)].slice(0,20)});
     config.svn_urls = [sourceUrl, ...(config.svn_urls||[]).filter(u=>u!==sourceUrl)].slice(0,20);
     initSuggest("merge_source", config.svn_urls);
     const r = await fetch("/api/merge/query", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await r.json();
-    if (d.error) { _showToast(d.error); return; }
-    _mergeData.versions = d.versions || [];
-    _mergeData.selectedRev = null;
-    _mergeData.checkedFiles = {};
-    _mergeData.totalChecked = 0;
-    renderMergeVersions();
-    document.getElementById("merge_file_list").innerHTML = '<div class="merge-empty">请先在左侧选择一个版本查看变更文件</div>';
-    document.getElementById("merge_file_hint").textContent = "请先选择一个版本";
-    document.getElementById("merge_file_count").textContent = "已选 0 个文件";
-    document.getElementById("merge_run_btn").disabled = true;
-    document.getElementById("merge_version_count").textContent = d.total ? `共 ${d.total} 个版本` : "";
-    if (!d.total) {
-      document.getElementById("merge_version_list").innerHTML = '<div class="merge-empty">暂无符合筛选条件的版本记录</div>';
-    }
-  } finally {
+    if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent=orig; return; }
+    const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
+    let resultData = null;
+    evtSrc.onmessage = (e) => {
+      if (e.data === "[DONE]") {
+        evtSrc.close();
+        btn.disabled = false;
+        btn.textContent = orig;
+        const sb = document.getElementById("status_bar");
+        if (sb) { sb.classList.remove("running"); const sp = sb.querySelector("span"); if (sp) sp.textContent = "系统空闲"; }
+        if (resultData) {
+          if (resultData.ok) {
+            _mergeData.versions = resultData.versions || [];
+            _mergeData.checkedRevs = {};
+            _mergeData.checkedFiles = {};
+            _mergeData.totalChecked = 0;
+            renderMergeVersions();
+            document.getElementById("merge_file_list").innerHTML = '<div class="merge-empty">请勾选版本查看变更文件</div>';
+            document.getElementById("merge_file_hint").textContent = "请勾选需要合并的版本";
+            document.getElementById("merge_file_count").textContent = "已选 0 个文件";
+            document.getElementById("merge_run_btn").disabled = true;
+            document.getElementById("merge_version_count").textContent = resultData.total ? `共 ${resultData.total} 个版本` : "";
+            if (!resultData.total) {
+              document.getElementById("merge_version_list").innerHTML = '<div class="merge-empty">暂无符合筛选条件的版本记录</div>';
+            }
+          } else {
+            _showToast(resultData.error || "查询失败");
+          }
+        }
+        return;
+      }
+      if (e.data.startsWith("[RESULT]")) {
+        try { resultData = JSON.parse(e.data.slice(8)); } catch(_) {}
+        return;
+      }
+      for (const raw of e.data.split("\n")) {
+        if (!raw.trim()) continue;
+        const div = document.createElement("div");
+        div.textContent = raw;
+        logEl.appendChild(div);
+      }
+      const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 32;
+      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+    };
+  } catch (err) {
     btn.disabled = false;
     btn.textContent = orig;
+    _showToast("请求失败: " + err.message);
   }
 }
 function renderMergeVersions() {
@@ -2816,19 +2943,118 @@ function renderMergeVersions() {
   const versions = _mergeData.versions;
   if (!versions.length) {
     container.innerHTML = '<div class="merge-empty">暂无符合筛选条件的版本记录</div>';
+    document.getElementById("merge_ver_all_btn").classList.add("merge-ops-hidden");
+    document.getElementById("merge_ver_inv_btn").classList.add("merge-ops-hidden");
+    document.getElementById("merge_ver_clr_btn").classList.add("merge-ops-hidden");
+    document.getElementById("merge_version_footer").classList.add("merge-ops-hidden");
     return;
   }
+  document.getElementById("merge_ver_all_btn").classList.remove("merge-ops-hidden");
+  document.getElementById("merge_ver_inv_btn").classList.remove("merge-ops-hidden");
+  document.getElementById("merge_ver_clr_btn").classList.remove("merge-ops-hidden");
+  document.getElementById("merge_version_footer").classList.remove("merge-ops-hidden");
   container.innerHTML = versions.map((v, i) => {
-    const active = _mergeData.selectedRev === v.rev ? " active" : "";
+    const checked = _mergeData.checkedRevs[v.rev] ? " checked" : "";
+    const cls = _mergeData.checkedRevs[v.rev] ? " checked" : "";
     const dateStr = (v.date||"").slice(0, 10);
     const msgShort = (v.msg||"").slice(0, 60);
-    return `<div class="merge-version-item${active}" data-rev="${v.rev}" data-idx="${i}">
+    return `<div class="merge-version-item${cls}" data-rev="${v.rev}" data-idx="${i}">
+      <input type="checkbox"${checked}>
       <span class="rev">r${v.rev}</span>
       <span class="date">${dateStr}</span>
-      <span class="author">${escapeHtml(v.author)}</span>
-      <span class="msg" title="${escapeHtml(v.msg)}">${escapeHtml(msgShort)}</span>
+      <span class="am-wrap"><span class="author">${escapeHtml(v.author)}</span><span class="msg" title="${escapeHtml(v.msg)}">${escapeHtml(msgShort)}</span></span>
     </div>`;
   }).join("");
+  _refreshMergeFileList();
+}
+function _refreshMergeFileList() {
+  const files = _getCheckedVersionFiles();
+  const hintEl = document.getElementById("merge_file_hint");
+  const fileAllBtn = document.getElementById("merge_file_all_btn");
+  const fileInvBtn = document.getElementById("merge_file_inv_btn");
+  const fileClrBtn = document.getElementById("merge_file_clr_btn");
+  const fileCount = document.getElementById("merge_file_count");
+  if (!files.length) {
+    document.getElementById("merge_file_list").innerHTML = '<div class="merge-empty">请勾选版本查看变更文件</div>';
+    hintEl.textContent = "请勾选需要合并的版本";
+    fileAllBtn.classList.add("merge-ops-hidden");
+    fileInvBtn.classList.add("merge-ops-hidden");
+    fileClrBtn.classList.add("merge-ops-hidden");
+    fileCount.classList.add("merge-ops-hidden");
+  } else {
+    hintEl.textContent = `共 ${files.length} 个文件`;
+    fileAllBtn.classList.remove("merge-ops-hidden");
+    fileInvBtn.classList.remove("merge-ops-hidden");
+    fileClrBtn.classList.remove("merge-ops-hidden");
+    fileCount.classList.remove("merge-ops-hidden");
+    renderMergeFiles(files);
+  }
+  _updateMergeFileCount();
+  _updateMergeVersionCount();
+}
+function _updateMergeVersionCount() {
+  const el = document.getElementById("merge_version_count_bottom");
+  const total = Object.keys(_mergeData.checkedRevs).length;
+  if (total > 0) {
+    el.textContent = `已选 ${total} 个`;
+    el.classList.remove("merge-ops-hidden");
+  } else {
+    el.classList.add("merge-ops-hidden");
+  }
+}
+let _mergeSettingsModal = null;
+function openMergeSettings() {
+  if (_mergeSettingsModal) {
+    _mergeSettingsModal.style.display = "flex";
+    return;
+  }
+  const modal = document.createElement("div");
+  modal.className = "merge-settings-modal";
+  modal.innerHTML = `
+    <div class="merge-settings-inner">
+      <h3>文件排除设置</h3>
+      <div class="sub">屏蔽指定路径下的所有子文件夹及文件，每行一个路径</div>
+      <textarea id="merge_exclude_paths_input" placeholder="Assets/Plugins&#10;Assets/StreamingAssets&#10;BinData"></textarea>
+      <div class="hint-text">匹配到的路径（及其子文件）将从变更文件列表中隐藏</div>
+      <div class="flex-row">
+        <button class="btn btn-normal" id="merge_settings_cancel">取消</button>
+        <button class="btn btn-primary" id="merge_settings_save">保存</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  _mergeSettingsModal = modal;
+  modal.querySelector("#merge_settings_cancel").addEventListener("click", () => {
+    modal.style.display = "none";
+  });
+  modal.querySelector("#merge_settings_save").addEventListener("click", () => {
+    const val = document.getElementById("merge_exclude_paths_input").value.trim();
+    const paths = val ? val.split("\n").map(s => s.trim().replace(/\\/g,"/")).filter(Boolean) : [];
+    saveConfig({merge_exclude_paths: paths});
+    modal.style.display = "none";
+    _refreshMergeFileList();
+  });
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.style.display = "none";
+  });
+  const saved = config.merge_exclude_paths || [];
+  document.getElementById("merge_exclude_paths_input").value = saved.join("\n");
+}
+function _isPathExcluded(path) {
+  const excludePaths = config.merge_exclude_paths || [];
+  if (!excludePaths.length) return false;
+  const normalized = path.replace(/\\/g, "/");
+  return excludePaths.some(ex => normalized === ex || normalized.startsWith(ex + "/"));
+}
+function _basename(p) {
+  p = p.replace(/\/$/, "");
+  const idx = p.lastIndexOf("/");
+  return idx >= 0 ? p.substring(idx + 1) : p;
+}
+function _dirname(p) {
+  p = p.replace(/\/$/, "");
+  const idx = p.lastIndexOf("/");
+  return idx >= 0 ? p.substring(0, idx) : "";
 }
 function renderMergeFiles(files) {
   const container = document.getElementById("merge_file_list");
@@ -2841,20 +3067,22 @@ function renderMergeFiles(files) {
     const path = f.path || "";
     const action = f.action || "";
     const checked = _mergeData.checkedFiles[path] ? " checked" : "";
-    const selected = _mergeData.checkedFiles[path] ? " selected" : "";
-    return `<div class="merge-file-item${selected}" data-path="${escapeHtml(path)}" data-idx="${i}">
+    const name = _basename(path);
+    const dir = _dirname(path);
+    return `<div class="merge-file-item${checked}" data-path="${escapeHtml(path)}" data-idx="${i}">
       <input type="checkbox"${checked}>
       <span class="action-tag ${action}">${actionCn[action]||action}</span>
-      <span class="path" title="${escapeHtml(path)}">${escapeHtml(path)}</span>
+      <span class="path" title="${escapeHtml(path)}"><span class="file-name">${escapeHtml(name)}</span> <span class="file-dir">${escapeHtml(dir)}</span></span>
     </div>`;
   }).join("");
   _updateMergeFileCount();
 }
 function _updateMergeFileCount() {
   const total = _mergeData.totalChecked;
-  document.getElementById("merge_file_count").textContent = `已选 ${total} 个文件`;
+  const el = document.getElementById("merge_file_count");
+  el.textContent = `已选 ${total} 个文件`;
+  el.classList.toggle("merge-ops-hidden", total === 0);
   document.getElementById("merge_run_btn").disabled = total === 0;
-  document.getElementById("merge_file_hint").textContent = total ? `已选 ${total} 个文件` : "请勾选需要合并的文件";
 }
 function _toggleMergeFile(path) {
   _mergeData.checkedFiles[path] = !_mergeData.checkedFiles[path];
@@ -2866,7 +3094,7 @@ function _toggleMergeFile(path) {
   const items = document.querySelectorAll("#merge_file_list .merge-file-item");
   items.forEach(el => {
     if (el.dataset.path === path) {
-      el.classList.toggle("selected", _mergeData.checkedFiles[path]);
+      el.classList.toggle("checked", _mergeData.checkedFiles[path]);
       el.querySelector("input[type='checkbox']").checked = _mergeData.checkedFiles[path];
     }
   });
@@ -2880,7 +3108,7 @@ function _selectAllMergeFiles(select) {
     _mergeData.checkedFiles[path] = select;
     if (select && !was) _mergeData.totalChecked++;
     if (!select && was) _mergeData.totalChecked--;
-    el.classList.toggle("selected", select);
+    el.classList.toggle("checked", select);
     el.querySelector("input[type='checkbox']").checked = select;
   });
   _updateMergeFileCount();
@@ -2892,8 +3120,8 @@ async function runMergeRun() {
   if (!targetPath) { _showToast("请输入目标路径"); return; }
   const checkedPaths = Object.keys(_mergeData.checkedFiles).filter(k => _mergeData.checkedFiles[k]);
   if (!checkedPaths.length) { _showToast("请至少选择一个文件"); return; }
-  const allRevs = _mergeData.versions.map(v => v.rev);
-  if (!allRevs.length) { _showToast("没有可合并的版本"); return; }
+  const checkedRevs = Object.keys(_mergeData.checkedRevs).map(Number);
+  if (!checkedRevs.length) { _showToast("请至少勾选一个版本"); return; }
   const btn = document.getElementById("merge_run_btn");
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>合并中...';
@@ -2902,10 +3130,8 @@ async function runMergeRun() {
   const body = {
     source_url: sourceUrl,
     target_path: targetPath,
-    revisions: allRevs,
+    revisions: checkedRevs,
     files: checkedPaths.map(p => ({path: p})),
-    svn_user: document.getElementById("merge_user").value.trim() || undefined,
-    svn_pass: document.getElementById("merge_pass").value || undefined,
   };
   try {
     const r = await fetch("/api/merge/run", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
@@ -3042,6 +3268,25 @@ document.addEventListener("click",e=>{
       break;
     }
     case "merge-select-clear": _selectAllMergeFiles(false); break;
+    case "merge-ver-select-all": {
+      _mergeData.versions.forEach(v => { _mergeData.checkedRevs[v.rev] = true; });
+      renderMergeVersions();
+      _updateMergeVersionCount();
+      break;
+    }
+    case "merge-ver-select-invert": {
+      _mergeData.versions.forEach(v => { _mergeData.checkedRevs[v.rev] = !_mergeData.checkedRevs[v.rev]; });
+      renderMergeVersions();
+      _updateMergeVersionCount();
+      break;
+    }
+    case "merge-ver-select-clear": {
+      _mergeData.versions.forEach(v => { _mergeData.checkedRevs[v.rev] = false; });
+      renderMergeVersions();
+      _updateMergeVersionCount();
+      break;
+    }
+    case "merge-file-settings": openMergeSettings(); break;
   }
 });
 document.addEventListener("change",e=>{
@@ -3080,17 +3325,26 @@ document.addEventListener("click",e=>{
 document.addEventListener("click", e => {
   const item = e.target.closest(".merge-version-item");
   if (!item) return;
+  if (e.target.closest("input[type='checkbox']")) return;
   const rev = Number(item.dataset.rev);
-  if (_mergeData.selectedRev === rev) return;
-  document.querySelectorAll(".merge-version-item").forEach(el => el.classList.remove("active"));
-  item.classList.add("active");
-  _mergeData.selectedRev = rev;
-  const v = _mergeData.versions.find(x => x.rev === rev);
-  if (v && v.files) {
-    renderMergeFiles(v.files);
-  } else {
-    document.getElementById("merge_file_list").innerHTML = '<div class="merge-empty">该版本无变更文件</div>';
-  }
+  const was = _mergeData.checkedRevs[rev];
+  _mergeData.checkedRevs[rev] = !was;
+  item.classList.toggle("checked", !was);
+  const cb = item.querySelector("input[type='checkbox']");
+  if (cb) cb.checked = !was;
+  _refreshMergeFileList();
+  _updateMergeVersionCount();
+});
+document.addEventListener("change", e => {
+  const item = e.target.closest(".merge-version-item input[type='checkbox']");
+  if (!item) return;
+  const verItem = item.closest(".merge-version-item");
+  if (!verItem) return;
+  const rev = Number(verItem.dataset.rev);
+  _mergeData.checkedRevs[rev] = item.checked;
+  verItem.classList.toggle("checked", item.checked);
+  _refreshMergeFileList();
+  _updateMergeVersionCount();
 });
 document.addEventListener("change", e => {
   if (!e.target.matches("#merge_file_list .merge-file-item input[type='checkbox']")) return;

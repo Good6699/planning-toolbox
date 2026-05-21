@@ -742,6 +742,34 @@ input::placeholder,textarea::placeholder{
 .wf-log-wrap{
   grid-column:1 / -1;
 }
+.wf-log-section{
+  margin-bottom:0;
+}
+.wf-log-section-header{
+  font-size:12px;
+  font-weight:600;
+  color:var(--accent);
+  padding:8px 0 4px 0;
+}
+.wf-log-section:first-child .wf-log-section-header{
+  padding-top:0;
+}
+.wf-log-body{
+  background:#090b10;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,.05);
+  padding:10px;
+  height:320px;
+  min-height:320px;
+  max-height:320px;
+  overflow:auto;
+  font-family:"Cascadia Code",Consolas,"Courier New",monospace;
+  font-size:12px;
+  line-height:1.65;
+  color:var(--sub);
+  -webkit-user-select:text;
+  user-select:text;
+}
 .svn-main,
 .upload-main,
 .tr-main{
@@ -1493,7 +1521,14 @@ function buildWorkflowTab(panel) {
       });
       if (!stepIndices.length) { _showToast("请先勾选要执行的步骤"); return; }
       const wfName = el.querySelector(".wf-parent-name").textContent;
-      runTask("/api/workflow/run", {wf_idx: Number(el.dataset.idx), step_indices: stepIndices}, null, "wf_log", wfName);
+      const wfIdx = Number(el.dataset.idx);
+      const logContainer = document.getElementById("wf_log");
+      const bodyId = "wf_log_" + wfIdx + "_" + Date.now();
+      const section = document.createElement("div");
+      section.className = "wf-log-section";
+      section.innerHTML = `<div class="wf-log-section-header">${escapeHtml(wfName)}</div><div class="wf-log-body" id="${bodyId}"></div>`;
+      logContainer.appendChild(section);
+      runTask("/api/workflow/run", {wf_idx: wfIdx, step_indices: stepIndices}, null, bodyId, wfName);
     });
   });
 
@@ -1712,13 +1747,24 @@ function runWorkflow() {
     byWf[p.wf_idx].push(p.step_idx);
   });
   const keys = Object.keys(byWf).map(Number).sort();
-  const wfNames = {};
-  document.querySelectorAll(".wf-parent").forEach(el => {
-    wfNames[Number(el.dataset.idx)] = el.querySelector(".wf-parent-name").textContent;
-  });
-  keys.forEach(wfIdx => {
-    runTask("/api/workflow/run", {wf_idx: wfIdx, step_indices: byWf[wfIdx]}, null, "wf_log", wfNames[wfIdx] || `工作流${wfIdx}`);
-  });
+    const wfNames = {};
+    document.querySelectorAll(".wf-parent").forEach(el => {
+      wfNames[Number(el.dataset.idx)] = el.querySelector(".wf-parent-name").textContent;
+    });
+    const logContainer = document.getElementById("wf_log");
+    logContainer.innerHTML = "";
+    keys.forEach(wfIdx => {
+      const name = wfNames[wfIdx] || `工作流${wfIdx}`;
+      const section = document.createElement("div");
+      section.className = "wf-log-section";
+      section.innerHTML = `<div class="wf-log-section-header">${escapeHtml(name)}</div><div class="wf-log-body" data-wf="${wfIdx}"></div>`;
+      logContainer.appendChild(section);
+    });
+    keys.forEach(wfIdx => {
+      const body = logContainer.querySelector(`.wf-log-body[data-wf="${wfIdx}"]`);
+      const name = wfNames[wfIdx] || `工作流${wfIdx}`;
+      runTask("/api/workflow/run", {wf_idx: wfIdx, step_indices: byWf[wfIdx]}, null, body.id || (body.id = "wf_log_"+wfIdx+"_"+Date.now()), name);
+    });
 }
 function escapeHtml(s){
   return (s||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -1977,7 +2023,6 @@ async function runTask(url, body, btn, logId, label) {
   const logEl = document.getElementById(logId);
   if (label) {
     if (_wfRunningTasks === 0) {
-      logEl.innerHTML = "";
       const statusBar = document.getElementById("status_bar");
       statusBar.classList.add("running");
       statusBar.querySelector("span").textContent = "运行中";

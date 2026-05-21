@@ -20,7 +20,7 @@ if os.path.isdir(_pm) and _pm not in sys.path:
     sys.path.insert(0, _pm)
 sys.path.insert(0, _script_dir)
 
-from flask import Flask, render_template, request, jsonify, Response, send_from_directory  # noqa: E402
+from flask import Flask, render_template, request, jsonify, Response, send_from_directory, stream_with_context  # noqa: E402
 from toolbox_config import (  # noqa: E402
     SCRIPT_DIR, MAIN_SCRIPT, DEFAULT_OUTPUT_DIR,
     load_config, save_config,
@@ -1636,15 +1636,15 @@ def api_log_stream(task_id):
                 if line is None:
                     yield "data: [DONE]\n\n"
                     break
-                # SSE data field: newlines inside data get collapsed by HTML.
-                # Use \n inside data payload — frontend splits and renders.
                 yield f"data: {line}\n\n"
             except queue.Empty:
                 yield "data: \n\n"
 
-    response = Response(_stream(), mimetype="text/event-stream")
-    response.headers["Cache-Control"] = "no-cache"
+    response = Response(stream_with_context(_stream()),
+                        mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["X-Accel-Buffering"] = "no"
+    response.headers["Connection"] = "keep-alive"
     return response
 
 # ═══════════════════════════════════════════════════════════

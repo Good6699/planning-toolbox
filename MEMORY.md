@@ -261,8 +261,15 @@
 - **关键经验**：
   - `autopep8` 只支持 E30/E12/E10 等格式类修复，不支持 E722（bare except）和 C901（圈复杂度）
   - E722 批量替换：用 Python `re.sub(r'^(\s*)except:\s', r'\1except Exception: ', content, flags=re.MULTILINE)` 安全替换所有裸 except
-  - C901 拆分模式：提取嵌套 `def _run()` 为模块级函数，通过 args 参数传递闭包变量
+  - **C901 拆分模式**：提取嵌套 `def _run()` 为模块级函数，通过 args 参数传递闭包变量
 - **涉及文件**：`desktop_main.py`、`toolbox_tab_upload.py`、`toolbox_tab_workflow.py`、`web_app.py`
+
+### _cmp_worker.py 被 flake8 清理误删
+- **场景**：2026-05-21 执行 SVN 对比时所有子进程报错 `exit=2`，提示 `can't open file '_cmp_worker.py'`。该文件被 Round 1 的 F841（删除未使用变量）清理中误删，但实际 `svn_oneclick_compare.py` 将其作为子进程通过 `sys.executable` 启动，属于跨进程调用而非模块导入，flake8 无法识别为"已使用"。
+- **根因**：`_cmp_worker.py` 被 `svn_oneclick_compare.py` 通过 `subprocess.Popen([sys.executable, worker_script, ...])` 方式调用，不是 `import` 或 `from` 导入。flake8 静态分析只看 Python 级导入（`import X` / `from X import Y`），无法检测到字符串形式的子进程脚本路径，F841/F401 规则将其视为"未使用的文件"误删。
+- **教训**：flake8 清理（特别是 F401/F841）**不可自动删除文件**，只能清代码引用。跨进程调用的脚本文件（`_cmp_worker.py`、`_github_push.py` 等）必须手动确认是否被 `subprocess`/`os.system`/`Popen` 等 API 使用。
+- **恢复方法**：`git checkout <删除前一个提交>^ -- _cmp_worker.py` 从 git 历史恢复文件
+- **涉及文件**：[_cmp_worker.py](file:///c:/Users/admin/.qclaw/workspace/_cmp_worker.py)
 - **全对判断**：`!q.answered || answerSelectedIndex===undefined` 任一未答即不算全对
 - **脚本位置**：`自动学习/auto_exam.js`
 

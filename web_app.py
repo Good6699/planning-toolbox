@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """策划工具箱 - Web 版本 (Flask 后端)"""
-import sys, os, json, signal, subprocess, threading, queue, time, shutil, stat, concurrent.futures
+import sys
+import os
+import json
+import signal
+import subprocess
+import threading
+import queue
+import time
+import shutil
+import stat
+import concurrent.futures
 from datetime import datetime
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -10,13 +20,13 @@ if os.path.isdir(_pm) and _pm not in sys.path:
     sys.path.insert(0, _pm)
 sys.path.insert(0, _script_dir)
 
-from flask import Flask, render_template, request, jsonify, Response, send_from_directory
-from toolbox_config import (
+from flask import Flask, render_template, request, jsonify, Response, send_from_directory  # noqa: E402
+from toolbox_config import (  # noqa: E402
     SCRIPT_DIR, MAIN_SCRIPT, DEFAULT_OUTPUT_DIR,
     load_config, save_config,
 )
-from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock
-from xlsm_zipper import apply_via_excel
+from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock  # noqa: E402
+from xlsm_zipper import apply_via_excel  # noqa: E402
 
 if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
     if len(sys.argv) < 3:
@@ -215,7 +225,8 @@ def api_svn_run():
                     os.remove(fpath)
                 elif os.path.isdir(fpath):
                     shutil.rmtree(fpath)
-            except: pass
+            except Exception:
+                pass
 
     task_id = _get_next_task_id()
     q = queue.Queue()
@@ -223,7 +234,7 @@ def api_svn_run():
 
     def _run():
         q.put(f"{'='*50}\n")
-        q.put(f"开始执行\n")
+        q.put("开始执行\n")
         q.put(f"模式: {mode}\n")
         q.put(f"SVN URL: {svn_url}\n")
         q.put(f"日期范围: {start_date} ~ {end_date}\n")
@@ -328,8 +339,10 @@ def api_file_list():
                     total = 0
                     for r, _, fs in os.walk(fp):
                         for f in fs:
-                            try: total += os.path.getsize(os.path.join(r, f))
-                            except: pass
+                            try:
+                                total += os.path.getsize(os.path.join(r, f))
+                            except Exception:
+                                pass
                     size = total
                 else:
                     size = st.st_size
@@ -386,7 +399,8 @@ def api_dir_browse():
             fp = os.path.join(path, name)
             if os.path.isdir(fp) and not name.startswith("."):
                 dirs.append({"name": name, "path": fp})
-    except: pass
+    except Exception:
+        pass
 
     parent = os.path.dirname(path) if path else ""
     return jsonify({"dirs": dirs, "current": os.path.normpath(path), "parent": parent, "drives": _get_drives()})
@@ -414,7 +428,8 @@ def api_upload_run():
     cfg = load_config()
     for k, v in [("src_dir_history", src), ("tgt_dir_history", tgt)]:
         hist = cfg.get(k, [])
-        if v in hist: hist.remove(v)
+        if v in hist:
+            hist.remove(v)
         hist.insert(0, v)
         cfg[k] = hist[:20]
     save_config(cfg)
@@ -425,7 +440,7 @@ def api_upload_run():
 
     def _run():
         q.put(f"{'='*50}\n")
-        q.put(f"开始上传\n")
+        q.put("开始上传\n")
         q.put(f"源: {src}\n")
         q.put(f"目标: {tgt}\n\n")
 
@@ -1152,7 +1167,7 @@ def api_translate_run():
         import re as _re
 
         q.put(f"{'='*50}\n")
-        q.put(f"开始翻译\n")
+        q.put("开始翻译\n")
         q.put(f"源文件: {src_path}\n")
         q.put(f"源语言: {src_lang}\n")
         q.put(f"目标语言: {', '.join(tgt_langs)}\n")

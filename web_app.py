@@ -92,11 +92,12 @@ def _handle_shutdown(signum, frame):
     _log_queues.clear()
     sys.exit(0)
 
-try:
-    signal.signal(signal.SIGTERM, _handle_shutdown)
-except AttributeError:
-    pass
-signal.signal(signal.SIGINT, _handle_shutdown)
+if threading.current_thread() is threading.main_thread():
+    try:
+        signal.signal(signal.SIGTERM, _handle_shutdown)
+    except AttributeError:
+        pass
+    signal.signal(signal.SIGINT, _handle_shutdown)
 
 # ═══════════════════════════════════════════════════════════
 # 页面

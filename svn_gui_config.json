@@ -1,7 +1,7 @@
 {
   "svn_urls": [
-    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/gameData",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/Client",
@@ -27,9 +27,11 @@
   "global_cmp_id_col": "::ID::",
   "cmp_global_id_col": "",
   "src_dir_history": [
+    "C:\\Users\\admin\\.qclaw\\workspace\\输出\\裂隙",
     "C:\\Users\\admin\\.qclaw\\workspace\\输出"
   ],
   "tgt_dir_history": [
+    "G:\\D3_KR2\\gameData\\Text",
     "G:/D3_JP/Client"
   ],
   "workflows": [
@@ -314,8 +316,8 @@
     "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
   ],
   "svn_keyword_history": [
-    "腐败秘境",
-    "裂隙"
+    "裂隙",
+    "腐败秘境"
   ],
   "svn_author_history": [
     "gaoyang"

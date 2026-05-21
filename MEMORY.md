@@ -128,6 +128,13 @@
 - **解决方案**：改用 `if (sb) { sb.classList.remove("running"); ... }` 安全守卫
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### 严格禁止修改与当前功能无关的文件
+- **场景**：在实现SVN精准文件合并功能时，"顺手"修改了 `desktop_main.py` 的 ctypes 窗口子类化参数类型（`c_longlong` → `wintypes`），导致窗口拖动闪现和关闭按钮异常
+- **根因**：违反了"只改用户指定的部分，其他保持原样"的纪律。`desktop_main.py` 的窗口子类化在原始版本中工作正常，无需改动。修改一个非目标文件引入了两个新 bug（拖拽闪现 + 关闭异常），调试时间远超 SVN 合并功能本身的开发时间
+- **解决方案**：用 `git checkout <正常版本> -- desktop_main.py` 恢复文件到原始版本。窗口拖拽闪现 bug 在原始代码中已存在（`SetWindowLongPtrW` 未设 `argtypes` 导致 64 位指针截断），不是本次功能引入
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/desktop_main.py)
+- **教训**：修改代码前必须先 `git diff` 确认当前修改仅涉及目标文件。发现任何非目标文件在 diff 中出现时立即停止
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

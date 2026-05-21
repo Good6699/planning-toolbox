@@ -381,6 +381,7 @@ input::placeholder,textarea::placeholder{
   border-radius:10px;
   overflow:hidden;
   transition:.2s;
+  position:relative;
 }
 .wf-parent.expanded{
   background:rgba(94,162,255,.04);
@@ -423,18 +424,37 @@ input::placeholder,textarea::placeholder{
   flex-shrink:0;
 }
 .wf-parent-name{
+  font-weight:600;
+  font-size:14px;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.wf-parent-name .wf-edit-icon{
+  display:inline-block;
+  vertical-align:middle;
+  margin-left:4px;
+  opacity:.25;
+  transition:opacity .15s;
+  line-height:1;
+}
+.wf-parent-name:hover .wf-edit-icon{
+  opacity:.6;
+}
+.wf-name-input{
   flex:1;
   font-weight:600;
   font-size:14px;
-}
-.wf-parent-badge{
-  font-size:11px;
-  color:var(--dim);
-  background:rgba(255,255,255,.05);
-  padding:2px 8px;
+  background:rgba(255,255,255,.06);
+  border:1px solid var(--accent);
   border-radius:5px;
+  color:var(--text);
+  padding:2px 8px;
+  outline:none;
+  height:28px;
+  min-width:60px;
 }
 .wf-play-btn{
+  margin-left:auto;
   width:26px;
   height:26px;
   display:flex;
@@ -456,16 +476,30 @@ input::placeholder,textarea::placeholder{
   color:#fff;
   transform:scale(1.12);
 }
-.wf-copy-btn,.wf-del-btn{
+.wf-copy-btn{
   width:26px;height:26px;
   display:flex;align-items:center;justify-content:center;
-  border:none;background:transparent;
-  border-radius:6px;color:var(--dim);
+  border:none;background:rgba(94,162,255,.1);
+  border-radius:6px;color:var(--accent);
   cursor:pointer;font-size:12px;
   transition:.15s;flex-shrink:0;
   padding:0;line-height:1;
 }
-.wf-copy-btn:hover{background:rgba(94,162,255,.1);color:var(--accent);}
+.wf-copy-btn:hover{
+  background:rgba(94,162,255,.25);
+  color:#fff;
+  transform:scale(1.12);
+}
+.wf-del-btn{
+  position:absolute;top:0;right:0;
+  width:22px;height:22px;
+  display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;
+  color:var(--dim);
+  cursor:pointer;font-size:11px;
+  transition:.15s;padding:0;line-height:1;
+  z-index:2;
+}
 .wf-del-btn:hover{background:rgba(244,71,71,.15);color:var(--danger);}
 .wf-children{
   display:none;
@@ -485,6 +519,7 @@ input::placeholder,textarea::placeholder{
   background:rgba(255,255,255,.025);
   border:1px solid rgba(255,255,255,.04);
   transition:.18s;
+  position:relative;
 }
 .wf-child:hover{
   background:rgba(255,255,255,.04);
@@ -538,30 +573,31 @@ input::placeholder,textarea::placeholder{
   transition:.15s;
   flex-shrink:0;
   font-size:14px;
+  margin-right:5px;
 }
 .wf-settings-btn:hover{
   background:rgba(94,162,255,.15);
   color:var(--accent);
 }
 .wf-child-del-btn{
-  width:28px;
-  height:28px;
+  position:absolute;top:0;right:0;
+  width:22px;height:22px;
   display:flex;
   align-items:center;
   justify-content:center;
   border:none;
   background:transparent;
-  border-radius:6px;
   color:var(--dim);
   cursor:pointer;
+  font-size:11px;
   transition:.15s;
-  flex-shrink:0;
-  font-size:14px;
-  margin-left:-6px;
+  padding:0;
+  line-height:1;
+  z-index:2;
 }
 .wf-child-del-btn:hover{
-  background:rgba(255,80,80,.15);
-  color:#ff5050;
+  background:rgba(244,71,71,.12);
+  color:var(--danger);
 }
 .wf-toolbar{
   display:flex;
@@ -1497,12 +1533,11 @@ function buildWorkflowTab(panel) {
               <div class="wf-parent-header">
                 <span class="wf-arrow">▶</span>
                 <input type="checkbox" class="wf-parent-check">
-                <span class="wf-parent-name">${escapeHtml(wf.name)}</span>
+                <span class="wf-parent-name">${escapeHtml(wf.name)}&nbsp;&nbsp;<span style="color:var(--dim);font-weight:400">${(wf.steps||[]).length}步骤</span><span class="wf-edit-icon"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5L10.5 3.5"/><path d="M2 10L3.5 6.5L8.5 1.5L10.5 3.5L5.5 8.5L2 10Z"/></svg></span></span>
                 <button class="wf-play-btn" title="执行本工作流勾选的步骤">▶</button>
-                <button class="wf-copy-btn" title="复制工作流">📋</button>
-                <span class="wf-parent-badge">${(wf.steps||[]).length} 步骤</span>
-                <button class="wf-del-btn" title="删除工作流">✕</button>
+                <button class="wf-copy-btn" title="复制工作流"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M10 4H11V11.5C11 12.328 10.328 13 9.5 13H3.5C2.672 13 2 12.328 2 11.5V5C2 4.172 2.672 3.5 3.5 3.5H4" stroke="currentColor" stroke-width="1.2"/></svg></button>
               </div>
+              <button class="wf-del-btn" title="删除工作流">✕</button>
               <div class="wf-children">
                 ${(wf.steps||[]).map((s, j) => `
                   <div class="wf-child" data-step="${j}">
@@ -1552,7 +1587,7 @@ function buildWorkflowTab(panel) {
   parents.forEach((el, i) => {
     const header = el.querySelector(".wf-parent-header");
     header.addEventListener("click", (e) => {
-      if (e.target.closest(".wf-parent-check,.wf-play-btn,.wf-copy-btn,.wf-del-btn")) return;
+      if (e.target.closest(".wf-parent-check,.wf-play-btn,.wf-copy-btn")) return;
       if (expandedIdx === i) {
         el.classList.remove("expanded");
         expandedIdx = -1;
@@ -1587,8 +1622,8 @@ function buildWorkflowTab(panel) {
         if (stepIdx >= 0) stepIndices.push(stepIdx);
       });
       if (!stepIndices.length) { _showToast("请先勾选要执行的步骤"); return; }
-      const wfName = el.querySelector(".wf-parent-name").textContent;
       const wfIdx = Number(el.dataset.idx);
+      const wfName = config.workflows[wfIdx]?.name || "工作流";
       const logContainer = document.getElementById("wf_log");
       const bodyId = "wf_log_" + wfIdx + "_" + Date.now();
       const section = document.createElement("div");
@@ -1617,6 +1652,35 @@ function buildWorkflowTab(panel) {
       config.workflows.splice(wfIdx, 1);
       saveConfig({workflows:config.workflows});
       _wfRebuild();
+    });
+    const nameSpan = el.querySelector(".wf-parent-name");
+    nameSpan.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (nameSpan.querySelector("input")) return;
+      const wfIdx = Number(el.dataset.idx);
+      const currentName = config.workflows[wfIdx]?.name || "";
+      const input = document.createElement("input");
+      input.className = "wf-name-input";
+      input.value = currentName;
+      nameSpan.textContent = "";
+      nameSpan.appendChild(input);
+      input.focus();
+      input.select();
+      const finish = (save) => {
+        const val = input.value.trim();
+        if (save && val && config.workflows[wfIdx]) {
+          config.workflows[wfIdx].name = val;
+          saveConfig({workflows:config.workflows});
+        }
+        if (config.workflows[wfIdx]) {
+          nameSpan.innerHTML = `${escapeHtml(config.workflows[wfIdx].name)}&nbsp;&nbsp;<span style="color:var(--dim);font-weight:400">${(config.workflows[wfIdx].steps||[]).length}步骤</span><span class="wf-edit-icon"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5L10.5 3.5"/><path d="M2 10L3.5 6.5L8.5 1.5L10.5 3.5L5.5 8.5L2 10Z"/></svg></span>`;
+        }
+      };
+      input.addEventListener("blur", () => finish(true));
+      input.addEventListener("keydown", (ke) => {
+        if (ke.key === "Enter") { ke.preventDefault(); input.blur(); }
+        if (ke.key === "Escape") { ke.preventDefault(); finish(false); }
+      });
     });
   });
 
@@ -1822,7 +1886,7 @@ function runWorkflow() {
   const keys = Object.keys(byWf).map(Number).sort();
     const wfNames = {};
     document.querySelectorAll(".wf-parent").forEach(el => {
-      wfNames[Number(el.dataset.idx)] = el.querySelector(".wf-parent-name").textContent;
+      wfNames[Number(el.dataset.idx)] = config.workflows[Number(el.dataset.idx)]?.name || "工作流";
     });
     const logContainer = document.getElementById("wf_log");
     logContainer.innerHTML = "";

@@ -357,6 +357,24 @@ while (true):
 - 弹窗宽 400px，使用 8px 网格间距（gap:8px, padding:24px, margin:12/20px）
 - 点击遮罩层空白区域可关闭弹窗（返回 false）
 
+## 2026-05-21 工作流列表 UI 多项优化
+
+### 变更清单
+1. **删除按钮移到右上角** — 父工作流和子工作流的 ✕ 删除按钮均改为 `position:absolute; top:0; right:0`，移出 inline 布局，无背景无边框，hover 变红色
+2. **复制按钮样式统一** — 从透明无背景改为与播放按钮一致的蓝色半透明背景 + hover 放大效果；📋 emoji 替换为 14×14 SVG 线框复制图标
+3. **步骤数显示** — 从带背景的 badge 改为纯暗色文字紧跟在名称后（`名称  2步骤`），不抢眼
+4. **名称可编辑** — 名称后加极淡 ✎ SVG 图标（opacity 0.25→hover 0.6），点击名称/步骤/图标整块进入内联输入，Enter/失焦保存，Esc 取消
+5. **点击区域分离** — `.wf-parent-name` 去掉 `flex:1` 不再撑满，空白区域点击触发展开/折叠
+
+### 涉及文件
+[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### 设计要点
+- `.wf-del-btn` / `.wf-child-del-btn` — 22×22 透明按钮，右上角 `top:0;right:0`，字体 11px，无背景无边框
+- `.wf-copy-btn` — 与 `.wf-play-btn` 完全相同的样式（蓝底蓝字），hover 变白放大
+- `.wf-parent-name` — `white-space:nowrap` 防止换行，点击内联编辑替换为 `<input class="wf-name-input">`
+- 所有的 `.textContent` 读取都改为从 `config.workflows[wfIdx].name` 获取，避免名称 span 内 SVG/步骤数文字干扰
+
 ## 2026-05-12 DeepSeek API 缓存命中优化
 
 ### 背景

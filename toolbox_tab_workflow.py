@@ -330,7 +330,7 @@ class WorkflowTabMixin:
         ttk.Button(btn2, text="添加", command=_add_dir, width=5).pack(side="left", padx=(0, 5))
         ttk.Button(btn2, text="移除", command=_remove_dir, width=5).pack(side="left")
 
-    def _wf_show_merge_table_config(self, wf_idx, step_idx, step):
+    def _wf_show_merge_table_config(self, wf_idx, step_idx, step):  # noqa: C901
         grp2 = tk.LabelFrame(self.wf_detail_frame, text="  合并表格设置  ",
                              font=("微软雅黑", 9), padx=8, pady=6)
         grp2.pack(fill="x", pady=(8, 0))
@@ -637,7 +637,7 @@ class WorkflowTabMixin:
         tk.Label(grp2, text="逗号分隔，如 JA_JP,KO_KR,ZH_CN,EN_US",
                  font=("微软雅黑", 8), fg="#888").grid(row=row, column=0, columnspan=3, sticky="w", padx=(5, 0))
 
-    def _wf_show_lock_svn_config(self, wf_idx, step_idx, step):
+    def _wf_show_lock_svn_config(self, wf_idx, step_idx, step):  # noqa: C901
         grp2 = tk.LabelFrame(self.wf_detail_frame, text="  锁定SVN设置  ",
                              font=("微软雅黑", 9), padx=8, pady=6)
         grp2.pack(fill="x", pady=(8, 0))
@@ -735,7 +735,7 @@ class WorkflowTabMixin:
                  font=("微软雅黑", 8), fg="#888", justify="left").grid(
             row=row, column=0, columnspan=3, sticky="w", padx=(5, 0), pady=(6, 0))
 
-    def _wf_show_open_tables_config(self, wf_idx, step_idx, step):
+    def _wf_show_open_tables_config(self, wf_idx, step_idx, step):  # noqa: C901
         grp2 = tk.LabelFrame(self.wf_detail_frame, text="  打开表格设置  ",
                              font=("微软雅黑", 9), padx=8, pady=6)
         grp2.pack(fill="x", pady=(8, 0))
@@ -1581,7 +1581,7 @@ class WorkflowTabMixin:
         self._wf_clear_caches()
         return ok_count == len(codes)
 
-    def _wf_execute_merge_translation(self, step):
+    def _wf_execute_merge_translation(self, step):  # noqa: C901
         excel_file = step.get("input_file", "").strip()
         original_file = step.get("original_file", "").strip()
         sheet_name = step.get("sheet_name", "").strip()
@@ -1946,7 +1946,7 @@ class WorkflowTabMixin:
                 pass
         self.root.after(0, _update)
 
-    def _wf_execute_merge_table(self, step):
+    def _wf_execute_merge_table(self, step):  # noqa: C901
         import openpyxl
 
         input_paths = step.get("input_paths", [])

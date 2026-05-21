@@ -408,12 +408,55 @@ def api_dir_browse():
 # ═══════════════════════════════════════════════════════════
 
 
+def _run_upload_copy(src, tgt, files, q):
+    q.put(f"{'='*50}\n")
+    q.put("开始上传\n")
+    q.put(f"源: {src}\n")
+    q.put(f"目标: {tgt}\n\n")
+
+    success = fail = 0
+    for fi in files:
+        name = fi["name"]
+        sp = fi["path"]
+        is_dir = fi.get("is_dir", False)
+        try:
+            if is_dir:
+                target_dir = os.path.join(tgt, name)
+                if os.path.isdir(target_dir):
+                    q.put(f"📂 {name}/ 已存在，合并文件...\n")
+                else:
+                    os.makedirs(target_dir, exist_ok=True)
+                for root, dirs, fnames in os.walk(sp):
+                    rel = os.path.relpath(root, sp)
+                    dst_dir = os.path.join(target_dir, rel)
+                    os.makedirs(dst_dir, exist_ok=True)
+                    for fn in fnames:
+                        _copy_file_upload(os.path.join(root, fn), os.path.join(dst_dir, fn))
+                q.put(f"✓ {name}/ 文件夹已复制\n")
+            else:
+                _copy_file_upload(sp, os.path.join(tgt, name))
+                q.put(f"✓ {name}\n")
+            success += 1
+        except Exception as e:
+            fail += 1
+            q.put(f"✗ {name}: {e}\n")
+    q.put(f"\n── 完成: {success} 成功, {fail} 失败 ──\n")
+    q.put(None)
+
+
+def _copy_file_upload(src_p, dst_p):
+    os.makedirs(os.path.dirname(dst_p), exist_ok=True)
+    if os.path.isfile(dst_p):
+        os.chmod(dst_p, stat.S_IWRITE)
+    shutil.copy2(src_p, dst_p)
+
+
 @app.route("/api/upload/run", methods=["POST"])
 def api_upload_run():
     data = request.get_json(force=True)
     src = data.get("src_dir", "").strip()
     tgt = data.get("tgt_dir", "").strip()
-    files = data.get("files", [])  # list of {name, path, is_dir}
+    files = data.get("files", [])
 
     if not src or not os.path.isdir(src):
         return jsonify({"error": "无效源目录"}), 400
@@ -422,7 +465,6 @@ def api_upload_run():
     if not files:
         return jsonify({"error": "请选择文件"}), 400
 
-    # 保存历史
     cfg = load_config()
     for k, v in [("src_dir_history", src), ("tgt_dir_history", tgt)]:
         hist = cfg.get(k, [])
@@ -435,49 +477,7 @@ def api_upload_run():
     task_id = _get_next_task_id()
     q = queue.Queue()
     _log_queues[task_id] = q
-
-    def _run():
-        q.put(f"{'='*50}\n")
-        q.put("开始上传\n")
-        q.put(f"源: {src}\n")
-        q.put(f"目标: {tgt}\n\n")
-
-        success = fail = 0
-        for fi in files:
-            name = fi["name"]
-            sp = fi["path"]
-            is_dir = fi.get("is_dir", False)
-            try:
-                if is_dir:
-                    target_dir = os.path.join(tgt, name)
-                    if os.path.isdir(target_dir):
-                        q.put(f"📂 {name}/ 已存在，合并文件...\n")
-                    else:
-                        os.makedirs(target_dir, exist_ok=True)
-                    for root, dirs, fnames in os.walk(sp):
-                        rel = os.path.relpath(root, sp)
-                        dst_dir = os.path.join(target_dir, rel)
-                        os.makedirs(dst_dir, exist_ok=True)
-                        for fn in fnames:
-                            _copy_file(os.path.join(root, fn), os.path.join(dst_dir, fn))
-                    q.put(f"✓ {name}/ 文件夹已复制\n")
-                else:
-                    _copy_file(sp, os.path.join(tgt, name))
-                    q.put(f"✓ {name}\n")
-                success += 1
-            except Exception as e:
-                fail += 1
-                q.put(f"✗ {name}: {e}\n")
-        q.put(f"\n── 完成: {success} 成功, {fail} 失败 ──\n")
-        q.put(None)
-
-    def _copy_file(src_p, dst_p):
-        os.makedirs(os.path.dirname(dst_p), exist_ok=True)
-        if os.path.isfile(dst_p):
-            os.chmod(dst_p, stat.S_IWRITE)
-        shutil.copy2(src_p, dst_p)
-
-    threading.Thread(target=_run, daemon=True).start()
+    threading.Thread(target=_run_upload_copy, args=(src, tgt, files, q), daemon=True).start()
     return jsonify({"task_id": task_id})
 
 # ═══════════════════════════════════════════════════════════
@@ -498,6 +498,56 @@ def api_workflow_save():
     cfg["workflows"] = data.get("workflows", [])
     save_config(cfg)
     return jsonify({"ok": True})
+
+
+def _run_wf_task(q, wf, steps, task_id):
+    prefix = {"error": "❌ ", "ok": "✓ ", "warn": "⚠ ", "head": ""}
+
+    def _put(msg, tag=""):
+        q.put(msg)
+
+    def _line(msg, tag=""):
+        _put(f"{prefix.get(tag, '')}{msg}\n")
+
+    _put(f"{'='*50}\n")
+    _put(f"执行工作流: {wf.get('name', '未命名')}\n")
+    _put(f"共 {len(steps)} 个步骤\n\n")
+
+    blocked = False
+    for i, step in enumerate(steps):
+        _put(f"-- [{i+1}/{len(steps)}] {step.get('name', '')} --\n")
+        if blocked:
+            _put("已阻断，跳过\n")
+            continue
+        stype = step.get("type", "")
+        ok = True
+        try:
+            if stype == "export_text":
+                ok = _exec_export_text(step, _put, task_id)
+            elif stype == "upload_svn":
+                ok = _exec_upload_svn(step, _put, task_id)
+            elif stype == "merge_table":
+                ok = _exec_merge_table(step, _put)
+            elif stype == "merge_translation":
+                ok = _exec_merge_translation(step, _put)
+            elif stype == "export_error_code":
+                ok = _exec_export_error_code(step, _put)
+            elif stype == "lock_svn":
+                ok = _exec_lock_svn(step, _put, task_id)
+            elif stype == "open_tables":
+                ok = _exec_open_tables(step, _put)
+            else:
+                _line(f"未知步骤类型: {stype}", "error")
+                ok = False
+        except Exception as e:
+            _line(str(e), "error")
+            ok = False
+        if not ok:
+            _line("步骤执行失败，阻断后续步骤", "error")
+            blocked = True
+    _put(f"\n{'='*50}\n")
+    _put("工作流执行完成\n" if not blocked else "工作流执行完成（有失败步骤）\n")
+    _put(None)
 
 
 @app.route("/api/workflow/run", methods=["POST"])
@@ -526,56 +576,7 @@ def api_workflow_run():
     task_id = _get_next_task_id()
     q = queue.Queue()
     _log_queues[task_id] = q
-
-    def _put(msg, tag=""):
-        q.put(msg)
-
-    def _line(msg, tag=""):
-        prefix = {"error": "❌ ", "ok": "✓ ", "warn": "⚠ ", "head": ""}.get(tag, "")
-        _put(f"{prefix}{msg}\n")
-
-    def _run():
-        _put(f"{'='*50}\n")
-        _put(f"执行工作流: {wf.get('name', '未命名')}\n")
-        _put(f"共 {len(steps)} 个步骤\n\n")
-
-        blocked = False
-        for i, step in enumerate(steps):
-            _put(f"-- [{i+1}/{len(steps)}] {step.get('name', '')} --\n")
-            if blocked:
-                _put("已阻断，跳过\n")
-                continue
-            stype = step.get("type", "")
-            ok = True
-            try:
-                if stype == "export_text":
-                    ok = _exec_export_text(step, _put, task_id)
-                elif stype == "upload_svn":
-                    ok = _exec_upload_svn(step, _put, task_id)
-                elif stype == "merge_table":
-                    ok = _exec_merge_table(step, _put)
-                elif stype == "merge_translation":
-                    ok = _exec_merge_translation(step, _put)
-                elif stype == "export_error_code":
-                    ok = _exec_export_error_code(step, _put)
-                elif stype == "lock_svn":
-                    ok = _exec_lock_svn(step, _put, task_id)
-                elif stype == "open_tables":
-                    ok = _exec_open_tables(step, _put)
-                else:
-                    _line(f"未知步骤类型: {stype}", "error")
-                    ok = False
-            except Exception as e:
-                _line(str(e), "error")
-                ok = False
-            if not ok:
-                _line("步骤执行失败，阻断后续步骤", "error")
-                blocked = True
-        _put(f"\n{'='*50}\n")
-        _put("工作流执行完成\n" if not blocked else "工作流执行完成（有失败步骤）\n")
-        _put(None)
-
-    threading.Thread(target=_run, daemon=True).start()
+    threading.Thread(target=_run_wf_task, args=(q, wf, steps, task_id), daemon=True).start()
     return jsonify({"task_id": task_id})
 
 
@@ -791,7 +792,7 @@ def _exec_export_error_code(step, put):
     return ok_count == len(codes)
 
 
-def _exec_merge_translation(step, put):
+def _exec_merge_translation(step, put):  # noqa: C901
     excel_file = step.get("input_file", "").strip()
     original_file = step.get("original_file", "").strip()
     sheet_name = step.get("sheet_name", "").strip()
@@ -1117,7 +1118,7 @@ def api_translate_lang_id_map():
 
 
 @app.route("/api/translate/run", methods=["POST"])
-def api_translate_run():
+def api_translate_run():  # noqa: C901
     data = request.get_json(force=True)
     src_path = data.get("src_path", "").strip()
     ref_path = data.get("ref_path", "").strip()

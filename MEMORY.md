@@ -334,6 +334,29 @@ while (true):
 - **两阶段比混合循环稳定**：先全部空提交，再统一处理查看→重做
 - **每次修改后必须 graphify update**
 
+## 2026-05-21 二次确认弹窗 UI 统一
+
+### 背景
+策划工具箱桌面版（Web UI）有三处使用原生 `confirm()` / `alert()` 弹窗（刷新文件错误提示、删除工作流、删除步骤），风格粗糙、位置僵硬，与深色后台 UI 不统一。
+
+### 解决方案
+1. **CSS 层**：新增 `.confirm-overlay`（全屏遮罩 flex 居中）、`.confirm-dialog`（圆角深色卡片）、`.confirm-dialog-title/msg/actions`、`.btn-danger`（删除操作红色按钮）
+2. **HTML 层**：在 `.app` 容器外新增确认弹窗 DOM 结构，`z-index:2000` 高于所有页面元素
+3. **JS 层**：
+   - `showConfirm(options)` — Promise 化 API，支持 `title`/`message`/`confirmText`/`cancelText`/`danger` 参数
+   - `showAlert(message, title)` — 仅确定按钮的提示弹窗，通过 `cancelText:""` 隐藏取消按钮
+   - 弹窗居中原理：overlay 用 `position:fixed; inset:0; display:flex; align-items:center; justify-content:center` 实现应用窗口正中央定位
+4. **替换**：3 处原生调用全部替换为 `await showConfirm()` / `await showAlert()`
+
+### 涉及文件
+[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### 设计要点
+- 使用 UI 系统已有色彩 Token：`--bg2`（弹窗背景）、`--line`（边框）、`--sub`（消息文字）、`--text`（标题文字）
+- 删除操作确认按钮使用 `.btn-danger`（`--danger:#ff637d` 渐变），与常规 `.btn-primary`（蓝色）区分危险操作
+- 弹窗宽 400px，使用 8px 网格间距（gap:8px, padding:24px, margin:12/20px）
+- 点击遮罩层空白区域可关闭弹窗（返回 false）
+
 ## 2026-05-12 DeepSeek API 缓存命中优化
 
 ### 背景

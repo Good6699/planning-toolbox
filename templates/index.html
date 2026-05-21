@@ -328,6 +328,14 @@ input::placeholder,textarea::placeholder{
   border-color:rgba(255,255,255,.1);
   color:#fff;
 }
+.btn-danger{
+  background:linear-gradient(180deg,#ff637d,#e04a62);
+  color:#fff;
+  box-shadow:0 12px 32px rgba(255,99,125,.32),inset 0 1px 0 rgba(255,255,255,.24);
+}
+.btn-danger:hover{
+  box-shadow:0 16px 40px rgba(255,99,125,.44),inset 0 1px 0 rgba(255,255,255,.3);
+}
 .file-list{
   display:flex;
   flex-direction:column;
@@ -661,6 +669,48 @@ input::placeholder,textarea::placeholder{
   font-size:11px;
   color:var(--dim);
   margin-top:2px;
+}
+.confirm-overlay{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.55);
+  z-index:2000;
+  justify-content:center;
+  align-items:center;
+}
+.confirm-overlay.show{
+  display:flex;
+}
+.confirm-dialog{
+  background:var(--bg2);
+  border:1px solid var(--line);
+  border-radius:14px;
+  width:400px;
+  max-width:85vw;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);
+  padding:24px;
+}
+.confirm-dialog-title{
+  font-size:16px;
+  font-weight:600;
+  color:var(--text);
+  margin:0 0 12px 0;
+}
+.confirm-dialog-msg{
+  font-size:14px;
+  color:var(--sub);
+  line-height:1.5;
+  margin:0 0 20px 0;
+  word-break:break-word;
+}
+.confirm-dialog-actions{
+  display:flex;
+  gap:8px;
+  justify-content:flex-end;
+}
+.confirm-dialog .btn{
+  min-width:80px;
 }
 .translate-layout{
   display:grid;
@@ -1097,6 +1147,16 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     </section>
   </main>
 </div>
+<div class="confirm-overlay" id="confirm_overlay">
+  <div class="confirm-dialog">
+    <h3 class="confirm-dialog-title" id="confirm_title">确认</h3>
+    <p class="confirm-dialog-msg" id="confirm_msg"></p>
+    <div class="confirm-dialog-actions">
+      <button class="btn btn-normal" id="confirm_cancel_btn">取消</button>
+      <button class="btn btn-primary" id="confirm_ok_btn">确定</button>
+    </div>
+  </div>
+</div>
 <script>
 const S = {};
 const nav = [
@@ -1399,7 +1459,7 @@ async function refreshFiles() {
   if (!src) return;
   const r = await fetch("/api/files/list", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:src})});
   const d = await r.json();
-  if (d.error) { alert(d.error); return; }
+  if (d.error) { await showAlert(d.error); return; }
   uploadFilesData = d.entries;
   renderFileList();
 }
@@ -1548,11 +1608,12 @@ function buildWorkflowTab(panel) {
       _wfRebuild();
     });
     const delBtn = el.querySelector(".wf-del-btn");
-    delBtn.addEventListener("click", (e) => {
+    delBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
       const wfIdx = Number(el.dataset.idx);
       const name = config.workflows[wfIdx]?.name || "未命名";
-      if (!confirm(`确定删除工作流「${name}」？`)) return;
+      const ok = await showConfirm({title:"删除工作流", message:`确定删除工作流「${name}」？`, confirmText:"删除", danger:true});
+      if (!ok) return;
       config.workflows.splice(wfIdx, 1);
       saveConfig({workflows:config.workflows});
       _wfRebuild();
@@ -1668,7 +1729,7 @@ function buildWorkflowTab(panel) {
     });
   });
   panel.querySelectorAll(".wf-child-del-btn").forEach(btn => {
-    btn.addEventListener("click", (e) => {
+    btn.addEventListener("click", async (e) => {
       e.stopPropagation();
       const child = btn.closest(".wf-child");
       const parent = btn.closest(".wf-parent");
@@ -1677,7 +1738,8 @@ function buildWorkflowTab(panel) {
       const stepIdx = [...parent.querySelector(".wf-children").children].indexOf(child);
       const step = config.workflows[wfIdx]?.steps?.[stepIdx];
       if (!step) return;
-      if (!confirm(`确定删除步骤「${step.name}」？`)) return;
+      const ok = await showConfirm({title:"删除步骤", message:`确定删除步骤「${step.name}」？`, confirmText:"删除", danger:true});
+      if (!ok) return;
       config.workflows[wfIdx].steps.splice(stepIdx, 1);
       saveConfig({workflows:config.workflows});
       _wfRebuild();
@@ -2710,6 +2772,46 @@ function _showToast(msg) {
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(()=>{t.style.opacity="0";setTimeout(()=>t.remove(),300);},2000);
+}
+function showConfirm({title="确认", message="", confirmText="确定", cancelText="取消", danger=false}={}){
+  return new Promise(resolve => {
+    const overlay = document.getElementById("confirm_overlay");
+    const titleEl = document.getElementById("confirm_title");
+    const msgEl = document.getElementById("confirm_msg");
+    const okBtn = document.getElementById("confirm_ok_btn");
+    const cancelBtn = document.getElementById("confirm_cancel_btn");
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    okBtn.textContent = confirmText;
+    cancelBtn.textContent = cancelText;
+    if (cancelText) {
+      cancelBtn.style.display = "";
+    } else {
+      cancelBtn.style.display = "none";
+    }
+    if (danger) {
+      okBtn.className = "btn btn-danger";
+    } else {
+      okBtn.className = "btn btn-primary";
+    }
+    const cleanup = () => {
+      overlay.classList.remove("show");
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      overlay.removeEventListener("click", onOverlay);
+    };
+    const onOk = () => { cleanup(); resolve(true); };
+    const onCancel = () => { cleanup(); resolve(false); };
+    const onOverlay = (e) => { if (e.target === overlay) { cleanup(); resolve(false); } };
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onOverlay);
+    overlay.classList.add("show");
+    okBtn.focus();
+  });
+}
+function showAlert(message, title="提示"){
+  return showConfirm({title, message, confirmText:"确定", cancelText:""});
 }
 async function browseFile(inputId, initialDir) {
   if (window.pywebview && pywebview.api && pywebview.api.browseFile) {

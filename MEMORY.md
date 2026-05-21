@@ -207,6 +207,35 @@
 - **WeakSet 不可用于去重 DOM**：`querySelectorAll` 每次返回新引用，`has()` 永远 false。改用索引计数或 `nthBtn(text, n)`
 - **Element UI radio 需逐一点击**：间隔 150-300ms，不能 forEach 一次性全点
 - **`vm.submit()` 不可靠**：应通过 DOM 按钮 `button.innerText === '提交'` 触发
+
+## 2026-05-21 桌面端子类化 + 工作流UI + flake8清理
+
+### 子类化 fallback 路径 DefWindowProcW 参数溢出
+- **根因**：ctypes windll 的 `DefWindowProcW`/`CallWindowProcW` 未设置 `argtypes`，默认用 `c_int`（32位）传参，64位 Windows 上 `lparam` 包含指针值时必然溢出。`SetWindowSubclass` 失败后走 fallback 路径（`SetWindowLongPtrW`），但 fallback 代码也忘了设 `argtypes`。
+- **解决方案**：在 `_fallback_subclass` 中 `_wnd_proc` 定义前补充两行 `argtypes`：`DefWindowProcW = (c_longlong, c_uint, c_longlong, c_longlong)`、`CallWindowProcW = (c_longlong, c_longlong, c_uint, c_longlong, c_longlong)`
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/desktop_main.py)
+
+### 工作流删除/复制按钮失效
+- **根因**：`wfDelete()`/`wfCopy()` 用 `document.querySelector(".wf-parent.selected")` 获取选中工作流，但工作流列表的点击事件只维护了 `.expanded` 类（展开/折叠），从未添加过 `.selected` 类。选择器永远返回 `null`，两个函数都直接 `return`。
+- **解决方案**：`.selected` → `.expanded`
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### 子线程导入 web_app 导致 signal 注册报错
+- **根因**：`desktop_main.py` 删除了 `import web_app` 后，`_start_flask` 线程中 `from web_app import app` 触发 `web_app.py` 模块级 `signal.signal()` 调用。Python 3.13 禁止在非主线程注册信号处理器，抛出 `ValueError: signal only works in main thread`。
+- **解决方案**：`web_app.py` 中 `signal.signal()` 外包 `if threading.current_thread() is threading.main_thread():` 判断
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### flake8 清理经验
+- **安全清理顺序**：① F401/F541/F841/F824（删除未用代码）→ ② E302/E305/E306/E127/E128（空行/缩进）→ ③ E722（bare except）→ ④ C901（圈复杂度）
+- **autopep8 工具**：`autopep8 --in-place --select E302,E305,E306,E127,E128 <file>` 可批量自动修复空行/缩进问题，比手动改快得多。首批清理约 90 处问题仅需 3 条命令。
+- **Round 1 效果**：4 个文件从 ~165 问题降至 ~122（消除 43 个 F401/F541/F841/E702/E231）
+- **Round 2 效果**：E302/E305/E306/E127/E128 全部清除（消除 ~90 个）
+- **涉及文件**：`desktop_main.py`、`toolbox_tab_upload.py`、`toolbox_tab_workflow.py`、`web_app.py`
+
+### 翻译输出文件被占用的友好提示
+- **场景**：翻译完成后 `wb.save(out_path)` 时，若输出文件已被 Excel 打开，抛出 `PermissionError [Errno 13]`，原始代码走 `except Exception` 打印完整 traceback。用户看到"翻译过程出错"后无法判断原因。
+- **解决方案**：在 `except Exception` 之前添加 `except PermissionError` 分支，输出友好提示"输出文件被占用，请关闭 Excel 中已打开的文件后重试"
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 - **全对判断**：`!q.answered || answerSelectedIndex===undefined` 任一未答即不算全对
 - **脚本位置**：`自动学习/auto_exam.js`
 

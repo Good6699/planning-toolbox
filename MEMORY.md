@@ -225,6 +225,18 @@
 - **解决方案**：`web_app.py` 中 `signal.signal()` 外包 `if threading.current_thread() is threading.main_thread():` 判断
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
+### 弃用 GitHub 远程推送，改为纯本地版本管理
+- **决策**：2026-05-21 因国内访问 GitHub 网络不稳定（push 经常静默失败或超时），决定停止远程推送，使用纯本地 Git 管理版本。
+- **改动**：更新 `github-push` skill 为只做本地 `git add` + `git commit --no-verify`，去掉所有推送相关步骤。remote origin 保留但不再使用。
+- **涉及文件**：[.trae/skills/github-push/SKILL.md](file:///c:/Users/admin/.qclaw/workspace/.trae/skills/github-push/SKILL.md)
+- **本地常用命令**：`git log --oneline` 查看历史，`git reset --soft HEAD~1` 撤销提交
+
+### SortableJS CDN 脚本阻塞首次渲染导致白屏
+- **场景**：2026-05-21 桌面版启动后页面 200 OK 但窗口空白，日志有两次 `GET /` 请求（间隔 2s 重试），[子类化] 信息正常打出，但页面始终不渲染
+- **根因**：Sortable.js CDN 脚本（`<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js">`）放在 `<head>` 中是 **render-blocking** 的——浏览器遇到 `<script>` 暂停 DOM 构建，等 CDN 下载并执行完脚本后才继续解析 HTML。当 CDN 网络慢或不可达时，页面长时间白屏。2 秒后 WebView2 自动重试 `GET /` 也无济于事，因为每次都重新走 render-blocking 流程
+- **解决方案**：将 `<script>` 从 `<head>` 移到 `</body>` 之前。MDN 官方文档确认这是标准做法："To avoid running a script before the DOM...simply place the script at the end of the document body, immediately before the closing `</body>` tag"。SortableJS 官方指南也推荐此做法。`buildWorkflowTab()` 是用户点击工作流页签时才调用，此时脚本早已加载完毕，不影响功能
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ### flake8 清理经验
 - **安全清理顺序**：① F401/F541/F841/F824（删除未用代码）→ ② E302/E305/E306/E127/E128（空行/缩进）→ ③ E722（bare except）→ ④ C901（圈复杂度）
 - **autopep8 工具**：`autopep8 --in-place --select E302,E305,E306,E127,E128 <file>` 可批量自动修复空行/缩进问题，比手动改快得多。首批清理约 90 处问题仅需 3 条命令。

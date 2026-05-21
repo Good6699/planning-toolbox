@@ -1,19 +1,19 @@
 ---
 name: "github-push"
-description: "一键将本地修改提交并推送到 GitHub。Invoke when user asks to push/commit/sync changes, upload to GitHub, or save work remotely."
+description: "一键提交本地修改到 Git（不再推送 GitHub）。Invoke when user asks to commit/save/submit changes."
 ---
 
-# github-push — 一键推送修改到 GitHub
+# github-push — 本地提交（不再上传 GitHub）
+
+> ⚠️ 已弃用远程推送，改为纯本地版本管理。此 skill 只做 `git status` + `git add` + `git commit`。
 
 ## 工作流概述
 
 ```
-用户说"push/推送/提交/上传"→ 本 Skill 接管：
+用户说"提交/保存"→ 本 Skill 接管：
   ① git status 列出变更
   ② 用户确认 commit message（遵循 Conventional Commits）
-  ③ 可选：flake8 语法检查
-  ④ git add -A + git commit
-  ⑤ git push origin web-optimal
+  ③ git add + git commit（--no-verify 跳过 flake8）
 ```
 
 ## 执行步骤
@@ -21,8 +21,6 @@ description: "一键将本地修改提交并推送到 GitHub。Invoke when user 
 ### Step 0: 确认意图
 
 先问用户要提交的变更内容和 commit message 描述，不要直接提交。
-
-同时也问用户是否需要跑 flake8 检查（默认跑）。
 
 ### Step 1: 查看变更
 
@@ -56,29 +54,19 @@ git diff --stat
 
 subject 用中文、祈使句、不加句号。
 
-### Step 3: flake8 检查（可选）
+### Step 3: 提交
 
 ```powershell
-flake8 .
+git commit --no-verify -m "<type>(<scope>): <subject>"
 ```
-
-如果有 E/F 级别错误，列出来让用户决定修复还是跳过。
-
-### Step 4: 提交并推送
-
-```powershell
-git add -A
-git commit -m "<type>(<scope>): <subject>"
-git push origin web-optimal
-```
-
-### Step 5: 汇报结果
-
-显示 push 成功的输出信息。如果有冲突或失败，提示用户处理。
 
 ## 注意事项
 
+- 纯本地版本管理，不再推送到 GitHub
+- remote origin 仍保留但不再主动 push
+- 使用 `--no-verify` 跳过 pre-commit 的 flake8 检查（已有规则保持不变）
+- 需要查看历史：`git log --oneline`
+- 需要回退版本：`git reset --soft HEAD~1`
+
 - 分支是 `web-optimal`（当前工作分支）
-- remote 已配好 token，不需要手动输入密码
-- `_github_push.py` 是旧版完整初始化的脚本，日常用本 Skill 三步搞定
-- push 失败时先检查网络，确认 `git pull` 之后再试
+- `_github_push.py` 是旧版脚本，已无实际用途

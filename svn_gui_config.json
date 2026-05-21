@@ -295,7 +295,9 @@
   ],
   "output_dir_export": "C:\\Users\\admin\\.qclaw\\workspace\\输出\\导出",
   "window_geometry": "992x800+-1063+178",
-  "tr_src_history": [],
+  "tr_src_history": [
+    "C:\\Users\\admin\\.qclaw\\workspace\\多语言翻译表.xlsx"
+  ],
   "tr_api_url": "https://api.deepseek.com/v1/chat/completions",
   "tr_model": "deepseek-v4-flash",
   "tr_out_dir": "C:\\Users\\admin\\.qclaw\\workspace\\输出",

@@ -34,6 +34,7 @@ class WorkflowTabMixin:
         name_frame.columnconfigure(1, weight=1)
         tk.Label(name_frame, text="名称：", font=("微软雅黑", 9)).grid(row=0, column=0, sticky="w")
         wf_name_var = tk.StringVar(value=wf.get("name", ""))
+
         def _on_name_change(*_):
             wf["name"] = wf_name_var.get()
             self._wf_save_config()
@@ -58,7 +59,7 @@ class WorkflowTabMixin:
                                               height=12, activestyle="none")
             self.wf_step_listbox.grid(row=0, column=0, sticky="nsew")
             step_vbar = ttk.Scrollbar(step_list_frame, orient="vertical",
-                                       command=self.wf_step_listbox.yview)
+                                      command=self.wf_step_listbox.yview)
             step_vbar.grid(row=0, column=1, sticky="ns")
             self.wf_step_listbox.configure(yscrollcommand=step_vbar.set)
             for i, s in enumerate(steps):
@@ -137,7 +138,7 @@ class WorkflowTabMixin:
                    command=lambda: self._wf_select_workflow_in_tree(wf_idx)).pack(side="right")
 
         grp1 = tk.LabelFrame(self.wf_detail_frame, text="  基本设置  ",
-                              font=("微软雅黑", 9), padx=8, pady=6)
+                             font=("微软雅黑", 9), padx=8, pady=6)
         grp1.pack(fill="x", pady=(8, 0))
         grp1.columnconfigure(1, weight=1)
 
@@ -150,6 +151,7 @@ class WorkflowTabMixin:
         row = 1
         tk.Label(grp1, text="名称：", font=("微软雅黑", 9)).grid(row=row, column=0, sticky="w", pady=(4, 0))
         name_var = tk.StringVar(value=step.get("name", ""))
+
         def _save_name(*_):
             step["name"] = name_var.get()
             self._wf_save_config()
@@ -193,7 +195,7 @@ class WorkflowTabMixin:
 
     def _wf_show_export_text_config(self, wf_idx, step_idx, step):
         grp2 = tk.LabelFrame(self.wf_detail_frame, text="  导出文字表设置  ",
-                              font=("微软雅黑", 9), padx=8, pady=6)
+                             font=("微软雅黑", 9), padx=8, pady=6)
         grp2.pack(fill="x", pady=(8, 0))
         grp2.columnconfigure(1, weight=1)
 
@@ -202,6 +204,7 @@ class WorkflowTabMixin:
         input_var = tk.StringVar(value=step.get("input_file", ""))
         input_entry = ttk.Entry(grp2, textvariable=input_var, font=("微软雅黑", 9))
         input_entry.grid(row=row, column=1, sticky="ew", padx=(5, 0))
+
         def _on_input_drop(files):
             if files:
                 f = files[0].strip('"').strip("'")
@@ -209,13 +212,15 @@ class WorkflowTabMixin:
                 step["input_file"] = f
                 self._wf_save_config()
         _DropTarget(input_entry, _on_input_drop).hook()
+
         def _browse_input():
             f = filedialog.askopenfilename(title="选择Excel文件",
-                filetypes=[("Excel文件", "*.xlsm *.xlsx *.xls"), ("所有文件", "*.*")])
+                                           filetypes=[("Excel文件", "*.xlsm *.xlsx *.xls"), ("所有文件", "*.*")])
             if f:
                 input_var.set(f)
                 step["input_file"] = f
                 self._wf_save_config()
+
         def _save_input(*_):
             step["input_file"] = input_var.get()
             self._wf_save_config()
@@ -247,7 +252,7 @@ class WorkflowTabMixin:
 
         def _add_tool():
             f = filedialog.askopenfilename(title="选择工具",
-                filetypes=[("可执行文件", "*.exe *.bat *.cmd"), ("所有文件", "*.*")])
+                                           filetypes=[("可执行文件", "*.exe *.bat *.cmd"), ("所有文件", "*.*")])
             if f:
                 tools_listbox.insert("end", os.path.basename(f))
                 tools = step.setdefault("tools", [])
@@ -273,7 +278,7 @@ class WorkflowTabMixin:
 
     def _wf_show_upload_svn_config(self, wf_idx, step_idx, step):
         grp2 = tk.LabelFrame(self.wf_detail_frame, text="  上传SVN设置  ",
-                              font=("微软雅黑", 9), padx=8, pady=6)
+                             font=("微软雅黑", 9), padx=8, pady=6)
         grp2.pack(fill="x", pady=(8, 0))
         grp2.columnconfigure(1, weight=1)
 
@@ -327,7 +332,7 @@ class WorkflowTabMixin:
 
     def _wf_show_merge_table_config(self, wf_idx, step_idx, step):
         grp2 = tk.LabelFrame(self.wf_detail_frame, text="  合并表格设置  ",
-                              font=("微软雅黑", 9), padx=8, pady=6)
+                             font=("微软雅黑", 9), padx=8, pady=6)
         grp2.pack(fill="x", pady=(8, 0))
         grp2.columnconfigure(1, weight=1)
 
@@ -413,8 +418,8 @@ class WorkflowTabMixin:
         def _add_path():
             initial = _get_default_dir()
             f = filedialog.askopenfilename(title="选择Excel文件",
-                initialdir=initial,
-                filetypes=[("Excel文件", "*.xlsm *.xlsx *.xls"), ("所有文件", "*.*")])
+                                           initialdir=initial,
+                                           filetypes=[("Excel文件", "*.xlsm *.xlsx *.xls"), ("所有文件", "*.*")])
             if f:
                 f = os.path.normpath(f)
                 existing = step.setdefault("input_paths", [])
@@ -428,7 +433,7 @@ class WorkflowTabMixin:
         def _add_dir_path():
             initial = _get_default_dir()
             d = filedialog.askdirectory(title="选择目录（将扫描其中所有Excel文件）",
-                initialdir=initial)
+                                        initialdir=initial)
             if not d:
                 return
             existing = step.setdefault("input_paths", [])
@@ -560,6 +565,7 @@ class WorkflowTabMixin:
         title_rows_var = tk.StringVar(value=str(step.get("title_rows", "1")))
         title_rows_entry = ttk.Entry(grp2, textvariable=title_rows_var, font=("微软雅黑", 9), width=10)
         title_rows_entry.grid(row=row, column=1, sticky="w", padx=(5, 0), pady=(6, 0))
+
         def _save_title_rows(*_):
             step["title_rows"] = title_rows_var.get().strip()
             self._wf_save_config()
@@ -570,6 +576,7 @@ class WorkflowTabMixin:
         id_col_var = tk.StringVar(value=str(step.get("id_col", "1")))
         id_col_spin = ttk.Spinbox(grp2, from_=1, to=100, textvariable=id_col_var, width=6, font=("微软雅黑", 9))
         id_col_spin.grid(row=row, column=1, sticky="w", padx=(5, 0), pady=(6, 0))
+
         def _save_id_col(*_):
             step["id_col"] = id_col_var.get().strip()
             self._wf_save_config()
@@ -579,7 +586,7 @@ class WorkflowTabMixin:
 
     def _wf_show_export_error_code_config(self, wf_idx, step_idx, step):
         grp2 = tk.LabelFrame(self.wf_detail_frame, text="  导出错误码设置  ",
-                              font=("微软雅黑", 9), padx=8, pady=6)
+                             font=("微软雅黑", 9), padx=8, pady=6)
         grp2.pack(fill="x", pady=(8, 0))
         grp2.columnconfigure(1, weight=1)
 
@@ -588,6 +595,7 @@ class WorkflowTabMixin:
         root_var = tk.StringVar(value=step.get("root_dir", ""))
         root_entry = ttk.Entry(grp2, textvariable=root_var, font=("微软雅黑", 9))
         root_entry.grid(row=row, column=1, sticky="ew", padx=(5, 0))
+
         def _on_root_drop(files):
             if files:
                 f = files[0].strip('"').strip("'")
@@ -595,12 +603,14 @@ class WorkflowTabMixin:
                 step["root_dir"] = f
                 self._wf_save_config()
         _DropTarget(root_entry, _on_root_drop).hook()
+
         def _browse_root():
             d = filedialog.askdirectory(title="选择根目录（自动查找 gameData\\Language）")
             if d:
                 root_var.set(d)
                 step["root_dir"] = d
                 self._wf_save_config()
+
         def _save_root(*_):
             step["root_dir"] = root_var.get()
             self._wf_save_config()
@@ -617,6 +627,7 @@ class WorkflowTabMixin:
         lang_var = tk.StringVar(value=step.get("lang_codes", ""))
         lang_entry = ttk.Entry(grp2, textvariable=lang_var, font=("微软雅黑", 9))
         lang_entry.grid(row=row, column=1, sticky="ew", padx=(5, 0), pady=(6, 0))
+
         def _save_lang(*_):
             step["lang_codes"] = lang_var.get()
             self._wf_save_config()
@@ -628,7 +639,7 @@ class WorkflowTabMixin:
 
     def _wf_show_lock_svn_config(self, wf_idx, step_idx, step):
         grp2 = tk.LabelFrame(self.wf_detail_frame, text="  锁定SVN设置  ",
-                              font=("微软雅黑", 9), padx=8, pady=6)
+                             font=("微软雅黑", 9), padx=8, pady=6)
         grp2.pack(fill="x", pady=(8, 0))
         grp2.columnconfigure(1, weight=1)
 
@@ -637,6 +648,7 @@ class WorkflowTabMixin:
         target_var = tk.StringVar(value=step.get("target_path", ""))
         target_entry = ttk.Entry(grp2, textvariable=target_var, font=("微软雅黑", 9))
         target_entry.grid(row=row, column=1, sticky="ew", padx=(5, 0))
+
         def _browse_target():
             f = filedialog.askopenfilename(title="选择要锁定的SVN文件")
             if not f:
@@ -647,6 +659,7 @@ class WorkflowTabMixin:
                 self._wf_save_config()
         ttk.Button(grp2, text="浏览…", command=_browse_target,
                    width=8).grid(row=row, column=2, padx=(5, 0))
+
         def _on_target_drop(files):
             if files:
                 f = files[0].strip('"').strip("'")
@@ -654,6 +667,7 @@ class WorkflowTabMixin:
                 step["target_path"] = f
                 self._wf_save_config()
         _DropTarget(target_entry, _on_target_drop).hook()
+
         def _save_target(*_):
             step["target_path"] = target_var.get()
             self._wf_save_config()
@@ -664,6 +678,7 @@ class WorkflowTabMixin:
         msg_var = tk.StringVar(value=step.get("lock_msg", "锁定中，请勿修改"))
         msg_entry = ttk.Entry(grp2, textvariable=msg_var, font=("微软雅黑", 9))
         msg_entry.grid(row=row, column=1, sticky="ew", padx=(5, 0), pady=(6, 0))
+
         def _save_msg(*_):
             step["lock_msg"] = msg_var.get()
             self._wf_save_config()
@@ -722,7 +737,7 @@ class WorkflowTabMixin:
 
     def _wf_show_open_tables_config(self, wf_idx, step_idx, step):
         grp2 = tk.LabelFrame(self.wf_detail_frame, text="  打开表格设置  ",
-                              font=("微软雅黑", 9), padx=8, pady=6)
+                             font=("微软雅黑", 9), padx=8, pady=6)
         grp2.pack(fill="x", pady=(8, 0))
         grp2.columnconfigure(1, weight=1)
 
@@ -750,7 +765,7 @@ class WorkflowTabMixin:
 
         def _add_file():
             f = filedialog.askopenfilename(title="选择Excel文件",
-                filetypes=[("Excel文件", "*.xlsm *.xlsx *.xls *.csv"), ("所有文件", "*.*")])
+                                           filetypes=[("Excel文件", "*.xlsm *.xlsx *.xls *.csv"), ("所有文件", "*.*")])
             if f:
                 existing = step.setdefault("file_paths", [])
                 if f not in existing:
@@ -810,7 +825,7 @@ class WorkflowTabMixin:
 
     def _wf_show_merge_translation_config(self, wf_idx, step_idx, step):
         grp2 = tk.LabelFrame(self.wf_detail_frame, text="  合并翻译设置  ",
-                              font=("微软雅黑", 9), padx=8, pady=6)
+                             font=("微软雅黑", 9), padx=8, pady=6)
         grp2.pack(fill="x", pady=(8, 0))
         grp2.columnconfigure(1, weight=1)
 
@@ -819,6 +834,7 @@ class WorkflowTabMixin:
         input_var = tk.StringVar(value=step.get("input_file", ""))
         input_entry = ttk.Entry(grp2, textvariable=input_var, font=("微软雅黑", 9))
         input_entry.grid(row=row, column=1, sticky="ew", padx=(5, 0))
+
         def _on_input_drop(files):
             if files:
                 f = files[0].strip('"').strip("'")
@@ -826,13 +842,15 @@ class WorkflowTabMixin:
                 step["input_file"] = f
                 self._wf_save_config()
         _DropTarget(input_entry, _on_input_drop).hook()
+
         def _browse_input():
             f = filedialog.askopenfilename(title="选择翻译Excel文件",
-                filetypes=[("Excel文件", "*.xlsm *.xlsx *.xls"), ("所有文件", "*.*")])
+                                           filetypes=[("Excel文件", "*.xlsm *.xlsx *.xls"), ("所有文件", "*.*")])
             if f:
                 input_var.set(f)
                 step["input_file"] = f
                 self._wf_save_config()
+
         def _save_input(*_):
             step["input_file"] = input_var.get()
             self._wf_save_config()
@@ -845,6 +863,7 @@ class WorkflowTabMixin:
         orig_var = tk.StringVar(value=step.get("original_file", ""))
         orig_entry = ttk.Entry(grp2, textvariable=orig_var, font=("微软雅黑", 9))
         orig_entry.grid(row=row, column=1, sticky="ew", padx=(5, 0), pady=(6, 0))
+
         def _on_orig_drop(files):
             if files:
                 f = files[0].strip('"').strip("'")
@@ -852,13 +871,15 @@ class WorkflowTabMixin:
                 step["original_file"] = f
                 self._wf_save_config()
         _DropTarget(orig_entry, _on_orig_drop).hook()
+
         def _browse_orig():
             f = filedialog.askopenfilename(title="选择原文件",
-                filetypes=[("Excel文件", "*.xlsm *.xlsx *.xls"), ("所有文件", "*.*")])
+                                           filetypes=[("Excel文件", "*.xlsm *.xlsx *.xls"), ("所有文件", "*.*")])
             if f:
                 orig_var.set(f)
                 step["original_file"] = f
                 self._wf_save_config()
+
         def _save_orig(*_):
             step["original_file"] = orig_var.get()
             self._wf_save_config()
@@ -872,6 +893,7 @@ class WorkflowTabMixin:
         sheet_var = tk.StringVar(value=step.get("sheet_name", ""))
         sheet_entry = ttk.Entry(grp2, textvariable=sheet_var, font=("微软雅黑", 9))
         sheet_entry.grid(row=row, column=1, sticky="ew", padx=(5, 0), pady=(6, 0))
+
         def _save_sheet(*_):
             step["sheet_name"] = sheet_var.get()
             self._wf_save_config()
@@ -1227,14 +1249,14 @@ class WorkflowTabMixin:
                                    state="disabled", wrap="word")
         self.wf_log_text.grid(row=1, column=0, sticky="nsew", pady=(4, 0))
         log_scroll = ttk.Scrollbar(log_frame, orient="vertical",
-                                    command=self.wf_log_text.yview)
+                                   command=self.wf_log_text.yview)
         log_scroll.grid(row=1, column=1, sticky="ns", pady=(4, 0))
         self.wf_log_text["yscrollcommand"] = log_scroll.set
 
         for tag in ("info", "ok", "warn", "error", "head"):
             self.wf_log_text.tag_config(tag,
-                foreground={"info": "#d4d4d4", "ok": "#4ec9b0", "warn": "#dcdcaa",
-                            "error": "#f44747", "head": "#569cd6"}[tag])
+                                        foreground={"info": "#d4d4d4", "ok": "#4ec9b0", "warn": "#dcdcaa",
+                                                    "error": "#f44747", "head": "#569cd6"}[tag])
 
     def _wf_clear_log(self):
         self.wf_log_text.config(state="normal")
@@ -1247,6 +1269,7 @@ class WorkflowTabMixin:
         ts = datetime.now().strftime("%H:%M:%S")
         msg = f"[{ts}] {msg}"
         w = self.wf_log_text
+
         def _upd():
             try:
                 w.config(state="normal")
@@ -1910,6 +1933,7 @@ class WorkflowTabMixin:
         ts = datetime.now().strftime("%H:%M:%S")
         msg = f"[{ts}] {msg}"
         log_widget = self.upload_log_text
+
         def _update():
             try:
                 if not log_widget.winfo_exists():

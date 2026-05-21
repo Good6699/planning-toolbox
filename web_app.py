@@ -47,6 +47,7 @@ app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
 
+
 @app.after_request
 def _no_cache(response):
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -54,19 +55,24 @@ def _no_cache(response):
     response.headers["Expires"] = "0"
     return response
 
+
 # ── SSE 日志流 ───────────────────────────────────────────
 _log_queues = {}  # task_id -> queue.Queue
+
 
 def _get_next_task_id():
     return str(int(time.time() * 1000))
 
+
 _active_subprocesses = []
 _active_tasks = {}
+
 
 def _register_proc(proc, task_id=None):
     _active_subprocesses.append(proc)
     if task_id:
         _active_tasks.setdefault(task_id, []).append(proc)
+
 
 def _unregister_proc(proc, task_id=None):
     try:
@@ -82,6 +88,7 @@ def _unregister_proc(proc, task_id=None):
         if not procs and task_id in _active_tasks:
             del _active_tasks[task_id]
 
+
 def _handle_shutdown(signum, frame):
     for proc in list(_active_subprocesses):
         try:
@@ -91,6 +98,7 @@ def _handle_shutdown(signum, frame):
             pass
     _log_queues.clear()
     sys.exit(0)
+
 
 if threading.current_thread() is threading.main_thread():
     try:
@@ -102,6 +110,8 @@ if threading.current_thread() is threading.main_thread():
 # ═══════════════════════════════════════════════════════════
 # 页面
 # ═══════════════════════════════════════════════════════════
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -109,6 +119,8 @@ def index():
 # ═══════════════════════════════════════════════════════════
 # 配置 API
 # ═══════════════════════════════════════════════════════════
+
+
 @app.route("/api/config", methods=["GET"])
 def api_get_config():
     cfg = load_config()
@@ -143,6 +155,7 @@ def api_get_config():
     }
     return jsonify(safe)
 
+
 @app.route("/api/config", methods=["POST"])
 def api_save_config():
     cfg = load_config()
@@ -163,6 +176,8 @@ def api_save_config():
 # ═══════════════════════════════════════════════════════════
 # SVN 执行 API
 # ═══════════════════════════════════════════════════════════
+
+
 @app.route("/api/svn/run", methods=["POST"])
 def api_svn_run():
     data = request.get_json(force=True)
@@ -241,8 +256,8 @@ def api_svn_run():
 
         try:
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                     text=True, encoding="utf-8", errors="replace",
-                                     bufsize=1, **_get_subprocess_kwargs())
+                                    text=True, encoding="utf-8", errors="replace",
+                                    bufsize=1, **_get_subprocess_kwargs())
             _register_proc(proc, task_id)
             try:
                 for line in iter(proc.stdout.readline, ""):
@@ -258,6 +273,7 @@ def api_svn_run():
 
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({"task_id": task_id})
+
 
 @app.route("/api/task/cancel", methods=["POST"])
 def api_task_cancel():
@@ -291,6 +307,8 @@ def api_task_cancel():
 # ═══════════════════════════════════════════════════════════
 # 文件浏览 API（上传页签用）
 # ═══════════════════════════════════════════════════════════
+
+
 @app.route("/api/files/list", methods=["POST"])
 def api_file_list():
     data = request.get_json(force=True)
@@ -335,6 +353,7 @@ def api_file_list():
 
     return jsonify({"entries": entries, "path": path})
 
+
 def _get_drives():
     drives = []
     for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
@@ -375,6 +394,8 @@ def api_dir_browse():
 # ═══════════════════════════════════════════════════════════
 # 上传执行 API
 # ═══════════════════════════════════════════════════════════
+
+
 @app.route("/api/upload/run", methods=["POST"])
 def api_upload_run():
     data = request.get_json(force=True)
@@ -449,10 +470,13 @@ def api_upload_run():
 # ═══════════════════════════════════════════════════════════
 # 工作流 API
 # ═══════════════════════════════════════════════════════════
+
+
 @app.route("/api/workflow/list", methods=["GET"])
 def api_workflow_list():
     cfg = load_config()
     return jsonify({"workflows": cfg.get("workflows", [])})
+
 
 @app.route("/api/workflow/save", methods=["POST"])
 def api_workflow_save():
@@ -461,6 +485,7 @@ def api_workflow_save():
     cfg["workflows"] = data.get("workflows", [])
     save_config(cfg)
     return jsonify({"ok": True})
+
 
 @app.route("/api/workflow/run", methods=["POST"])
 def api_workflow_run():
@@ -491,6 +516,7 @@ def api_workflow_run():
 
     def _put(msg, tag=""):
         q.put(msg)
+
     def _line(msg, tag=""):
         prefix = {"error": "❌ ", "ok": "✓ ", "warn": "⚠ ", "head": ""}.get(tag, "")
         _put(f"{prefix}{msg}\n")
@@ -641,8 +667,8 @@ def _exec_lock_svn(step, put, task_id=None):
     proc = None
     try:
         proc = subprocess.Popen([svn, "lock", "--force", "-m", lock_msg, target_path],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, **_get_subprocess_kwargs())
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, **_get_subprocess_kwargs())
         _register_proc(proc, task_id)
         try:
             stdout, stderr = proc.communicate(timeout=60)
@@ -1026,6 +1052,8 @@ def _exec_merge_table(step, put):
 # ═══════════════════════════════════════════════════════════
 # 语言ID映射 API
 # ═══════════════════════════════════════════════════════════
+
+
 def _import_lang_map_txt_to_json():
     """从 lang_map.txt 读取并合并为 {语言名: [ID列表]} 格式"""
     map_path = os.path.join(SCRIPT_DIR, "lang_map.txt")
@@ -1051,6 +1079,7 @@ def _import_lang_map_txt_to_json():
         pass
     return result
 
+
 @app.route("/api/translate/lang-id-map", methods=["GET", "POST"])
 def api_translate_lang_id_map():
     if request.method == "GET":
@@ -1072,6 +1101,8 @@ def api_translate_lang_id_map():
 # ═══════════════════════════════════════════════════════════
 # 翻译执行 API
 # ═══════════════════════════════════════════════════════════
+
+
 @app.route("/api/translate/run", methods=["POST"])
 def api_translate_run():
     data = request.get_json(force=True)
@@ -1420,6 +1451,7 @@ def api_translate_run():
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({"task_id": task_id})
 
+
 @app.route("/api/open/folder", methods=["POST"])
 def api_open_folder():
     data = request.get_json(force=True)
@@ -1602,6 +1634,8 @@ def api_log_stream(task_id):
 # ═══════════════════════════════════════════════════════════
 # 静态文件
 # ═══════════════════════════════════════════════════════════
+
+
 @app.route("/api/close", methods=["POST"])
 def api_close():
     import ctypes
@@ -1613,9 +1647,11 @@ def api_close():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
+
 @app.route("/api/static/<path:filename>")
 def api_static(filename):
     return send_from_directory(_script_dir, filename)
+
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=18123, debug=False)

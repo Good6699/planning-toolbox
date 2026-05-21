@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """策划工具箱 - Web 版本 (Flask 后端)"""
-import sys, os, json, signal, subprocess, threading, queue, time, shutil, stat, tempfile, concurrent.futures
+import sys, os, json, signal, subprocess, threading, queue, time, shutil, stat, concurrent.futures
 from datetime import datetime
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -12,8 +12,8 @@ sys.path.insert(0, _script_dir)
 
 from flask import Flask, render_template, request, jsonify, Response, send_from_directory
 from toolbox_config import (
-    SCRIPT_DIR, MAIN_SCRIPT, CONFIG_FILE, DEFAULT_OUTPUT_DIR,
-    load_config, save_config, int_or
+    SCRIPT_DIR, MAIN_SCRIPT, DEFAULT_OUTPUT_DIR,
+    load_config, save_config,
 )
 from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock
 from xlsm_zipper import apply_via_excel
@@ -787,11 +787,13 @@ def _exec_merge_translation(step, put):
         if sheet_name:
             if sheet_name not in trans_wb.sheetnames:
                 put("翻译文件中无 Sheet: " + sheet_name + "\n")
-                trans_wb.close(); orig_wb.close()
+                trans_wb.close()
+                orig_wb.close()
                 return False
             if sheet_name not in orig_wb.sheetnames:
                 put("原文件中无 Sheet: " + sheet_name + "\n")
-                trans_wb.close(); orig_wb.close()
+                trans_wb.close()
+                orig_wb.close()
                 return False
             process_sheets = [sheet_name]
         else:
@@ -1112,8 +1114,10 @@ def api_translate_run():
     _log_queues[task_id] = q
 
     def _run():
-        import openpyxl, requests, time as _time, re as _re
-        from datetime import datetime
+        import openpyxl
+        import requests
+        import time as _time
+        import re as _re
 
         q.put(f"{'='*50}\n")
         q.put(f"开始翻译\n")
@@ -1218,7 +1222,7 @@ def api_translate_run():
                 if ref_parts:
                     user_parts.append("\n".join(ref_parts))
 
-            numbered = [f"{i+1}|{t.replace(chr(13),' ').replace(chr(10),' ')}" for i, t in enumerate(texts)]
+            numbered = [f"{i+1}|{t.replace(chr(13), ' ').replace(chr(10), ' ')}" for i, t in enumerate(texts)]
             user_parts.append(
                 f"请将以下文本从 {clean_src} 一次性翻译为 {lang_display}。"
                 f"\n严格按照编号和分隔符格式返回，每行一条："
@@ -1248,7 +1252,6 @@ def api_translate_run():
                         data = resp.json()
                         usage = data.get("usage", {})
                         hit = usage.get("prompt_cache_hit_tokens", 0)
-                        miss = usage.get("prompt_cache_miss_tokens", 0)
                         total_p = usage.get("prompt_tokens", 0)
                         if total_p > 0:
                             rate = hit / total_p * 100
@@ -1399,7 +1402,6 @@ def api_translate_run():
                             batch_fail += 1
 
                 overall_fail += batch_fail
-                status = "ok" if batch_fail == 0 else "warn"
                 q.put(f"  批次 {batch_num} 完成（成功 {batch_ok}/{batch_ok + batch_fail}）\n")
                 _time.sleep(0.5)
 
@@ -1583,13 +1585,13 @@ def api_log_stream(task_id):
             try:
                 line = q.get(timeout=15)
                 if line is None:
-                    yield f"data: [DONE]\n\n"
+                    yield "data: [DONE]\n\n"
                     break
                 # SSE data field: newlines inside data get collapsed by HTML.
                 # Use \n inside data payload — frontend splits and renders.
                 yield f"data: {line}\n\n"
             except queue.Empty:
-                yield f"data: \n\n"
+                yield "data: \n\n"
 
     response = Response(_stream(), mimetype="text/event-stream")
     response.headers["Cache-Control"] = "no-cache"

@@ -39,7 +39,6 @@ _docker = None
 _is_dragging = False
 
 
-
 class EdgeDocker:
     def __init__(self, window):
         self.window = window
@@ -277,12 +276,12 @@ class EdgeDocker:
                     ex = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
                     ctypes.windll.user32.SetWindowLongW(hwnd, -20, ex | 0x8)
                     win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0,
-                        win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
+                                          win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
                     desktop = ctypes.windll.user32.FindWindowW("Progman", None)
                     if desktop:
                         ctypes.windll.user32.SwitchToThisWindow(desktop, True)
                         ctypes.windll.user32.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0,
-                            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
+                                                          win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
                 except:
                     pass
         except Exception:
@@ -309,7 +308,7 @@ class EdgeDocker:
                     ex = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
                     ctypes.windll.user32.SetWindowLongW(hwnd, -20, ex & ~0x8)
                     win32gui.SetWindowPos(hwnd, win32con.HWND_NOTOPMOST, 0, 0, 0, 0,
-                        win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
+                                          win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
                 except:
                     pass
         except Exception:
@@ -375,7 +374,7 @@ def _make_tray_image():
 
 
 def _show_window(icon, item=None):
-    global _window_visible, _docker
+    global _window_visible
     hwnd = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
     if hwnd:
         ctypes.windll.user32.ShowWindow(hwnd, 9)
@@ -557,7 +556,6 @@ def _center_on_cursor_screen(hwnd):
 
 
 def _undock_and_center(hwnd):
-    global _docker
     if _docker:
         _docker.docked = None
         _docker._busy_until = time.perf_counter() + 0.6
@@ -588,7 +586,7 @@ def _fallback_subclass(hwnd):
     )
 
     def _wnd_proc(hwnd_inner, msg, wparam, lparam):
-        global _window_visible, _docker
+        global _window_visible
         if msg == 0x0010:
             try:
                 for w in webview.windows:
@@ -641,7 +639,6 @@ def _subclass_window(hwnd):
             _window_visible = False
             return 0
         if msg == 0x0006 and wparam == 1:
-            global _docker
             if _docker and _docker.docked:
                 _docker._taskbar_activate = True
         return ctypes.windll.comctl32.DefSubclassProc(
@@ -701,6 +698,7 @@ def _init_dnd(window):
             js = f"document.getElementById('{target_id}').value={js_path};onSvnUrlPicked();"
         else:
             js = f"document.getElementById('{target_id}').value={js_path};document.getElementById('{target_id}').dispatchEvent(new Event('change',{{bubbles:true}}));"
+
         def _inj():
             try:
                 window.evaluate_js(js)
@@ -740,8 +738,6 @@ def _init_dnd(window):
 
 def main():
     _acquire_instance_lock()
-
-    import web_app
 
     flask_thread = threading.Thread(target=_start_flask, daemon=True)
     flask_thread.start()

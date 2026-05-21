@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """策划工具箱 - 上传SVN页签"""
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-import json, os, subprocess, sys as _sys, threading, re, shutil, stat, copy
+from tkinter import filedialog, messagebox
+import os
+import subprocess
+import threading
+import shutil
+import stat
 from datetime import datetime
-from toolbox_platform import _DropTarget, _check_office_lock, _get_subprocess_kwargs, _get_svn_path
-from toolbox_config import CONFIG_FILE, SCRIPT_DIR, MAIN_SCRIPT, DEFAULT_OUTPUT_DIR, load_config, save_config, int_or
+from toolbox_platform import _get_subprocess_kwargs, _get_svn_path
+from toolbox_config import load_config, save_config
+
 
 class UploadTabMixin:
     def _clear_upload_log(self):
@@ -553,7 +557,7 @@ class UploadTabMixin:
     def _launch_tortoise_commit(self, tortoise_path, wc_root, file_paths):
         """启动 TortoiseSVN 提交对话框，传 WC 根目录展示全部变更"""
         try:
-            proc = subprocess.Popen(
+            subprocess.Popen(
                 [tortoise_path, "/command:commit", f"/path:{wc_root}"],
             )
             self._ulog(f"📄 TortoiseProc -> 已传 {len(file_paths)} 个文件（changelist 分组）", "info")

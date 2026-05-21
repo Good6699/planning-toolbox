@@ -240,22 +240,32 @@
       ]
     },
     {
-      "name": "测试",
+      "name": "JP导出Text (副本)",
       "steps": [
         {
-          "dirs": [
-            "G:\\D3_Asia\\gameData",
-            "G:\\D3_Asia\\Client\\Assets\\StreamingAssets"
-          ],
-          "name": "gameData&StreamingAssets",
-          "type": "upload_svn"
+          "lock_msg": "锁定中，请勿修改",
+          "name": "4",
+          "target_path": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
+          "type": "lock_svn",
+          "update_dirs": [
+            "G:\\D3_JP\\gameData",
+            "G:\\D3_JP\\Client\\Assets\\StreamingAssets"
+          ]
         },
         {
-          "lang_codes": "TH_TH,ZH_CN,ZH_TW,MS_MY,IN_ID",
-          "name": "5",
-          "root_dir": "G:\\D3_Asia\\gameData\\Language",
-          "type": "export_error_code"
-        },
+          "input_file": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
+          "name": "2",
+          "tools": [
+            "G:\\D3_JP\\gameData\\Text\\服务器文字表导出_替换文本引用.bat",
+            "G:\\D3_JP\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
+          ],
+          "type": "export_text"
+        }
+      ]
+    },
+    {
+      "name": "测试",
+      "steps": [
         {
           "input_paths": [
             "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\裂隙\\Text\\Texts.xlsm"

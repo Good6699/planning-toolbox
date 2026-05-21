@@ -3,11 +3,17 @@
 """策划工具箱 - SVN工作流页签"""
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, font as tkfont
-import json, os, subprocess, sys as _sys, threading, re, shutil, stat, copy, concurrent.futures
+import os
+import subprocess
+import sys as _sys
+import threading
+import copy
+import concurrent.futures
 from datetime import datetime
 from toolbox_platform import _DropTarget, _check_office_lock, _get_subprocess_kwargs, _get_svn_path
-from toolbox_config import CONFIG_FILE, SCRIPT_DIR, MAIN_SCRIPT, DEFAULT_OUTPUT_DIR, load_config, save_config, int_or
+from toolbox_config import load_config, save_config
 from xlsm_zipper import apply_via_excel
+
 
 class WorkflowTabMixin:
     def _wf_clear_detail(self):
@@ -1588,11 +1594,13 @@ class WorkflowTabMixin:
             if sheet_name:
                 if sheet_name not in trans_wb.sheetnames:
                     self._wlog("翻译文件中无 Sheet: " + sheet_name, "error")
-                    trans_wb.close(); orig_wb.close()
+                    trans_wb.close()
+                    orig_wb.close()
                     return False
                 if sheet_name not in orig_wb.sheetnames:
                     self._wlog("原文件中无 Sheet: " + sheet_name, "error")
-                    trans_wb.close(); orig_wb.close()
+                    trans_wb.close()
+                    orig_wb.close()
                     return False
                 process_sheets = [sheet_name]
             else:

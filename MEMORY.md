@@ -285,6 +285,11 @@
   - 桌面版通过 `desktop_main.py` 的 `make_server` 启动，不是 `app.run()`，线程配置必须在 `make_server` 加
   - 多个并行 SSE 流需要独立的 DOM 容器 + 独立 EventSource 实例
 - **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/desktop_main.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### lesson-log 与 github-push 合并为 record-and-commit
+- **场景**：2026-05-21 用户要求将两个技能合并为一个。原先 `lesson-log`（记经验到知识库）和 `github-push`（本地 git 提交）被设计为独立的技能，但使用场景高度重合——解决一个复杂问题后通常需要两步一起做。每次分开调用增加沟通成本。
+- **合并方案**：新技能 `record-and-commit` 将两个流程合并为流水线：Step 1-3 记录知识库 → Step 4 git 提交。用户说"记下来"或"提交"时自动识别要执行哪些步骤。旧目录 `.trae/skills/lesson-log/` 和 `.trae/skills/github-push/` 已删除。
+- **涉及文件**：[record-and-commit/SKILL.md](file:///c:/Users/admin/.qclaw/workspace/.trae/skills/record-and-commit/SKILL.md)
 - **全对判断**：`!q.answered || answerSelectedIndex===undefined` 任一未答即不算全对
 - **脚本位置**：`自动学习/auto_exam.js`
 

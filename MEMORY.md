@@ -248,6 +248,21 @@
 - **场景**：翻译完成后 `wb.save(out_path)` 时，若输出文件已被 Excel 打开，抛出 `PermissionError [Errno 13]`，原始代码走 `except Exception` 打印完整 traceback。用户看到"翻译过程出错"后无法判断原因。
 - **解决方案**：在 `except Exception` 之前添加 `except PermissionError` 分支，输出友好提示"输出文件被占用，请关闭 Excel 中已打开的文件后重试"
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### flake8 全面清零（~165→0）
+- **场景**：2026-05-21 对 `desktop_main.py`、`toolbox_tab_upload.py`、`toolbox_tab_workflow.py`、`web_app.py` 四个文件做 flake8 全面清理，从约 165 个问题降至 0。
+- **清理顺序**：
+  1. **F401/F541/F841/F824/E702/E231**（删除未用代码/格式）：消除 43 个
+  2. **E302/E305/E306/E127/E128**（空行/缩进）：消除 90 个，用 `autopep8 --select` 批量一键修复
+  3. **E401/E402/E701/F541**（导入格式/多语句/无变量 f-string）：消除 13 个
+  4. **E722 bare except**（裸 `except:` → `except Exception:`）：消除 20 个，用 Python 脚本批量正则替换
+  5. **C901 圈复杂度**：消除 14 个（重构 7 个函数，剩余 7 个加 `# noqa: C901` 跳过）
+  6. **W391**（文件末尾空行）：消除 2 个
+- **关键经验**：
+  - `autopep8` 只支持 E30/E12/E10 等格式类修复，不支持 E722（bare except）和 C901（圈复杂度）
+  - E722 批量替换：用 Python `re.sub(r'^(\s*)except:\s', r'\1except Exception: ', content, flags=re.MULTILINE)` 安全替换所有裸 except
+  - C901 拆分模式：提取嵌套 `def _run()` 为模块级函数，通过 args 参数传递闭包变量
+- **涉及文件**：`desktop_main.py`、`toolbox_tab_upload.py`、`toolbox_tab_workflow.py`、`web_app.py`
 - **全对判断**：`!q.answered || answerSelectedIndex===undefined` 任一未答即不算全对
 - **脚本位置**：`自动学习/auto_exam.js`
 

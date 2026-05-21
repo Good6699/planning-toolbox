@@ -1,7 +1,7 @@
 {
   "svn_urls": [
-    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/gameData",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/Client",
@@ -309,9 +309,9 @@
   ],
   "output_dir": "C:\\Users\\admin\\.qclaw\\workspace\\输出",
   "output_dir_history": [
+    "C:\\Users\\admin\\.qclaw\\workspace\\输出",
     "G:\\D3_KR2\\gameData\\Text",
-    "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
-    "C:\\Users\\admin\\.qclaw\\workspace\\输出"
+    "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
   ],
   "svn_keyword_history": [
     "裂隙"

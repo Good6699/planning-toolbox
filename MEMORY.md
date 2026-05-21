@@ -110,6 +110,24 @@
 - **多进程IPC开销**：worker返回parsed dict（18MB/个），32个pair需传1.15GB数据到主进程，严重影响性能。应让worker直接写磁盘缓存，只返回轻量结果（diff_rows + 元数据）。
 - **`_cache_hits/_cache_misses` 计数器在worker进程递增但不回传主进程**，导致主进程的缓存统计永远为0不打印
 
+### ctypes 窗口子类化：64位Windows下必须用 wintypes 类型
+- **场景**：`desktop_main.py` 中 `_subclass_window()` 和 `_fallback_subclass()` 使用 ctypes 对 pywebview 窗口做窗口过程子类化，实现隐藏到托盘和任务栏激活
+- **根因**：① HWND/WPARAM/LPARAM 在64位Windows上是指针尺寸（64位），必须用 `wintypes.HWND`/`wintypes.WPARAM`/`wintypes.LPARAM`，不能用 `c_longlong`。用整数类型时，ctypes 做的是有符号整数转换，某些高位指针地址（如 `0x7FFE...`）会被截断或溢出；② `SetWindowLongPtrW` 的 `argtypes` 未设置或类型不匹配时默认按 `c_int`（32位）传参，函数静默失败返回0；③ `_fallback_original=0` 时 fallback 回调跳过 `CallWindowProcW` 直接走 `DefWindowProcW`，绕过了 WinForms 内部消息泵，窗口卡死
+- **解决方案**：① 用 `ctypes.WinDLL('user32', use_last_error=True)` 创建独立 DLL 实例（避免与全局 `ctypes.windll` 冲突）；② `argtypes` 全部使用 `wintypes.HWND`、`wintypes.UINT`、`wintypes.WPARAM`、`wintypes.LPARAM`、`ctypes.c_void_p`（函数指针）；③ 调用 `SetWindowLongPtrW` 前后检查 `ctypes.get_last_error()` 确认返回值是否有效（返回0不一定表示失败，原始值可能为0，需配合 `SetLastError(0)` + `GetLastError()` 判断）；④ 回调函数返回值类型用 `ctypes.c_longlong`（LRESULT 在 64 位下为 64 位有符号）
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/desktop_main.py)
+
+### SVN 精准文件合并功能
+- **场景**：新增第5个页签"SVN合并"，实现双SVN地址输入→筛选版本→选择文件→执行合并→唤起提交弹窗的完整流程
+- **设计**：独立模块 `toolbox_merge.py`（SVN log查询、diff分析、文件级merge、TortoiseSVN弹窗）+ Flask API 端点 + SPA前端页签
+- **关键点**：① 文件级合而不是项目级合并，逐文件调用 `svn merge --accept theirs-full -c REV URL FILE`；② 冲突处理统一用 `theirs-full`，无需人工确认；③ 复用已有 SSE 日志流模式；④ 合并完成后自动唤起 TortoiseSVN 提交弹窗
+- **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)（新增）、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### JS 可选链不能用于赋值左侧
+- **场景**：`index.html` 中 `runMergeRun()` 的 `sb?.querySelector("span")?.textContent = "系统空闲"` 导致整个 `<script>` 块解析失败
+- **根因**：JS 的 `?.` 可选链操作符是表达式（产生值），不能用作赋值目标。`OptionalExpression = value` 是 `SyntaxError: Invalid left-hand side in assignment`，会导致整个页面 JS 全部不执行（侧边栏、导航全部消失）
+- **解决方案**：改用 `if (sb) { sb.classList.remove("running"); ... }` 安全守卫
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

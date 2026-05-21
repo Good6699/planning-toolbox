@@ -270,6 +270,21 @@
 - **教训**：flake8 清理（特别是 F401/F841）**不可自动删除文件**，只能清代码引用。跨进程调用的脚本文件（`_cmp_worker.py`、`_github_push.py` 等）必须手动确认是否被 `subprocess`/`os.system`/`Popen` 等 API 使用。
 - **恢复方法**：`git checkout <删除前一个提交>^ -- _cmp_worker.py` 从 git 历史恢复文件
 - **涉及文件**：[_cmp_worker.py](file:///c:/Users/admin/.qclaw/workspace/_cmp_worker.py)
+
+### SSE 实时日志流修复（并行工作流阻塞/日志不刷新）
+- **场景**：2026-05-21 并行运行 2 个工作流时日志不实时刷新，且实际为串行执行。日志显示正常但第二个工作流等第一个跑完才开始。
+- **根因**：`desktop_main.py` 使用 `werkzeug.serving.make_server("127.0.0.1", 18123, app)` 启动 Flask，默认单线程——SSE 长连接占用线程后，后续 HTTP 请求全部排队等待。`app.run(threaded=True)` 无效因为桌面版不经过 `if __name__` 路径。
+- **解决方案**：
+  1. `make_server(..., app, threaded=True)` 开启多线程，每个请求独立线程处理，SSE 不再阻塞其他请求
+  2. `api_log_stream` 用 `stream_with_context` 包装生成器，确保每个 `yield` 立即推送到客户端
+  3. Cache-Control 强化为 `no-store, must-revalidate` 禁止任何缓存
+  4. 前端每个工作流日志用独立 DOM 节点（唯一 `bodyId`），不再是所有工作流共用一个 `wf_log_single`
+  5. 播放按钮点击时 `appendChild` 而不是 `innerHTML=""`，避免清空已有日志
+- **关键经验**：
+  - `direct_passthrough=True` 要求 yield bytes，SSE 返回 str 会报错，不能加
+  - 桌面版通过 `desktop_main.py` 的 `make_server` 启动，不是 `app.run()`，线程配置必须在 `make_server` 加
+  - 多个并行 SSE 流需要独立的 DOM 容器 + 独立 EventSource 实例
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/desktop_main.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 - **全对判断**：`!q.answered || answerSelectedIndex===undefined` 任一未答即不算全对
 - **脚本位置**：`自动学习/auto_exam.js`
 

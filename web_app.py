@@ -408,6 +408,38 @@ def api_dir_browse():
 # ═══════════════════════════════════════════════════════════
 
 
+def _decode_svn_output(data):
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data.decode("gbk", errors="replace")
+
+
+def _svn_update_first(q, target_dir):
+    svn_exe = _get_svn_path()
+    q.put("正在更新 SVN 工作副本...\n")
+    try:
+        r = subprocess.run(
+            [svn_exe, "update", "--accept", "theirs-full", target_dir],
+            capture_output=True, text=False,
+            timeout=120, **_get_subprocess_kwargs()
+        )
+        text = _decode_svn_output(r.stdout)
+        if r.returncode == 0:
+            for line in text.strip().splitlines():
+                line = line.strip()
+                if line:
+                    q.put(f"  {line}\n")
+            q.put("SVN 更新完成\n")
+        else:
+            err_text = _decode_svn_output(r.stderr)
+            q.put("SVN 更新失败: " + err_text.strip() + "\n")
+    except subprocess.TimeoutExpired:
+        q.put("SVN 更新超时（超过2分钟）\n")
+    except Exception as e:
+        q.put("SVN 更新异常: " + str(e) + "\n")
+
+
 def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
     q.put(f"\n{'─'*40}\n")
     q.put("开始SVN上传\n")
@@ -563,26 +595,6 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
             pass
     q.put(f"   🏷️ {cl_ok}/{len(modified_files)} 个文件已标记 changelist\n")
 
-    q.put("正在更新 SVN 工作副本...\n")
-    try:
-        r = subprocess.run(
-            [svn_exe, "update", "--accept", "theirs-full", wc_root],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=120, **_get_subprocess_kwargs()
-        )
-        if r.returncode == 0:
-            for line in r.stdout.strip().splitlines():
-                line = line.strip()
-                if line:
-                    q.put(f"  {line}\n")
-            q.put("SVN 更新完成\n")
-        else:
-            q.put("SVN 更新失败: " + r.stderr.strip() + "\n")
-    except subprocess.TimeoutExpired:
-        q.put("SVN 更新超时（超过2分钟）\n")
-    except Exception as e:
-        q.put("SVN 更新异常: " + str(e) + "\n")
-
     tortoise = _get_tortoise_proc_path()
     if tortoise:
         q.put(f"🖥️ 正在打开 TortoiseSVN 提交对话框 ({len(modified_files)} 个文件)...\n")
@@ -598,6 +610,23 @@ def _run_upload_copy(src, tgt, files, q):
     q.put(f"源: {src}\n")
     q.put(f"目标: {tgt}\n\n")
 
+    svn_exe = _get_svn_path()
+    result = subprocess.run(
+        [svn_exe, "info", tgt],
+        capture_output=True, text=False,
+        timeout=15, **_get_subprocess_kwargs()
+    )
+    if result.returncode == 0:
+        wc_r = subprocess.run(
+            [svn_exe, "info", "--show-item", "wc-root", tgt],
+            capture_output=True, text=False,
+            timeout=15, **_get_subprocess_kwargs()
+        )
+        wc_root = _decode_svn_output(wc_r.stdout).strip()
+        if wc_root:
+            _svn_update_first(q, wc_root)
+
+    q.put("开始复制文件...\n")
     success = fail = 0
     copied_files = []
     for fi in files:
@@ -1766,6 +1795,26 @@ def _find_svn_wc(url):
         if found:
             break
     return found
+
+
+@app.route("/api/svn/clear-changelist", methods=["POST"])
+def api_svn_clear_changelist():
+    data = request.get_json(force=True)
+    target_dir = data.get("target_dir", "").strip()
+    if not target_dir or not os.path.isdir(target_dir):
+        return jsonify({"ok": False, "error": "无效目录"}), 400
+    svn_exe = _get_svn_path()
+    try:
+        r = subprocess.run(
+            [svn_exe, "changelist", "--remove", "--changelist", "本次修改", target_dir, "--depth", "infinity"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=60, **_get_subprocess_kwargs()
+        )
+        if r.returncode == 0:
+            return jsonify({"ok": True, "message": "changelist 已清理"})
+        return jsonify({"ok": False, "error": r.stderr.strip() or "清理失败"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/svn/find-wc", methods=["POST"])

@@ -14,8 +14,6 @@
 
 ## 当前项目与关注
 
-- SVN版本对比工具（v9+）：多进程并行解析 + 下载/解析流水线 + ID Map缓存 + 预过滤；Python GUI (svn_compare_gui.py)
-- SVN工具GUI已改为Python实现（svn_compare_gui.py），配置持久化到svn_gui_config.json
 - **策划工具箱桌面版**：pywebview(内嵌WebView2) + Flask后端 + SPA前端，端口18123
 
 ## 策划工具箱桌面版架构
@@ -290,6 +288,27 @@
 - **场景**：2026-05-21 用户要求将两个技能合并为一个。原先 `lesson-log`（记经验到知识库）和 `github-push`（本地 git 提交）被设计为独立的技能，但使用场景高度重合——解决一个复杂问题后通常需要两步一起做。每次分开调用增加沟通成本。
 - **合并方案**：新技能 `record-and-commit` 将两个流程合并为流水线：Step 1-3 记录知识库 → Step 4 git 提交。用户说"记下来"或"提交"时自动识别要执行哪些步骤。旧目录 `.trae/skills/lesson-log/` 和 `.trae/skills/github-push/` 已删除。
 - **涉及文件**：[record-and-commit/SKILL.md](file:///c:/Users/admin/.qclaw/workspace/.trae/skills/record-and-commit/SKILL.md)
+
+### SVN update 提前到复制前 + 中文编码修复
+- **场景**：2026-05-21 上传SVN功能运行时先复制文件再更新，导致新复制的文件可能被远程无冲突覆盖；同时 `svn update` 输出包含中文乱码。
+- **解决方案**：
+  1. `svn update` 提前到文件复制前执行（`_svn_update_first`），确保工作副本最新后再复制
+  2. 新增 `_decode_svn_output` 函数：先尝试 UTF-8 解码，失败则用 GBK 解码（中文版 SVN 输出 GBK 编码）
+- **关键经验**：SVN 中文版输出编码为 GBK（cp936），不能预设 UTF-8，需要双编码容错
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### 工作流步骤自动根据配置内容识别名称
+- **场景**：2026-05-21 用户反馈工作流子步骤名称无法修改，要求改用规则自动生成。
+- **规则**：
+  - 打开表格 → 显示文件路径的文件名（`os.path.basename`）
+  - 锁定SVN → 显示目标路径的文件名
+  - 导出文字表 → 显示主文件路径的文件名
+  - 上传SVN → 显示源目录的文件名，多个逗号分隔
+  - 合并翻译 → 显示原始文件路径的文件名
+  - 导出错误码 → 显示语言代码，多个逗号分隔
+  - 合并表格 → 显示输入文件路径的文件名，多个逗号分隔
+- **实现**：桌面GUI 用 `_wf_auto_name` 静态方法 + `_wf_save_config` 命名的 `_wf_edit_ctx` 自动触发；Web UI 用 `_wfAutoName` 在模态框保存时执行
+- **涉及文件**：[toolbox_tab_workflow.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_tab_workflow.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 - **全对判断**：`!q.answered || answerSelectedIndex===undefined` 任一未答即不算全对
 - **脚本位置**：`自动学习/auto_exam.js`
 

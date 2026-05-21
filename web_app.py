@@ -27,6 +27,7 @@ from toolbox_config import (  # noqa: E402
 )
 from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock  # noqa: E402
 from xlsm_zipper import apply_via_excel  # noqa: E402
+from toolbox_merge import svn_log, svn_log_changed_files, svn_merge, open_commit_dialog, resolve_target_path  # noqa: E402
 
 if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
     if len(sys.argv) < 3:
@@ -1860,6 +1861,148 @@ def api_cache_clear():
         except Exception as e:
             return jsonify({"error": f"清理 {sub} 失败: {e}"}), 500
     return jsonify({"ok": True, "count": total})
+
+
+# ═══════════════════════════════════════════════════════════
+# SVN 精准合并 API
+# ═══════════════════════════════════════════════════════════
+
+
+@app.route("/api/merge/query", methods=["POST"])
+def api_merge_query():
+    """查询源SVN版本列表及变更文件"""
+    data = request.get_json(force=True)
+    source_url = data.get("source_url", "").strip()
+    start_date = data.get("start_date", "")
+    end_date = data.get("end_date", "")
+    author = data.get("author", "").strip() or None
+    keyword = data.get("keyword", "").strip() or None
+    if not source_url:
+        return jsonify({"ok": False, "error": "源SVN地址不能为空"}), 400
+    if not start_date or not end_date:
+        return jsonify({"ok": False, "error": "请选择日期范围"}), 400
+    cfg = load_config()
+    svn_user = data.get("svn_user") or cfg.get("svn_user", "")
+    svn_pass = data.get("svn_pass") or cfg.get("svn_pass", "")
+    if svn_pass:
+        from toolbox_config import decrypt_key
+        svn_pass = decrypt_key(svn_pass)
+    try:
+        versions = svn_log(source_url, start_date, end_date,
+                           author=author, keyword=keyword,
+                           svn_user=svn_user or None,
+                           svn_pass=svn_pass or None)
+        for v in versions:
+            try:
+                files = svn_log_changed_files(
+                    source_url, v["rev"],
+                    svn_user=svn_user or None,
+                    svn_pass=svn_pass or None)
+                v["files"] = files
+            except Exception:
+                v["files"] = []
+        return jsonify({"ok": True, "versions": versions, "total": len(versions)})
+    except RuntimeError as e:
+        return jsonify({"ok": False, "error": str(e)}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"查询失败: {e}"}), 200
+
+
+def _merge_worker(task_id, source_url, target_path, revisions, files,
+                  svn_user, svn_pass):
+    """后台合并任务线程"""
+    q = _log_queues.setdefault(task_id, queue.Queue())
+    ts = datetime.now().strftime("%H:%M:%S")
+
+    def _log(msg, level="info"):
+        tag = f"[{ts}][{level}]" if level != "info" else f"[{ts}]"
+        q.put(f"{tag} {msg}\n")
+
+    try:
+        q.put(f"{'='*50}\n")
+        q.put("🚀 SVN精准合并开始\n")
+        q.put(f"源地址: {source_url}\n")
+        q.put(f"目标路径: {target_path}\n")
+        q.put(f"涉及版本: {len(revisions)} 个, 文件: {len(files)} 个\n")
+        q.put(f"{'='*50}\n")
+
+        total_merged = 0
+        total_conflict = 0
+        total_skipped = 0
+        all_conflict_files = []
+
+        for rev in revisions:
+            q.put(f"\n── 处理版本 r{rev} ──\n")
+            try:
+                result = svn_merge(
+                    source_url, target_path, rev, files,
+                    svn_user=svn_user, svn_pass=svn_pass,
+                    log_callback=_log
+                )
+                total_merged += result["merged"]
+                total_conflict += result["conflict"]
+                total_skipped += result["skipped"]
+                all_conflict_files.extend(result["conflict_files"])
+            except Exception as e:
+                q.put(f"  ❌ 版本 r{rev} 合并失败: {e}\n")
+
+        q.put("\n" + "=" * 50 + "\n")
+        q.put("📊 合并统计\n")
+        q.put(f"  ✅ 合并成功: {total_merged} 个文件\n")
+        q.put(f"  ⚠  源版本覆盖(冲突): {total_conflict} 个文件\n")
+        q.put(f"  ⏭  跳过: {total_skipped} 个文件\n")
+        if all_conflict_files:
+            q.put("\n📋 冲突文件清单（已用源版本覆盖）：\n")
+            for cf in all_conflict_files:
+                q.put(f"  - {cf}\n")
+
+        q.put(f"\n{'='*50}\n")
+        q.put("🔄 正在唤起SVN提交弹窗...\n")
+        opened = open_commit_dialog(target_path)
+        if opened:
+            q.put("✅ 已打开TortoiseSVN提交弹窗，请手动确认提交\n")
+        else:
+            q.put("⚠ 未找到TortoiseSVN，请手动执行 svn commit\n")
+        q.put("🎉 合并流程结束\n")
+    except Exception as e:
+        q.put(f"\n❌ 合并任务异常终止: {e}\n")
+    finally:
+        q.put(None)
+
+
+@app.route("/api/merge/run", methods=["POST"])
+def api_merge_run():
+    """执行SVN精准合并"""
+    data = request.get_json(force=True)
+    source_url = data.get("source_url", "").strip()
+    target_url_or_path = data.get("target_path", "").strip()
+    revisions = data.get("revisions", [])
+    files = data.get("files", [])
+    if not source_url:
+        return jsonify({"ok": False, "error": "源SVN地址不能为空"}), 400
+    if not target_url_or_path:
+        return jsonify({"ok": False, "error": "目标路径不能为空"}), 400
+    if not revisions:
+        return jsonify({"ok": False, "error": "请选择至少一个版本"}), 400
+    if not files:
+        return jsonify({"ok": False, "error": "请选择至少一个文件"}), 400
+    target_path = resolve_target_path(target_url_or_path)
+    if not target_path:
+        return jsonify({"ok": False, "error": "无法确定目标本地工作副本路径，请确保路径有效或已执行过SVN检出"}), 400
+    cfg = load_config()
+    svn_user = data.get("svn_user") or cfg.get("svn_user", "")
+    svn_pass = data.get("svn_pass") or cfg.get("svn_pass", "")
+    if svn_pass:
+        from toolbox_config import decrypt_key
+        svn_pass = decrypt_key(svn_pass)
+    task_id = _get_next_task_id()
+    t = threading.Thread(target=_merge_worker,
+                         args=(task_id, source_url, target_path,
+                               revisions, files,
+                               svn_user or None, svn_pass or None),
+                         daemon=True)
+    t.start()
+    return jsonify({"task_id": task_id})
 
 
 # ═══════════════════════════════════════════════════════════

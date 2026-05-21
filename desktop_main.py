@@ -9,6 +9,7 @@ import time
 import socket
 import signal
 import ctypes
+from ctypes import wintypes
 import urllib.request
 import webview
 import win32gui
@@ -591,15 +592,16 @@ def _fallback_subclass(hwnd):
     GWLP_WNDPROC = -4
 
     WNDPROC = ctypes.WINFUNCTYPE(
-        ctypes.c_longlong, ctypes.c_longlong, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong
+        ctypes.c_longlong,
+        wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
     )
 
-    ctypes.windll.user32.DefWindowProcW.argtypes = (
-        ctypes.c_longlong, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong
+    _user32 = ctypes.WinDLL('user32', use_last_error=True)
+    _user32.CallWindowProcW.argtypes = (
+        ctypes.c_void_p, wintypes.HWND, wintypes.UINT,
+        wintypes.WPARAM, wintypes.LPARAM,
     )
-    ctypes.windll.user32.CallWindowProcW.argtypes = (
-        ctypes.c_longlong, ctypes.c_longlong, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong
-    )
+    _user32.CallWindowProcW.restype = ctypes.c_longlong
 
     def _wnd_proc(hwnd_inner, msg, wparam, lparam):
         global _window_visible
@@ -616,7 +618,7 @@ def _fallback_subclass(hwnd):
             if _docker and _docker.docked:
                 _docker._taskbar_activate = True
         if _fallback_original:
-            return ctypes.windll.user32.CallWindowProcW(
+            return _user32.CallWindowProcW(
                 _fallback_original, hwnd_inner, msg, wparam, lparam
             )
         return ctypes.windll.user32.DefWindowProcW(
@@ -624,13 +626,22 @@ def _fallback_subclass(hwnd):
         )
 
     _wnd_proc_fallback_ref = WNDPROC(_wnd_proc)
-    ctypes.windll.user32.SetWindowLongPtrW.restype = ctypes.c_longlong
-    new_ptr = ctypes.cast(_wnd_proc_fallback_ref, ctypes.c_void_p).value
-    global _fallback_original
-    _fallback_original = ctypes.windll.user32.SetWindowLongPtrW(
-        hwnd, GWLP_WNDPROC, new_ptr
+    _user32.SetWindowLongPtrW.argtypes = (
+        wintypes.HWND, wintypes.INT, ctypes.c_void_p,
     )
-    print(f"[子类化] fallback 完成, 原 WNDPROC={_fallback_original:#x}", file=sys.stderr)
+    _user32.SetWindowLongPtrW.restype = ctypes.c_void_p
+    _ptr = ctypes.cast(_wnd_proc_fallback_ref, ctypes.c_void_p)
+    global _fallback_original
+    _fallback_original = _user32.SetWindowLongPtrW(
+        wintypes.HWND(hwnd), GWLP_WNDPROC, _ptr,
+    )
+    if not _fallback_original:
+        err = ctypes.get_last_error()
+        if err:
+            print(f"[子类化] SetWindowLongPtrW 失败, GetLastError={err}", file=sys.stderr)
+            _fallback_original = 0
+            return
+    print(f"[子类化] fallback 完成, 原 WNDPROC={int(ctypes.cast(_fallback_original, ctypes.c_void_p).value):#x}", file=sys.stderr)
 
 
 def _subclass_window(hwnd):
@@ -639,9 +650,11 @@ def _subclass_window(hwnd):
 
     SUBCLASSPROC = ctypes.WINFUNCTYPE(
         ctypes.c_longlong,
-        ctypes.c_longlong, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong,
-        ctypes.c_ulonglong, ctypes.c_ulonglong,
+        wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
+        ctypes.c_void_p, ctypes.c_void_p,
     )
+
+    _comctl32 = ctypes.WinDLL('comctl32', use_last_error=True)
 
     def _subclass_proc(hwnd_inner, msg, wparam, lparam, uId, dwRef):
         global _window_visible
@@ -657,19 +670,24 @@ def _subclass_window(hwnd):
         if msg == 0x0006 and wparam == 1:
             if _docker and _docker.docked:
                 _docker._taskbar_activate = True
-        return ctypes.windll.comctl32.DefSubclassProc(
+        return _comctl32.DefSubclassProc(
             hwnd_inner, msg, wparam, lparam
         )
 
     _wnd_proc_ref = SUBCLASSPROC(_subclass_proc)
-    ctypes.windll.comctl32.DefSubclassProc.restype = ctypes.c_longlong
-    ctypes.windll.comctl32.SetWindowSubclass.argtypes = (
-        ctypes.c_longlong, ctypes.c_ulonglong, ctypes.c_ulonglong, ctypes.c_ulonglong,
+    _comctl32.DefSubclassProc.argtypes = (
+        wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
     )
-    ctypes.windll.comctl32.InitCommonControls()
-    result = ctypes.windll.comctl32.SetWindowSubclass(
-        hwnd, ctypes.cast(_wnd_proc_ref, ctypes.c_void_p).value,
-        _SUBCLASS_ID, 0
+    _comctl32.DefSubclassProc.restype = ctypes.c_longlong
+    _comctl32.SetWindowSubclass.argtypes = (
+        wintypes.HWND, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+    )
+    _comctl32.SetWindowSubclass.restype = ctypes.c_longlong
+    _comctl32.InitCommonControls()
+    _subclass_ptr = ctypes.cast(_wnd_proc_ref, ctypes.c_void_p)
+    result = _comctl32.SetWindowSubclass(
+        wintypes.HWND(hwnd), _subclass_ptr,
+        ctypes.c_void_p(_SUBCLASS_ID), ctypes.c_void_p(0)
     )
     if not result:
         print("[子类化] SetWindowSubclass 失败, 尝试 fallback", file=sys.stderr)

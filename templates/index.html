@@ -1143,6 +1143,126 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   font-size:11px;color:var(--dim);
   margin-top:2px;
 }
+
+/* ── SVN 合并页签 ── */
+.merge-layout{
+  display:grid;
+  grid-template-columns:1fr 480px;
+  gap:16px;
+  align-content:start;
+}
+.merge-full{
+  grid-column:1/-1;
+}
+.merge-version-list{
+  max-height:400px;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.merge-version-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  border-radius:8px;
+  cursor:pointer;
+  transition:background .15s;
+  font-size:13px;
+}
+.merge-version-item:hover{
+  background:var(--panel2);
+}
+.merge-version-item.active{
+  background:rgba(94,162,255,.15);
+  border-left:3px solid var(--accent);
+}
+.merge-version-item .rev{
+  font-weight:600;
+  color:var(--accent);
+  min-width:50px;
+}
+.merge-version-item .date{
+  color:var(--dim);
+  font-size:11px;
+  min-width:100px;
+}
+.merge-version-item .author{
+  color:var(--sub);
+  font-size:11px;
+  min-width:60px;
+}
+.merge-version-item .msg{
+  color:var(--text);
+  flex:1;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.merge-file-list{
+  max-height:350px;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  margin-top:8px;
+}
+.merge-file-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 8px;
+  border-radius:6px;
+  font-size:12px;
+  cursor:pointer;
+  transition:background .15s;
+}
+.merge-file-item:hover{
+  background:var(--panel2);
+}
+.merge-file-item.selected{
+  background:rgba(94,162,255,.1);
+}
+.merge-file-item input[type="checkbox"]{
+  accent-color:var(--accent);
+}
+.merge-file-item .action-tag{
+  font-size:10px;
+  padding:1px 5px;
+  border-radius:4px;
+  font-weight:600;
+  min-width:28px;
+  text-align:center;
+}
+.merge-file-item .action-tag.add{background:rgba(82,210,115,.15);color:var(--success);}
+.merge-file-item .action-tag.mod{background:rgba(94,162,255,.15);color:var(--accent);}
+.merge-file-item .action-tag.del{background:rgba(255,99,125,.15);color:var(--danger);}
+.merge-file-item .path{
+  flex:1;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:var(--sub);
+}
+.merge-file-ops{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  margin-top:8px;
+}
+.merge-file-ops .count{
+  color:var(--accent);
+  font-size:12px;
+  font-weight:600;
+  margin-left:auto;
+}
+.merge-empty{
+  padding:24px 16px;
+  text-align:center;
+  color:var(--dim);
+  font-size:13px;
+}
 </style>
 </head>
 <body>
@@ -1200,6 +1320,7 @@ const nav = [
   {key:"upload",label:"复制上传"},
   {key:"workflow",label:"工作流"},
   {key:"translate",label:"翻译"},
+  {key:"merge",label:"SVN 合并"},
 ];
 nav.forEach(n => { S[n.key] = {el:null,built:false,logEl:null}; });
 const sidebarNav = document.getElementById("sidebar_nav");
@@ -1233,6 +1354,7 @@ const tabMeta = {
   upload:{title:"复制上传",sub:"批量文件复制上传到 SVN 工作目录"},
   workflow:{title:"工作流",sub:"自动化 SVN 操作编排"},
   translate:{title:"翻译",sub:"Excel 多语言批量翻译工作台"},
+  merge:{title:"SVN 合并",sub:"精准文件级SVN版本合并 — 无需还原、无需清空本地修改"},
 };
 function switchTab(key) {
   nav.forEach(n => {
@@ -1262,6 +1384,7 @@ function buildTab(key) {
       case "upload": buildUploadTab(panel); break;
       case "workflow": buildWorkflowTab(panel); break;
       case "translate": buildTranslateTab(panel); break;
+      case "merge": buildMergeTab(panel); break;
     }
     S[key].built = true;
   }, 20);
@@ -2524,6 +2647,303 @@ function saveAdvSettings() {
       document.querySelector("[data-action='save-adv-settings']").textContent = "保存";
     });
 }
+let _mergeData = {versions:[], selectedRev:null, checkedFiles:{}, totalChecked:0};
+function buildMergeTab(panel) {
+  const today = `${cy}-${String(cm).padStart(2,"0")}-${String(cd).padStart(2,"0")}`;
+  const yearStart = `${cy}-01-01`;
+  panel.innerHTML = `
+    <div class="workbench merge-layout">
+      <div class="merge-full card">
+        <div class="card-title">SVN 地址</div>
+        <div class="form-group">
+          <label>源SVN地址（读取版本、变更文件）</label>
+          <input type="text" id="merge_source" placeholder="输入源SVN仓库URL，如 http://svn/repo/branches/xxx" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>目标路径（合并落地的本地工作副本路径）</label>
+          <input type="text" id="merge_target" placeholder="输入本地SVN工作副本路径，如 D:/workspace/project" autocomplete="off">
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">筛选条件</div>
+        <div class="form-group">
+          <label>时间范围</label>
+          <div class="flex-row" style="align-items:center">
+            <input type="date" id="merge_start" value="${yearStart}" style="flex:1;min-width:0">
+            <span style="color:var(--dim)">—</span>
+            <input type="date" id="merge_end" value="${today}" style="flex:1;min-width:0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>提交者（留空不限）</label>
+          <input type="text" id="merge_author" placeholder="按SVN用户名过滤" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>备注关键词（留空不限）</label>
+          <input type="text" id="merge_keyword" placeholder="按提交备注模糊匹配">
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">SVN 凭证</div>
+        <div class="form-group">
+          <label>用户名</label>
+          <input type="text" id="merge_user" placeholder="SVN账号（默认使用已保存的）" value="${escapeHtml(config.svn_user||"")}">
+        </div>
+        <div class="form-group">
+          <label>密码</label>
+          <input type="password" id="merge_pass" placeholder="SVN密码">
+        </div>
+      </div>
+      <div class="merge-full">
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header compact">
+            <span style="font-weight:600">版本列表</span>
+            <span style="color:var(--dim);font-size:12px" id="merge_version_count"></span>
+          </div>
+          <div class="merge-version-list" id="merge_version_list">
+            <div class="merge-empty">请配置筛选条件后点击「筛选查询」</div>
+          </div>
+        </div>
+      </div>
+      <div class="merge-full">
+        <div class="card" style="margin-bottom:0">
+          <div class="card-header compact">
+            <span style="font-weight:600">变更文件</span>
+            <span style="color:var(--dim);font-size:12px" id="merge_file_hint">请先选择一个版本</span>
+          </div>
+          <div class="merge-file-list" id="merge_file_list">
+            <div class="merge-empty">请先在左侧选择一个版本查看变更文件</div>
+          </div>
+          <div class="merge-file-ops">
+            <button class="btn btn-normal btn-sm" data-action="merge-select-all">全选</button>
+            <button class="btn btn-normal btn-sm" data-action="merge-select-invert">反选</button>
+            <button class="btn btn-normal btn-sm" data-action="merge-select-clear">清空</button>
+            <span class="count" id="merge_file_count">已选 0 个文件</span>
+          </div>
+        </div>
+      </div>
+      <div class="action-center merge-full" style="display:flex;gap:12px;justify-content:center">
+        <button class="btn btn-primary" data-action="merge-query" id="merge_query_btn" style="min-width:180px">筛选查询</button>
+        <button class="btn btn-primary" data-action="merge-run" id="merge_run_btn" style="min-width:180px" disabled>开始精准合并</button>
+      </div>
+      <div class="merge-full">
+        <div class="card">
+          <div class="card-header compact">
+            <span style="font-weight:600">执行日志</span>
+          </div>
+          <div class="log" id="merge_log"></div>
+        </div>
+      </div>
+    </div>
+  `;
+  S.merge.logEl = document.getElementById("merge_log");
+  const savedSource = config.svn_urls?.[0] || "";
+  if (savedSource) document.getElementById("merge_source").value = savedSource;
+  initSuggest("merge_source", config.svn_urls||[]);
+  enablePathDrop("merge_target", {mode:"path"});
+  initSuggest("merge_author", config.svn_author_history||[]);
+  initSuggest("merge_keyword", config.svn_keyword_history||[]);
+  document.getElementById("merge_source").addEventListener("blur", ()=>{
+    const val = document.getElementById("merge_source").value.trim();
+    if (val && val.startsWith("http") && !(config.svn_urls||[]).includes(val)) {
+      saveConfig({svn_urls:[val, ...(config.svn_urls||[])].slice(0,20)});
+      config.svn_urls = [val, ...(config.svn_urls||[])].slice(0,20);
+      initSuggest("merge_source", config.svn_urls);
+    }
+  });
+  document.getElementById("merge_author").addEventListener("blur", ()=>{
+    const val = document.getElementById("merge_author").value.trim();
+    if (val && !(config.svn_author_history||[]).includes(val)) {
+      saveConfig({svn_author_history:[val, ...(config.svn_author_history||[])].slice(0,20)});
+      initSuggest("merge_author", config.svn_author_history);
+    }
+  });
+  document.getElementById("merge_keyword").addEventListener("blur", ()=>{
+    const val = document.getElementById("merge_keyword").value.trim();
+    if (val && !(config.svn_keyword_history||[]).includes(val)) {
+      saveConfig({svn_keyword_history:[val, ...(config.svn_keyword_history||[])].slice(0,20)});
+      initSuggest("merge_keyword", config.svn_keyword_history);
+    }
+  });
+}
+async function runMergeQuery() {
+  const sourceUrl = document.getElementById("merge_source").value.trim();
+  const targetPath = document.getElementById("merge_target").value.trim();
+  const startDate = document.getElementById("merge_start").value;
+  const endDate = document.getElementById("merge_end").value;
+  if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
+  if (!targetPath) { _showToast("请输入目标本地工作副本路径"); return; }
+  const btn = document.getElementById("merge_query_btn");
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.innerHTML = '<span class="spinner"></span>查询中...';
+  try {
+    const body = {
+      source_url: sourceUrl,
+      start_date: startDate,
+      end_date: endDate,
+      author: document.getElementById("merge_author").value.trim() || "",
+      keyword: document.getElementById("merge_keyword").value.trim() || "",
+      svn_user: document.getElementById("merge_user").value.trim() || undefined,
+      svn_pass: document.getElementById("merge_pass").value || undefined,
+    };
+    saveConfig({svn_urls:[sourceUrl, ...(config.svn_urls||[]).filter(u=>u!==sourceUrl)].slice(0,20)});
+    config.svn_urls = [sourceUrl, ...(config.svn_urls||[]).filter(u=>u!==sourceUrl)].slice(0,20);
+    initSuggest("merge_source", config.svn_urls);
+    const r = await fetch("/api/merge/query", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const d = await r.json();
+    if (d.error) { _showToast(d.error); return; }
+    _mergeData.versions = d.versions || [];
+    _mergeData.selectedRev = null;
+    _mergeData.checkedFiles = {};
+    _mergeData.totalChecked = 0;
+    renderMergeVersions();
+    document.getElementById("merge_file_list").innerHTML = '<div class="merge-empty">请先在左侧选择一个版本查看变更文件</div>';
+    document.getElementById("merge_file_hint").textContent = "请先选择一个版本";
+    document.getElementById("merge_file_count").textContent = "已选 0 个文件";
+    document.getElementById("merge_run_btn").disabled = true;
+    document.getElementById("merge_version_count").textContent = d.total ? `共 ${d.total} 个版本` : "";
+    if (!d.total) {
+      document.getElementById("merge_version_list").innerHTML = '<div class="merge-empty">暂无符合筛选条件的版本记录</div>';
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+function renderMergeVersions() {
+  const container = document.getElementById("merge_version_list");
+  const versions = _mergeData.versions;
+  if (!versions.length) {
+    container.innerHTML = '<div class="merge-empty">暂无符合筛选条件的版本记录</div>';
+    return;
+  }
+  container.innerHTML = versions.map((v, i) => {
+    const active = _mergeData.selectedRev === v.rev ? " active" : "";
+    const dateStr = (v.date||"").slice(0, 10);
+    const msgShort = (v.msg||"").slice(0, 60);
+    return `<div class="merge-version-item${active}" data-rev="${v.rev}" data-idx="${i}">
+      <span class="rev">r${v.rev}</span>
+      <span class="date">${dateStr}</span>
+      <span class="author">${escapeHtml(v.author)}</span>
+      <span class="msg" title="${escapeHtml(v.msg)}">${escapeHtml(msgShort)}</span>
+    </div>`;
+  }).join("");
+}
+function renderMergeFiles(files) {
+  const container = document.getElementById("merge_file_list");
+  if (!files || !files.length) {
+    container.innerHTML = '<div class="merge-empty">该版本无变更文件</div>';
+    return;
+  }
+  const actionCn = {add:"新增", mod:"修改", del:"删除"};
+  container.innerHTML = files.map((f, i) => {
+    const path = f.path || "";
+    const action = f.action || "";
+    const checked = _mergeData.checkedFiles[path] ? " checked" : "";
+    const selected = _mergeData.checkedFiles[path] ? " selected" : "";
+    return `<div class="merge-file-item${selected}" data-path="${escapeHtml(path)}" data-idx="${i}">
+      <input type="checkbox"${checked}>
+      <span class="action-tag ${action}">${actionCn[action]||action}</span>
+      <span class="path" title="${escapeHtml(path)}">${escapeHtml(path)}</span>
+    </div>`;
+  }).join("");
+  _updateMergeFileCount();
+}
+function _updateMergeFileCount() {
+  const total = _mergeData.totalChecked;
+  document.getElementById("merge_file_count").textContent = `已选 ${total} 个文件`;
+  document.getElementById("merge_run_btn").disabled = total === 0;
+  document.getElementById("merge_file_hint").textContent = total ? `已选 ${total} 个文件` : "请勾选需要合并的文件";
+}
+function _toggleMergeFile(path) {
+  _mergeData.checkedFiles[path] = !_mergeData.checkedFiles[path];
+  if (_mergeData.checkedFiles[path]) {
+    _mergeData.totalChecked++;
+  } else {
+    _mergeData.totalChecked--;
+  }
+  const items = document.querySelectorAll("#merge_file_list .merge-file-item");
+  items.forEach(el => {
+    if (el.dataset.path === path) {
+      el.classList.toggle("selected", _mergeData.checkedFiles[path]);
+      el.querySelector("input[type='checkbox']").checked = _mergeData.checkedFiles[path];
+    }
+  });
+  _updateMergeFileCount();
+}
+function _selectAllMergeFiles(select) {
+  const items = document.querySelectorAll("#merge_file_list .merge-file-item");
+  items.forEach(el => {
+    const path = el.dataset.path;
+    const was = _mergeData.checkedFiles[path];
+    _mergeData.checkedFiles[path] = select;
+    if (select && !was) _mergeData.totalChecked++;
+    if (!select && was) _mergeData.totalChecked--;
+    el.classList.toggle("selected", select);
+    el.querySelector("input[type='checkbox']").checked = select;
+  });
+  _updateMergeFileCount();
+}
+async function runMergeRun() {
+  const sourceUrl = document.getElementById("merge_source").value.trim();
+  const targetPath = document.getElementById("merge_target").value.trim();
+  if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
+  if (!targetPath) { _showToast("请输入目标路径"); return; }
+  const checkedPaths = Object.keys(_mergeData.checkedFiles).filter(k => _mergeData.checkedFiles[k]);
+  if (!checkedPaths.length) { _showToast("请至少选择一个文件"); return; }
+  const allRevs = _mergeData.versions.map(v => v.rev);
+  if (!allRevs.length) { _showToast("没有可合并的版本"); return; }
+  const btn = document.getElementById("merge_run_btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>合并中...';
+  const logEl = document.getElementById("merge_log");
+  logEl.innerHTML = "";
+  const body = {
+    source_url: sourceUrl,
+    target_path: targetPath,
+    revisions: allRevs,
+    files: checkedPaths.map(p => ({path: p})),
+    svn_user: document.getElementById("merge_user").value.trim() || undefined,
+    svn_pass: document.getElementById("merge_pass").value || undefined,
+  };
+  try {
+    const r = await fetch("/api/merge/run", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const d = await r.json();
+    if (d.error) {
+      logEl.innerHTML = '<span class="error">❌ '+escapeHtml(d.error)+'</span>';
+      return;
+    }
+    const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
+    evtSrc.onmessage = (e) => {
+      if (e.data === "[DONE]") {
+        evtSrc.close();
+        btn.disabled = false;
+        btn.textContent = "开始精准合并";
+        const sb = document.getElementById("status_bar");
+        if (sb) {
+          sb.classList.remove("running");
+          const span = sb.querySelector("span");
+          if (span) span.textContent = "系统空闲";
+        }
+        return;
+      }
+      const lines = e.data.split("\n");
+      for (const raw of lines) {
+        if (!raw.trim()) continue;
+        const div = document.createElement("div");
+        div.textContent = raw;
+        logEl.appendChild(div);
+      }
+      const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 32;
+      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+    };
+  } catch (err) {
+    logEl.innerHTML = '<span class="error">❌ 请求失败: '+escapeHtml(err.message)+'</span>';
+    btn.disabled = false;
+    btn.textContent = "开始精准合并";
+  }
+}
 document.addEventListener("click",e=>{
   const target = e.target.closest("[data-action]");
   if(!target) return;
@@ -2611,6 +3031,17 @@ document.addEventListener("click",e=>{
       w.dataset.dismissed = "1";
       break;
     }
+    case "merge-query": runMergeQuery(); break;
+    case "merge-run": runMergeRun(); break;
+    case "merge-select-all": _selectAllMergeFiles(true); break;
+    case "merge-select-invert": {
+      const items = document.querySelectorAll("#merge_file_list .merge-file-item");
+      items.forEach(el => {
+        _toggleMergeFile(el.dataset.path);
+      });
+      break;
+    }
+    case "merge-select-clear": _selectAllMergeFiles(false); break;
   }
 });
 document.addEventListener("change",e=>{
@@ -2645,6 +3076,33 @@ document.addEventListener("click",e=>{
   if(!group) return;
   group.querySelectorAll(".toggle-btn").forEach(b=>b.classList.remove("active"));
   toggle.classList.add("active");
+});
+document.addEventListener("click", e => {
+  const item = e.target.closest(".merge-version-item");
+  if (!item) return;
+  const rev = Number(item.dataset.rev);
+  if (_mergeData.selectedRev === rev) return;
+  document.querySelectorAll(".merge-version-item").forEach(el => el.classList.remove("active"));
+  item.classList.add("active");
+  _mergeData.selectedRev = rev;
+  const v = _mergeData.versions.find(x => x.rev === rev);
+  if (v && v.files) {
+    renderMergeFiles(v.files);
+  } else {
+    document.getElementById("merge_file_list").innerHTML = '<div class="merge-empty">该版本无变更文件</div>';
+  }
+});
+document.addEventListener("change", e => {
+  if (!e.target.matches("#merge_file_list .merge-file-item input[type='checkbox']")) return;
+  const item = e.target.closest(".merge-file-item");
+  if (!item) return;
+  _toggleMergeFile(item.dataset.path);
+});
+document.addEventListener("click", e => {
+  const item = e.target.closest(".merge-file-item");
+  if (!item) return;
+  if (e.target.matches("input")) return;
+  _toggleMergeFile(item.dataset.path);
 });
 document.addEventListener("input",e=>{
   // wf_name handler removed - workflow name editing now done via settings modal

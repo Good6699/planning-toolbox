@@ -147,10 +147,14 @@
 - **解决方案**：将 footer 改为始终可见（去掉 `merge-ops-hidden`），仅隐藏内部的计数文字；`_refreshMergeFileList()` 不再控制 footer 显示/隐藏
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
-### 语义合并目标路径应持久化保存
-- **场景**：`merge_source` 输入框有 blur 保存历史的功能，但 `merge_target` 没有
-- **解决方案**：新增 `config.merge_target_history` 配置键，blur 时保存并 `initSuggest` 支持下拉历史，初始加载时回填上次使用的路径
-- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+### merge_target_history 配置白名单缺失导致重启后丢失
+- **场景**：`#merge_target` 输入框 blur 时已正确保存 `merge_target_history` 到 JSON 文件，但重启后历史记录消失
+- **根因**：Flask 的 `GET /api/config` 使用白名单返回配置，`merge_target_history` 不在白名单中（仅 output_dir_history / svn_keyword_history 等历史字段在白名单中），导致前端 `config.merge_target_history` 为 `undefined`
+- **解决方案**：
+  1. 在 `web_app.py` 的 `safe` 字典中添加 `"merge_target_history": cfg.get("merge_target_history", [])`
+  2. 在 `_selectSuggest()` 的 `_configMap` 和删除建议项的 `map` 中补充 `merge_target` / `merge_author` / `merge_keyword` 的配置键映射，确保从下拉列表选择/删除时也持久化排序
+- **教训**：新增配置键时，必须同时检查前端的 blur 保存逻辑 + 后端的 GET 白名单。POST 写入没问题不代表 GET 读回没问题。
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
 ## 行为准则
 

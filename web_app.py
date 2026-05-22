@@ -151,6 +151,7 @@ def api_get_config():
         "tr_saved_tgt_langs": cfg.get("tr_saved_tgt_langs", []),
         "output_dir": cfg.get("output_dir", DEFAULT_OUTPUT_DIR),
         "output_dir_history": cfg.get("output_dir_history", []),
+        "merge_target_history": cfg.get("merge_target_history", []),
         "svn_keyword_history": cfg.get("svn_keyword_history", []),
         "svn_author_history": cfg.get("svn_author_history", []),
         "exclude_dirs": cfg.get("exclude_dirs", ""),

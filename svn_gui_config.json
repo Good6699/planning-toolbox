@@ -1,11 +1,10 @@
 {
   "svn_urls": [
-    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/gameData",
-    "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/Client",
-    "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/server"
+    "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/Client"
   ],
   "workers": "10",
   "parse_workers": "10",
@@ -27,14 +26,62 @@
   "global_cmp_id_col": "::ID::",
   "cmp_global_id_col": "",
   "src_dir_history": [
-    "C:\\Users\\admin\\.qclaw\\workspace\\输出\\裂隙",
     "C:\\Users\\admin\\.qclaw\\workspace\\输出"
   ],
   "tgt_dir_history": [
+    "G:\\D3_KR2\\Client",
     "G:\\D3_KR2\\gameData\\Text",
     "G:/D3_JP/Client"
   ],
   "workflows": [
+    {
+      "name": "KR2导出文字表",
+      "steps": []
+    },
+    {
+      "name": "JP导出Text",
+      "steps": [
+        {
+          "lock_msg": "锁定中，请勿修改",
+          "name": "Texts.xlsm",
+          "target_path": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
+          "type": "lock_svn",
+          "update_dirs": [
+            "G:\\D3_JP\\gameData",
+            "G:\\D3_JP\\Client\\Assets\\StreamingAssets"
+          ]
+        },
+        {
+          "id_col": "1",
+          "input_paths": [
+            "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\职业\\Texts.xlsm"
+          ],
+          "merge_prefixes": "",
+          "name": "Texts.xlsm",
+          "target_dir": "G:\\D3_JP\\gameData\\Text",
+          "title_rows": "1",
+          "type": "merge_table"
+        },
+        {
+          "input_file": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
+          "lang_codes": "",
+          "name": "Texts.xlsm",
+          "tools": [
+            "G:\\D3_JP\\gameData\\Text\\服务器文字表导出_替换文本引用.bat",
+            "G:\\D3_JP\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
+          ],
+          "type": "export_text"
+        },
+        {
+          "dirs": [
+            "G:\\D3_JP\\gameData",
+            "G:\\D3_JP\\Client\\Assets\\StreamingAssets"
+          ],
+          "name": "gameData,StreamingAssets",
+          "type": "upload_svn"
+        }
+      ]
+    },
     {
       "name": "KR2打开表格",
       "steps": [
@@ -44,63 +91,6 @@
           ],
           "name": "Texts.xlsm",
           "type": "open_tables"
-        }
-      ]
-    },
-    {
-      "name": "KR2导出Text",
-      "steps": [
-        {
-          "lock_msg": "锁定中，请勿修改",
-          "name": "Texts.xlsm",
-          "target_path": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
-          "type": "lock_svn",
-          "update_dirs": [
-            "G:\\D3_KR2\\gameData",
-            "G:\\D3_KR2\\Client\\Assets\\StreamingAssets"
-          ]
-        },
-        {
-          "input_file": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
-          "lang_codes": "",
-          "name": "Texts.xlsm",
-          "tools": [
-            "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat",
-            "G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
-          ],
-          "type": "export_text"
-        },
-        {
-          "dirs": [
-            "G:\\D3_KR2\\gameData",
-            "G:\\D3_KR2\\Client\\Assets\\StreamingAssets"
-          ],
-          "name": "gameData,StreamingAssets",
-          "type": "upload_svn"
-        }
-      ],
-      "sub_workflows": [
-        {
-          "depth_limit": 30,
-          "ext_filter": "",
-          "input_files": [
-            "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
-          ],
-          "monitor_dir": "G:/D3_KR2/gameData",
-          "name": "导出Text后端",
-          "timeout_min": 30,
-          "tool_path": "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat"
-        },
-        {
-          "depth_limit": 20,
-          "ext_filter": "",
-          "input_files": [
-            "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
-          ],
-          "monitor_dir": "G:\\D3_KR2\\Client\\Assets\\StreamingAssets",
-          "name": "导出Text前端",
-          "timeout_min": 30,
-          "tool_path": "G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
         }
       ]
     },
@@ -172,13 +162,13 @@
         },
         {
           "input_file": "G:\\D3_Asia\\gameData\\Text\\Texts.xlsm",
+          "lang_codes": "",
           "name": "Texts.xlsm",
           "tools": [
             "G:\\D3_Asia\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
             "G:\\D3_Asia\\gameData\\Text\\服务器文字表导出_替换文本引用.bat"
           ],
-          "type": "export_text",
-          "lang_codes": ""
+          "type": "export_text"
         },
         {
           "lang_codes": "TH_TH,ZH_CN,ZH_TW,MS_MY,IN_ID",
@@ -195,108 +185,6 @@
           "type": "upload_svn"
         }
       ]
-    },
-    {
-      "name": "JP导出Text",
-      "steps": [
-        {
-          "lock_msg": "锁定中，请勿修改",
-          "name": "Texts.xlsm",
-          "target_path": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
-          "type": "lock_svn",
-          "update_dirs": [
-            "G:\\D3_JP\\gameData",
-            "G:\\D3_JP\\Client\\Assets\\StreamingAssets"
-          ]
-        },
-        {
-          "id_col": "1",
-          "input_paths": [
-            "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\职业\\Texts.xlsm"
-          ],
-          "merge_prefixes": "",
-          "name": "Texts.xlsm",
-          "target_dir": "G:\\D3_JP\\gameData\\Text",
-          "title_rows": "1",
-          "type": "merge_table"
-        },
-        {
-          "input_file": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
-          "name": "Texts.xlsm",
-          "tools": [
-            "G:\\D3_JP\\gameData\\Text\\服务器文字表导出_替换文本引用.bat",
-            "G:\\D3_JP\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
-          ],
-          "type": "export_text",
-          "lang_codes": ""
-        },
-        {
-          "dirs": [
-            "G:\\D3_JP\\gameData",
-            "G:\\D3_JP\\Client\\Assets\\StreamingAssets"
-          ],
-          "name": "gameData,StreamingAssets",
-          "type": "upload_svn"
-        }
-      ]
-    },
-    {
-      "name": "JP导出Text (副本)",
-      "steps": [
-        {
-          "lock_msg": "锁定中，请勿修改",
-          "name": "4",
-          "target_path": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
-          "type": "lock_svn",
-          "update_dirs": [
-            "G:\\D3_JP\\gameData",
-            "G:\\D3_JP\\Client\\Assets\\StreamingAssets"
-          ]
-        },
-        {
-          "input_file": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
-          "name": "2",
-          "tools": [
-            "G:\\D3_JP\\gameData\\Text\\服务器文字表导出_替换文本引用.bat",
-            "G:\\D3_JP\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
-          ],
-          "type": "export_text"
-        }
-      ]
-    },
-    {
-      "name": "测试",
-      "steps": [
-        {
-          "input_paths": [
-            "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\裂隙\\Text\\Texts.xlsm"
-          ],
-          "merge_prefixes": [
-            "新增_"
-          ],
-          "name": "Text",
-          "target_dir": "G:/D3_Asia/gameData",
-          "title_rows": "1",
-          "type": "merge_table"
-        },
-        {
-          "id_col": "2",
-          "input_paths": [
-            "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\裂隙\\道具相关.xlsm"
-          ],
-          "merge_prefixes": [
-            "新增_"
-          ],
-          "name": "Data",
-          "target_dir": "G:\\D3_Asia\\gameData",
-          "title_rows": "3",
-          "type": "merge_table"
-        }
-      ]
-    },
-    {
-      "name": "新工作流",
-      "steps": []
     }
   ],
   "output_dir_export": "C:\\Users\\admin\\.qclaw\\workspace\\输出\\导出",
@@ -320,6 +208,7 @@
     "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
   ],
   "svn_keyword_history": [
+    "专武",
     "裂隙",
     "腐败秘境"
   ],
@@ -420,5 +309,13 @@
       "Turkish"
     ]
   },
+  "merge_exclude_paths": [
+    "config",
+    "config_temp",
+    "ExportTxt"
+  ],
+  "merge_target_history": [
+    "G:\\D3_KR2\\Client"
+  ],
   "tr_api_key_enc": "/ZhanvpqNABPoNt3CbrSkfxhsARxEX7yxR/83CnNjAHvkEQ="
 }

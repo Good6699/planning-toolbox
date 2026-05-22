@@ -965,6 +965,29 @@ input::placeholder,textarea::placeholder{
 .suggest-drop.show{
   display:block;
 }
+.wf-history-drop{
+  position:fixed;
+  background:#151b26;
+  border:1px solid rgba(94,162,255,.18);
+  border-radius:8px;
+  max-height:264px;
+  overflow-y:auto;
+  z-index:10001;
+  display:none;
+  box-shadow:0 12px 36px rgba(0,0,0,.55);
+  min-width:160px;
+  max-width:480px;
+}
+.wf-history-drop.show{
+  display:block;
+}
+.wf-history-item{
+  padding:6px 12px;cursor:pointer;font-size:13px;color:var(--text);
+  word-break:break-all;line-height:1.4;
+  border-bottom:1px solid rgba(255,255,255,.04);
+}
+.wf-history-item:last-child{border-bottom:none}
+.wf-history-item:hover{background:rgba(94,162,255,.1)}
 .suggest-drop .s-item{
   padding:6px 10px;
   cursor:pointer;
@@ -2061,15 +2084,71 @@ function buildWorkflowTab(panel) {
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
   }
 
+  function _wfHistoryPool(key) {
+    if (["input_file","original_file","target_path","root_dir","target_dir"].includes(key)) return "wf_history_paths";
+    if (["sheet_name","lock_msg"].includes(key)) return "wf_history_msgs";
+    return "wf_history_texts";
+  }
+  function _wfHistorySave(pool, val) {
+    if (!val.trim()) return;
+    const key = "_" + pool;
+    const arr = config[key] || [];
+    const updated = [val, ...arr.filter(v => v !== val)].slice(0, 30);
+    config[key] = updated;
+    saveConfig({[key]: updated});
+  }
+  function _wfHistoryShow(inp, pool) {
+    const key = "_" + pool;
+    const items = config[key] || [];
+    if (!items.length) return;
+    if (_wfHistoryDd) _wfHistoryDd.remove();
+    const dd = document.createElement("div");
+    dd.className = "wf-history-drop";
+    items.forEach(v => {
+      const item = document.createElement("div");
+      item.className = "wf-history-item";
+      item.textContent = v;
+      item.addEventListener("mousedown", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        inp.value = v;
+        inp.dispatchEvent(new Event("input", {bubbles: true}));
+        dd.remove();
+        _wfHistoryDd = null;
+        inp.focus();
+      });
+      dd.appendChild(item);
+    });
+    const rect = inp.getBoundingClientRect();
+    dd.style.left = rect.left + "px";
+    dd.style.top = (rect.bottom + 4) + "px";
+    dd.style.minWidth = Math.max(rect.width, 160) + "px";
+    dd.classList.add("show");
+    document.body.appendChild(dd);
+    _wfHistoryDd = dd;
+  }
+
   function _wfModalAfterOpen() {
     modalBody.querySelectorAll("[id^=wf_m_]").forEach(inp => {
       if (inp.id) enablePathDrop(inp.id);
     });
+    modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
+      const key = inp.dataset.key;
+      if (!key) return;
+      const pool = _wfHistoryPool(key);
+      inp.addEventListener("focus", () => {
+        _wfHistoryShow(inp, pool);
+      });
+      inp.addEventListener("blur", () => {
+        setTimeout(() => { if (_wfHistoryDd && !_wfHistoryDd.matches(":hover")) { _wfHistoryDd.remove(); _wfHistoryDd = null; } }, 150);
+        _wfHistorySave(pool, inp.value);
+      });
+    });
   }
 
-  document.getElementById("wf_modal_close").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; });
-  document.getElementById("wf_modal_cancel").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; });
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; } });
+  document.getElementById("wf_modal_close").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } });
+  document.getElementById("wf_modal_cancel").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } });
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } } });
   document.getElementById("wf_modal_save").addEventListener("click", _wfModalDoSave);
 
   panel.querySelectorAll("button,input").forEach(el => {
@@ -2162,6 +2241,7 @@ function buildWorkflowTab(panel) {
   S.workflow.logEl = document.getElementById("wf_log");
 }
 let _wfSortables = [];
+let _wfHistoryDd = null;
 function _wfRebuild() {
   _wfSortables.forEach(s => s.destroy());
   _wfSortables = [];
@@ -2170,6 +2250,12 @@ function _wfRebuild() {
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#wf_step_type_picker") && !e.target.closest(".wf-add-step-item")) {
     document.querySelectorAll("#wf_step_type_picker").forEach(m => m.remove());
+  }
+});
+document.addEventListener("mousedown", (e) => {
+  if (_wfHistoryDd && !e.target.closest(".wf-history-drop") && !e.target.closest(".wf-modal-input")) {
+    _wfHistoryDd.remove();
+    _wfHistoryDd = null;
   }
 });
 function wfCreate() {

@@ -164,6 +164,9 @@ def api_get_config():
         "cmp_output_cols": cfg.get("cmp_output_cols", ""),
         "workflows": cfg.get("workflows", []),
         "tr_api_key": cfg.get("tr_api_key", ""),
+        "_wf_history_paths": cfg.get("_wf_history_paths", []),
+        "_wf_history_texts": cfg.get("_wf_history_texts", []),
+        "_wf_history_msgs": cfg.get("_wf_history_msgs", []),
     }
     return jsonify(safe)
 

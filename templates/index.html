@@ -1174,6 +1174,19 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   font-size:12px;
   font-weight:600;
 }
+.merge-file-footer{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:4px 8px;
+  border-top:1px solid var(--panel2);
+  min-height:28px;
+}
+.merge-file-footer .count{
+  color:var(--accent);
+  font-size:12px;
+  font-weight:600;
+}
 .merge-version-item{
   display:flex;
   align-items:center;
@@ -2813,12 +2826,14 @@ function buildMergeTab(panel) {
               <button class="btn btn-normal btn-sm merge-ops-hidden" data-action="merge-select-invert" id="merge_file_inv_btn">反选</button>
               <button class="btn btn-normal btn-sm merge-ops-hidden" data-action="merge-select-clear" id="merge_file_clr_btn">清空</button>
               <span style="color:var(--dim);font-size:12px" id="merge_file_hint">请先选择一个版本</span>
-              <span class="count merge-ops-hidden" id="merge_file_count">已选 0 个文件</span>
-              <button class="btn btn-normal btn-sm" data-action="merge-file-settings" title="排除路径设置" style="font-size:14px;padding:0 6px">⚙</button>
             </div>
           </div>
           <div class="merge-file-list" id="merge_file_list">
             <div class="merge-empty">请先在左侧选择一个版本查看变更文件</div>
+          </div>
+          <div class="merge-file-footer" id="merge_file_footer">
+            <button class="btn btn-normal btn-sm" data-action="merge-file-settings" title="排除路径设置" style="font-size:12px;padding:2px 12px">⚙ 排除设置</button>
+            <span class="count merge-ops-hidden" id="merge_file_count_bottom">已选 0 个文件</span>
           </div>
         </div>
       </div>
@@ -2836,6 +2851,9 @@ function buildMergeTab(panel) {
   const savedSource = config.svn_urls?.[0] || "";
   if (savedSource) document.getElementById("merge_source").value = savedSource;
   initSuggest("merge_source", config.svn_urls||[]);
+  const savedTarget = config.merge_target_history?.[0] || "";
+  if (savedTarget) document.getElementById("merge_target").value = savedTarget;
+  initSuggest("merge_target", config.merge_target_history||[]);
   enablePathDrop("merge_target", {mode:"path"});
   initSuggest("merge_author", config.svn_author_history||[]);
   initSuggest("merge_keyword", config.svn_keyword_history||[]);
@@ -2845,6 +2863,13 @@ function buildMergeTab(panel) {
       saveConfig({svn_urls:[val, ...(config.svn_urls||[])].slice(0,20)});
       config.svn_urls = [val, ...(config.svn_urls||[])].slice(0,20);
       initSuggest("merge_source", config.svn_urls);
+    }
+  });
+  document.getElementById("merge_target").addEventListener("blur", ()=>{
+    const val = document.getElementById("merge_target").value.trim();
+    if (val && !(config.merge_target_history||[]).includes(val)) {
+      saveConfig({merge_target_history:[val, ...(config.merge_target_history||[])].slice(0,20)});
+      initSuggest("merge_target", config.merge_target_history);
     }
   });
   document.getElementById("merge_author").addEventListener("blur", ()=>{
@@ -2907,7 +2932,7 @@ async function runMergeQuery() {
             renderMergeVersions();
             document.getElementById("merge_file_list").innerHTML = '<div class="merge-empty">请勾选版本查看变更文件</div>';
             document.getElementById("merge_file_hint").textContent = "请勾选需要合并的版本";
-            document.getElementById("merge_file_count").textContent = "已选 0 个文件";
+            document.getElementById("merge_file_count_bottom").textContent = "已选 0 个文件";
             document.getElementById("merge_run_btn").disabled = true;
             document.getElementById("merge_version_count").textContent = resultData.total ? `共 ${resultData.total} 个版本` : "";
             if (!resultData.total) {
@@ -2973,7 +2998,7 @@ function _refreshMergeFileList() {
   const fileAllBtn = document.getElementById("merge_file_all_btn");
   const fileInvBtn = document.getElementById("merge_file_inv_btn");
   const fileClrBtn = document.getElementById("merge_file_clr_btn");
-  const fileCount = document.getElementById("merge_file_count");
+  const fileCount = document.getElementById("merge_file_count_bottom");
   if (!files.length) {
     document.getElementById("merge_file_list").innerHTML = '<div class="merge-empty">请勾选版本查看变更文件</div>';
     hintEl.textContent = "请勾选需要合并的版本";
@@ -2986,7 +3011,6 @@ function _refreshMergeFileList() {
     fileAllBtn.classList.remove("merge-ops-hidden");
     fileInvBtn.classList.remove("merge-ops-hidden");
     fileClrBtn.classList.remove("merge-ops-hidden");
-    fileCount.classList.remove("merge-ops-hidden");
     renderMergeFiles(files);
   }
   _updateMergeFileCount();
@@ -3079,7 +3103,7 @@ function renderMergeFiles(files) {
 }
 function _updateMergeFileCount() {
   const total = _mergeData.totalChecked;
-  const el = document.getElementById("merge_file_count");
+  const el = document.getElementById("merge_file_count_bottom");
   el.textContent = `已选 ${total} 个文件`;
   el.classList.toggle("merge-ops-hidden", total === 0);
   document.getElementById("merge_run_btn").disabled = total === 0;

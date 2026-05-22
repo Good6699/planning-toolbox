@@ -135,6 +135,23 @@
 - **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/desktop_main.py)
 - **教训**：修改代码前必须先 `git diff` 确认当前修改仅涉及目标文件。发现任何非目标文件在 diff 中出现时立即停止
 
+### svn log --verbose 文件路径格式与 URL pathname 不一致
+- **场景**：实现语义合并页签的文件排除功能时，新增 `_isFileUnderSourceUrl()` 尝试仅显示当前 SVN URL 下的文件
+- **根因**：`svn log URL --verbose --xml` 返回的 `<path>` 内容是以仓库根为基准的路径（如 `/branches/xxx/Assets/file.txt`），而 `new URL(sourceUrl).pathname` 包含 SVN 服务的仓库挂载路径（如 `http://svn/repo/branches/xxx` → pathname `/repo/branches/xxx`）。两者路径前缀不同，导致所有文件都被过滤掉，文件列表为空
+- **解决方案**：完全移除 `_isFileUnderSourceUrl()`。`svn log URL --verbose` 本身就已经只返回该 URL 范围内的文件，无需额外过滤
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### 设置按钮/配置UI必须始终可见，不应依赖数据状态
+- **场景**：变更文件列表的"⚙ 排除设置"按钮放在 `merge_file_footer` 中，footer 初始带 `merge-ops-hidden`，只有文件列表有内容时才显示
+- **根因**：用户需要在勾选版本/显示文件之前就能配置排除规则，数据驱动的可见性逻辑导致设置按钮不可达
+- **解决方案**：将 footer 改为始终可见（去掉 `merge-ops-hidden`），仅隐藏内部的计数文字；`_refreshMergeFileList()` 不再控制 footer 显示/隐藏
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### 语义合并目标路径应持久化保存
+- **场景**：`merge_source` 输入框有 blur 保存历史的功能，但 `merge_target` 没有
+- **解决方案**：新增 `config.merge_target_history` 配置键，blur 时保存并 `initSuggest` 支持下拉历史，初始加载时回填上次使用的路径
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

@@ -192,6 +192,12 @@
 - **解决方案**：菜单不内嵌在 DOM 树中，点击时 `createElement('div')` 动态创建并 `document.body.appendChild(menu)`，彻底脱离父元素影响。点击选项后用 `menu.remove()` 销毁
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### _wfRebuild 后弹窗闭包上下文失效
+- **场景**：添加步骤后 `_wfRebuild()` 重建 DOM，但弹窗保存时 `_modalCtx` 为 null，设置无法保存
+- **根因**：`_wfRebuild()` 重建 DOM 后，事件监听器绑定到新闭包中的新变量实例，但弹窗上下文 `_modalCtx` 是旧闭包中的局部变量，新闭包读不到
+- **解决方案**：将弹窗上下文同步存储到 `overlay.dataset.modalCtx`（DOM dataset），`_wfModalDoSave` 优先读本地 `_modalCtx`，读不到时从 `overlay.dataset.modalCtx` fallback。同时在新闭包中直接通过 `document.getElementById` 操作弹窗 DOM，不依赖旧闭包中的变量引用
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

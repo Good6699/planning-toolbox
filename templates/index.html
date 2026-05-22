@@ -1905,7 +1905,24 @@ function buildWorkflowTab(panel) {
           const stepIdx = wf.steps.length - 1;
           saveConfig({workflows:config.workflows});
           _wfRebuild();
-          setTimeout(() => { _wfModalOpen(wfIdx, stepIdx); }, 50);
+          const parentEl = document.querySelector(`.wf-parent[data-idx="${wfIdx}"]`);
+          if (parentEl) {
+            document.querySelectorAll(".wf-parent.expanded").forEach(p => p.classList.remove("expanded"));
+            parentEl.classList.add("expanded");
+          }
+          setTimeout(() => {
+            const step = config.workflows[wfIdx]?.steps?.[stepIdx];
+            if (!step) return;
+            document.getElementById("wf_modal_title").textContent = typeCn[step.type] || step.type;
+            document.getElementById("wf_modal_body").innerHTML = _wfModalFields(step.type, step);
+            document.getElementById("wf_modal_overlay").dataset.modalCtx = JSON.stringify({ wfIdx, stepIdx });
+            document.getElementById("wf_modal_overlay").classList.add("show");
+            setTimeout(() => {
+              document.getElementById("wf_modal_body").querySelectorAll("[id^=wf_m_]").forEach(inp => {
+                if (inp.id) enablePathDrop(inp.id);
+              });
+            }, 50);
+          }, 50);
         });
         menu.appendChild(opt);
       });
@@ -1961,9 +1978,10 @@ function buildWorkflowTab(panel) {
 
   function _wfModalDoSave() {
     if (_wfSaving) return;
-    if (!_modalCtx) return;
+    const ctx = _modalCtx || (overlay.dataset.modalCtx ? JSON.parse(overlay.dataset.modalCtx) : null);
+    if (!ctx) return;
     _wfSaving = true;
-    const { wfIdx, stepIdx } = _modalCtx;
+    const { wfIdx, stepIdx } = ctx;
     const step = config.workflows[wfIdx]?.steps?.[stepIdx];
     if (!step) { _wfSaving = false; return; }
     modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
@@ -2035,9 +2053,9 @@ function buildWorkflowTab(panel) {
     });
   }
 
-  document.getElementById("wf_modal_close").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; });
-  document.getElementById("wf_modal_cancel").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; });
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) { overlay.classList.remove("show"); _modalCtx = null; } });
+  document.getElementById("wf_modal_close").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; });
+  document.getElementById("wf_modal_cancel").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; });
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; } });
   document.getElementById("wf_modal_save").addEventListener("click", _wfModalDoSave);
 
   panel.querySelectorAll("button,input").forEach(el => {
@@ -2048,6 +2066,7 @@ function buildWorkflowTab(panel) {
     if (!step) return;
     modalTitle.textContent = typeCn[step.type] || step.type;
     modalBody.innerHTML = _wfModalFields(step.type, step);
+    overlay.dataset.modalCtx = JSON.stringify({ wfIdx, stepIdx });
     _modalCtx = { wfIdx, stepIdx };
     overlay.classList.add("show");
     setTimeout(() => _wfModalAfterOpen(), 50);

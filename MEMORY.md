@@ -181,6 +181,17 @@
 - **解决方案**：捕获 `PermissionError` 后写日志提示"文件正在被 Excel 打开，请关闭后重试"，然后 `raise` 让异常继续传播
 - **涉及文件**：[svn_oneclick_compare.py](file:///c:/Users/admin/.qclaw/workspace/svn_oneclick_compare.py)
 
+### 工作流添加步骤与类型选择
+- **场景**：工作流列表缺少在页面上直接添加步骤的功能
+- **解决方案**：每个工作流子项末尾加 `+ 添加步骤` 占位项（虚线边框样式），点击弹出自建的类型选择菜单（`document.createElement` 追加到 `document.body`，脱离父 DOM 树避免 CSS opacity 继承问题），选类型后创建步骤自动打开设置弹窗；SortableJS 加 `filter: ".wf-add-step-item"` 防止被拖拽
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### CSS opacity 继承：子元素 opacity:1 无法覆盖父元素
+- **场景**：类型选择菜单被父容器 `.wf-add-step-item` 的透明度影响，背景 50% 透明看不清
+- **根因**：CSS `opacity` 不是常规继承属性，而是对整个渲染子树施加统一的透明度变换。父元素设置 `opacity: .5`，子元素 `opacity: 1` 无效（浏览器在合成阶段将整棵子树作为一个组进行 Alpha 混合）
+- **解决方案**：菜单不内嵌在 DOM 树中，点击时 `createElement('div')` 动态创建并 `document.body.appendChild(menu)`，彻底脱离父元素影响。点击选项后用 `menu.remove()` 销毁
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

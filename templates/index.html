@@ -549,6 +549,13 @@ input::placeholder,textarea::placeholder{
 .wf-child-type.export_error_code{background:rgba(255,99,125,.15);color:#ff637d;}
 .wf-child-type.lock_svn{background:rgba(255,140,0,.15);color:#ff8c00;}
 .wf-child-type.open_tables{background:rgba(100,200,255,.15);color:#64c8ff;}
+.wf-add-step-item{
+  display:flex;align-items:center;gap:8px;position:relative;
+  padding:8px 12px;cursor:pointer;color:var(--accent);
+  font-size:13px;transition:opacity .15s, border-color .15s;
+  border:1px dashed rgba(255,255,255,.12);border-radius:6px;margin:4px 6px;
+}
+.wf-add-step-item:hover{border-color:var(--accent);color:var(--accent)}
 .wf-child-name{
   flex:1;
   font-size:13px;
@@ -1770,6 +1777,10 @@ function buildWorkflowTab(panel) {
                     <button class="wf-child-del-btn" title="删除步骤">✕</button>
                   </div>
                 `).join('')}
+                <div class="wf-add-step-item">
+                  <span style="font-size:16px;font-weight:600;line-height:1">+</span>
+                  <span>添加步骤</span>
+                </div>
               </div>
             </div>
           `).join('')}
@@ -1863,6 +1874,42 @@ function buildWorkflowTab(panel) {
       config.workflows.splice(wfIdx+1, 0, orig);
       saveConfig({workflows:config.workflows});
       _wfRebuild();
+    });
+    const addItem = el.querySelector(".wf-add-step-item");
+    addItem.addEventListener("mousedown", (e) => e.stopPropagation());
+    addItem.addEventListener("click", (e) => {
+      e.stopPropagation();
+      document.querySelectorAll("#wf_step_type_picker").forEach(m => m.remove());
+      const menu = document.createElement("div");
+      menu.id = "wf_step_type_picker";
+      menu.style.cssText = "position:fixed;z-index:10000;background:#1c1e26;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:4px 0;box-shadow:0 4px 24px rgba(0,0,0,.5)";
+      const rect = addItem.getBoundingClientRect();
+      menu.style.left = rect.left + "px";
+      menu.style.top = (rect.bottom + 4) + "px";
+      Object.entries(typeCn).forEach(([k,v]) => {
+        const opt = document.createElement("div");
+        opt.style.cssText = "padding:6px 16px;cursor:pointer;white-space:nowrap;font-size:13px;color:var(--text,#e0e0e0)";
+        opt.textContent = `${typeIcon[k]||''} ${v}`;
+        opt.addEventListener("mouseenter", () => opt.style.background = "rgba(255,255,255,.06)");
+        opt.addEventListener("mouseleave", () => opt.style.background = "");
+        opt.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          menu.remove();
+          const wfIdx = Number(el.dataset.idx);
+          const wf = config.workflows[wfIdx];
+          if (!wf) return;
+          const step = {type: k, name: ""};
+          const autoName = _wfAutoName(step);
+          if (autoName) step.name = autoName;
+          wf.steps.push(step);
+          const stepIdx = wf.steps.length - 1;
+          saveConfig({workflows:config.workflows});
+          _wfRebuild();
+          setTimeout(() => { _wfModalOpen(wfIdx, stepIdx); }, 50);
+        });
+        menu.appendChild(opt);
+      });
+      document.body.appendChild(menu);
     });
     const delBtn = el.querySelector(".wf-del-btn");
     delBtn.addEventListener("click", async (e) => {
@@ -1996,6 +2043,15 @@ function buildWorkflowTab(panel) {
   panel.querySelectorAll("button,input").forEach(el => {
     el.addEventListener("mousedown", (e) => e.stopPropagation());
   });
+  function _wfModalOpen(wfIdx, stepIdx) {
+    const step = config.workflows[wfIdx]?.steps?.[stepIdx];
+    if (!step) return;
+    modalTitle.textContent = typeCn[step.type] || step.type;
+    modalBody.innerHTML = _wfModalFields(step.type, step);
+    _modalCtx = { wfIdx, stepIdx };
+    overlay.classList.add("show");
+    setTimeout(() => _wfModalAfterOpen(), 50);
+  }
   panel.querySelectorAll(".wf-settings-btn").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -2004,14 +2060,7 @@ function buildWorkflowTab(panel) {
       if (!child || !parent) return;
       const wfIdx = Number(parent.dataset.idx);
       const stepIdx = [...parent.querySelector(".wf-children").children].indexOf(child);
-      const step = config.workflows[wfIdx]?.steps?.[stepIdx];
-      if (!step) return;
-      const typeCn = {export_text:"导出文字表",upload_svn:"上传SVN",merge_table:"合并表格",merge_translation:"合并翻译",export_error_code:"导出错误码",lock_svn:"锁定SVN",open_tables:"打开表格"};
-      modalTitle.textContent = typeCn[step.type] || step.type;
-      modalBody.innerHTML = _wfModalFields(step.type, step);
-      _modalCtx = { wfIdx, stepIdx };
-      overlay.classList.add("show");
-      setTimeout(() => _wfModalAfterOpen(), 50);
+      _wfModalOpen(wfIdx, stepIdx);
     });
   });
   panel.querySelectorAll(".wf-child-del-btn").forEach(btn => {
@@ -2055,6 +2104,7 @@ function buildWorkflowTab(panel) {
       const newOrder = [...document.querySelectorAll("#wf_tree > .wf-parent")].map(el => Number(el.dataset.idx));
       config.workflows = newOrder.map(i => config.workflows[i]);
       saveConfig({workflows:config.workflows});
+      document.querySelectorAll("#wf_tree > .wf-parent").forEach((el, i) => { el.dataset.idx = i; });
     },
   }));
 
@@ -2062,6 +2112,7 @@ function buildWorkflowTab(panel) {
     _wfSortables.push(Sortable.create(container, {
       ...sortableOptions,
       group: "wf-children",
+      filter: ".wf-add-step-item",
       onEnd() {
           const parent = container.closest(".wf-parent");
           const wfIdx = Number(parent.dataset.idx);
@@ -2070,6 +2121,7 @@ function buildWorkflowTab(panel) {
           const newSteps = [...container.children].map(el => wf.steps[Number(el.dataset.step)]);
           wf.steps = newSteps;
           saveConfig({workflows:config.workflows});
+          [...container.children].forEach((el, j) => { el.dataset.step = j; });
         },
     }));
   });
@@ -2082,6 +2134,11 @@ function _wfRebuild() {
   _wfSortables = [];
   buildWorkflowTab(S.workflow.panel);
 }
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#wf_step_type_picker") && !e.target.closest(".wf-add-step-item")) {
+    document.querySelectorAll("#wf_step_type_picker").forEach(m => m.remove());
+  }
+});
 function wfCreate() {
   config.workflows = config.workflows || [];
   config.workflows.push({name:"新工作流",steps:[]});

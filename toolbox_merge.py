@@ -153,6 +153,11 @@ def svn_merge(source_url, target_wc, revision, files,
             continue
         local_file = os.path.join(target_wc, file_path)
         if not os.path.exists(local_file):
+            action = f.get("action", "")
+            if action == "del":
+                _log(f"  ▶ 文件已被删除，跳过: {file_path}", "info")
+                merged_count += 1
+                continue
             _log(f"⏭ 跳过(本地不存在): {file_path}", "warn")
             skip_count += 1
             continue

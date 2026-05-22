@@ -1303,7 +1303,8 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   height:13px;
 }
 .merge-ops-hidden{display:none!important;}
-  .merge-file-item .action-tag{
+  .merge-file-item.del{background:rgba(255,99,125,.04)}
+.merge-file-item .action-tag{
   font-size:10px;
   padding:1px 5px;
   border-radius:4px;
@@ -1314,6 +1315,10 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .merge-file-item .action-tag.add{background:rgba(82,210,115,.15);color:var(--success);}
 .merge-file-item .action-tag.mod{background:rgba(94,162,255,.15);color:var(--accent);}
 .merge-file-item .action-tag.del{background:rgba(255,99,125,.15);color:var(--danger);}
+.merge-file-item .del-tag{
+  font-size:10px;color:#ff637d;font-weight:600;margin-left:2px;flex-shrink:0;
+}
+.wf-file-del{opacity:.55}
 .merge-file-item .path{
   flex:1;
   overflow:hidden;
@@ -2935,15 +2940,33 @@ function saveAdvSettings() {
       document.querySelector("[data-action='save-adv-settings']").textContent = "保存";
     });
 }
-let _mergeData = {versions:[], checkedRevs:{}, checkedFiles:{}, totalChecked:0};
+let _mergeData = {versions:[], checkedRevs:{}, checkedFiles:{}, totalChecked:0, stripPrefix:""};
 function _getCheckedVersionFiles() {
+  const allActions = {};
   const allFiles = {};
+  _mergeData.versions.forEach(v => {
+    if (!v.files) return;
+    v.files.forEach(f => {
+      if (!allActions[f.path]) allActions[f.path] = [];
+      allActions[f.path].push({ rev: v.rev, action: f.action });
+    });
+  });
   _mergeData.versions.forEach(v => {
     if (_mergeData.checkedRevs[v.rev] && v.files) {
       v.files.forEach(f => {
         if (_isPathExcluded(f.path)) return;
         if (!allFiles[f.path]) {
-          allFiles[f.path] = f;
+          const acts = allActions[f.path] || [];
+          const latest = acts.reduce((a, b) => a.rev > b.rev ? a : b, { rev: 0, action: "" });
+          let finalAction;
+          if (latest.action === "del") {
+            finalAction = "del";
+          } else if (acts.some(a => a.action === "add")) {
+            finalAction = "add";
+          } else {
+            finalAction = "mod";
+          }
+          allFiles[f.path] = { ...f, action: finalAction };
         }
       });
     }
@@ -3115,6 +3138,7 @@ async function runMergeQuery() {
         if (resultData) {
           if (resultData.ok) {
             _mergeData.versions = resultData.versions || [];
+            _mergeData.stripPrefix = resultData.strip_prefix || "";
             _mergeData.checkedRevs = {};
             _mergeData.checkedFiles = {};
             _mergeData.totalChecked = 0;
@@ -3257,7 +3281,7 @@ function _isPathExcluded(path) {
   const excludePaths = config.merge_exclude_paths || [];
   if (!excludePaths.length) return false;
   const normalized = path.replace(/\\/g, "/");
-  return excludePaths.some(ex => normalized === ex || normalized.startsWith(ex + "/"));
+  return excludePaths.some(ex => normalized === ex || normalized.startsWith(ex + "/") || normalized.includes("/" + ex + "/") || normalized.endsWith("/" + ex));
 }
 function _basename(p) {
   p = p.replace(/\/$/, "");
@@ -3276,15 +3300,20 @@ function renderMergeFiles(files) {
     return;
   }
   const actionCn = {add:"新增", mod:"修改", del:"删除"};
+  const sp = _mergeData.stripPrefix || "";
   container.innerHTML = files.map((f, i) => {
     const path = f.path || "";
     const action = f.action || "";
     const checked = _mergeData.checkedFiles[path] ? " checked" : "";
-    const name = _basename(path);
-    const dir = _dirname(path);
-    return `<div class="merge-file-item${checked}" data-path="${escapeHtml(path)}" data-idx="${i}">
+    const isDel = action === "del";
+    let displayPath = path;
+    if (sp && path.startsWith(sp + "/")) displayPath = path.slice(sp.length + 1);
+    const name = _basename(displayPath);
+    const dir = _dirname(displayPath);
+    return `<div class="merge-file-item${checked}${isDel ? " wf-file-del" : ""}" data-path="${escapeHtml(path)}" data-idx="${i}">
       <input type="checkbox"${checked}>
       <span class="action-tag ${action}">${actionCn[action]||action}</span>
+      ${isDel ? '<span class="del-tag">已删除</span>' : ""}
       <span class="path" title="${escapeHtml(path)}"><span class="file-name">${escapeHtml(name)}</span> <span class="file-dir">${escapeHtml(dir)}</span></span>
     </div>`;
   }).join("");
@@ -3345,7 +3374,10 @@ async function runMergeRun() {
     source_url: sourceUrl,
     target_path: targetPath,
     revisions: checkedRevs,
-    files: checkedPaths.map(p => ({path: p})),
+    files: [...document.querySelectorAll("#merge_file_list .merge-file-item input:checked")].map(cb => {
+      const item = cb.closest(".merge-file-item");
+      return {path: item.dataset.path, action: item.classList.contains("wf-file-del") ? "del" : "mod"};
+    }),
   };
   try {
     const r = await fetch("/api/merge/run", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
@@ -3622,7 +3654,7 @@ function _selectSuggest(val) {
     const inp = document.getElementById(_activeInputId);
     inp.value = val;
     inp.dispatchEvent(new Event("input", {bubbles:true}));
-    const _configMap = {svn_url:"svn_urls",svn_keyword:"svn_keyword_history",svn_author:"svn_author_history",svn_output:"output_dir_history",upload_src:"src_dir_history",upload_tgt:"tgt_dir_history",tr_src:"tr_src_history",tr_ref:"tr_ref_history",tr_out:"tr_out_dir",merge_target:"merge_target_history",merge_author:"svn_author_history",merge_keyword:"svn_keyword_history"};
+    const _configMap = {svn_url:"svn_urls",merge_source:"svn_urls",svn_keyword:"svn_keyword_history",svn_author:"svn_author_history",svn_output:"output_dir_history",upload_src:"src_dir_history",upload_tgt:"tgt_dir_history",tr_src:"tr_src_history",tr_ref:"tr_ref_history",tr_out:"tr_out_dir",merge_target:"merge_target_history",merge_author:"svn_author_history",merge_keyword:"svn_keyword_history"};
     const ck = _configMap[_activeInputId];
     if (ck && config[ck]) {
       const updated = [val, ...config[ck].filter(v=>v!==val)].slice(0,20);
@@ -3650,7 +3682,7 @@ document.addEventListener("click", e => {
     if (s && idx >= 0 && idx < s.items.length) {
       const removed = s.items[idx];
       s.items.splice(idx, 1);
-      const map = {svn_url:["svn_urls",20], svn_output:["output_dir_history",10], upload_src:["src_dir_history",20], upload_tgt:["tgt_dir_history",20], tr_src:["tr_src_history",20], tr_ref:["tr_ref_history",20], tr_out:["tr_out_dir",20], adv_cmp_file:["cmp_file_presets",20], merge_target:["merge_target_history",20], merge_author:["svn_author_history",20], merge_keyword:["svn_keyword_history",20]};
+      const map = {svn_url:["svn_urls",20], merge_source:["svn_urls",20], svn_output:["output_dir_history",10], upload_src:["src_dir_history",20], upload_tgt:["tgt_dir_history",20], tr_src:["tr_src_history",20], tr_ref:["tr_ref_history",20], tr_out:["tr_out_dir",20], adv_cmp_file:["cmp_file_presets",20], merge_target:["merge_target_history",20], merge_author:["svn_author_history",20], merge_keyword:["svn_keyword_history",20]};
       const mk = map[_activeInputId];
       if (mk) {
         const hist = (config[mk[0]]||[]).filter(v=>v!==removed);

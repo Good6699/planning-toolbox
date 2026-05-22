@@ -215,6 +215,22 @@
 - **解决方案**：在 CSS（绿色标签 `.unlock_svn`）、web 版（`_exec_unlock_svn`）、tkinter 版（`_wf_execute_unlock_svn` / `_wf_show_unlock_svn_config`）以及前端 typeCn/typeIcon/设置表单/自动命名中，同步新增 `unlock_svn` 类型。解锁不加 `--force`，别人锁住的无法强制解锁
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[toolbox_tab_workflow.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_tab_workflow.py)
 
+### 弹窗输入框历史记录共享
+- **场景**：工作流设置弹窗每次手动输入，没有历史记忆
+- **解决方案**：建立 3 个共享池（文件路径 `_wf_history_paths`、文本 `_wf_history_texts`、短文本 `_wf_history_msgs`），blur 时 LRU 30 条自动保存并持久化，focus 时下拉显示。同时修复这些新 key 在后端 GET whitelist 中的缺失
+- **教训**：后端 `api_get_config` 的 safe dict 是白名单机制，前端新加的配置 key 必须同步加入，否则页面重启后数据丢失
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### merge 文件列表 SVN 路径过滤与剥离
+- **场景**：SVN log --verbose 返回的路径是完整仓库路径，包含其他目录的变更文件
+- **解决方案**：URL 路径过滤（文件 URL 按文件名、目录 URL 按 startswith），同时计算 `strip_prefix` 传给前端用于显示时剥离仓库前缀，但后端保留完整路径用于排除检查和合并执行
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### merge 删除文件智能标记与合并处理
+- **场景**：新增后删除的文件出现在文件列表中，合并时会出错
+- **解决方案**：扫描全部版本，取每个文件所有操作，规则：最新操作为 del → 标记删除（灰色+标签）、不是删除且任一版本有 add → 标记新增、全是 mod → 标记修改。删除文件可勾选，合并时自动处理为删除操作。已不存在的文件跳过
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

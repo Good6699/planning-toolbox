@@ -167,6 +167,7 @@ def api_get_config():
         "_wf_history_paths": cfg.get("_wf_history_paths", []),
         "_wf_history_texts": cfg.get("_wf_history_texts", []),
         "_wf_history_msgs": cfg.get("_wf_history_msgs", []),
+        "merge_exclude_paths": cfg.get("merge_exclude_paths", []),
     }
     return jsonify(safe)
 
@@ -2022,16 +2023,44 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
         if keyword:
             _log(f"关键词: {keyword}")
         _log("正在获取版本信息及变更文件（svn log --verbose）...")
+
+        from urllib.parse import urlparse
+        _FILE_EXTS = (".xlsm", ".xlsx", ".xls", ".xlsb", ".csv")
+        parsed = urlparse(source_url)
+        path_segments = parsed.path.strip("/").split("/")
+        is_file_url = any(source_url.lower().endswith(ext) for ext in _FILE_EXTS)
+        filter_str_verbose = None
+        if is_file_url:
+            filter_str_verbose = path_segments[-1]
+            _log(f"检测到文件URL，仅显示文件: {filter_str_verbose}")
+        elif len(path_segments) > 2:
+            filter_str_verbose = "/" + "/".join(path_segments[2:])
+            _log(f"检测到目录URL，仅显示 {filter_str_verbose}/ 下的文件")
+
         versions = svn_log(source_url, start_date, end_date,
                            author=author, keyword=keyword,
                            svn_user=svn_user, svn_pass=svn_pass,
                            verbose=True)
+
+        if filter_str_verbose:
+            for v in versions:
+                if is_file_url:
+                    repo_relative = "/" + "/".join(path_segments[2:]) if len(path_segments) > 2 else filter_str_verbose
+                    v["files"] = [f for f in v.get("files", []) if repo_relative in f.get("path", "") or f.get("path", "").endswith("/" + filter_str_verbose)]
+                else:
+                    prefix = filter_str_verbose.rstrip("/") + "/"
+                    v["files"] = [f for f in v.get("files", []) if f.get("path", "").startswith(prefix)]
+            matched = sum(len(v.get("files", [])) for v in versions)
+            if is_file_url and matched == 0:
+                _log(f"完整路径未匹配，尝试仅按文件名 '{filter_str_verbose}' 过滤")
+                for v in versions:
+                    v["files"] = [f for f in v.get("files", []) if filter_str_verbose in f.get("path", "")]
         total = len(versions)
         _log(f"查询完成，共 {total} 个版本")
         if total > 0:
             file_count = sum(len(v.get("files", [])) for v in versions)
             _log(f"所有版本累计变更文件: {file_count} 个")
-        result = json.dumps({"ok": True, "versions": versions, "total": total})
+        result = json.dumps({"ok": True, "versions": versions, "total": total, "strip_prefix": filter_str_verbose if not is_file_url else ""})
         q.put(f"[RESULT]{result}\n")
     except RuntimeError as e:
         err = json.dumps({"ok": False, "error": str(e)})
@@ -2060,6 +2089,17 @@ def _merge_worker(task_id, source_url, target_path, revisions, files,
         q.put(f"目标路径: {target_path}\n")
         q.put(f"涉及版本: {len(revisions)} 个, 文件: {len(files)} 个\n")
         q.put(f"{'='*50}\n")
+
+        from urllib.parse import urlparse
+        parsed = urlparse(source_url)
+        segs = parsed.path.strip("/").split("/")
+        strip_prefix = ("/" + "/".join(segs[2:]) + "/") if len(segs) > 2 else None
+        for f in files:
+            raw = f.get("path", "")
+            if strip_prefix and raw.startswith(strip_prefix):
+                f["path"] = raw[len(strip_prefix):]
+            elif raw.startswith("/"):
+                f["path"] = raw[1:]
 
         total_merged = 0
         total_conflict = 0

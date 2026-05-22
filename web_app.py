@@ -905,6 +905,40 @@ def _exec_lock_svn(step, put, task_id=None):
         return False
     svn = _get_svn_path()
     put(f"SVN 锁定: {target_path}\n")
+
+    update_dirs = step.get("update_dirs", [])
+    if update_dirs:
+        for d in update_dirs:
+            d = d.strip()
+            if not d or not os.path.isdir(d):
+                put(f"更新目录无效: {d}\n")
+                return False
+            put(f"正在更新目录: {d}\n")
+            proc = None
+            try:
+                proc = subprocess.Popen([svn, "update", "--accept", "theirs-full", d],
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        text=True, **_get_subprocess_kwargs())
+                _register_proc(proc, task_id)
+                try:
+                    stdout, stderr = proc.communicate(timeout=120)
+                    if proc.returncode == 0:
+                        for line in stdout.strip().splitlines():
+                            line = line.strip()
+                            if line:
+                                put(f"  {line}\n")
+                        put(f"更新完成: {d}\n")
+                    else:
+                        put(f"更新失败: {d} - {stderr[-200:]}\n")
+                        return False
+                finally:
+                    _unregister_proc(proc, task_id)
+            except Exception as e:
+                if proc:
+                    _unregister_proc(proc, task_id)
+                put(f"更新异常: {e}\n")
+                return False
+
     proc = None
     try:
         proc = subprocess.Popen([svn, "lock", "--force", "-m", lock_msg, target_path],

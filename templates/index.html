@@ -1883,9 +1883,18 @@ function buildWorkflowTab(panel) {
       const menu = document.createElement("div");
       menu.id = "wf_step_type_picker";
       menu.style.cssText = "position:fixed;z-index:10000;background:#1c1e26;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:4px 0;box-shadow:0 4px 24px rgba(0,0,0,.5)";
+      const itemCount = Object.keys(typeCn).length;
+      const estMenuH = itemCount * 30 + 8;
       const rect = addItem.getBoundingClientRect();
-      menu.style.left = rect.left + "px";
-      menu.style.top = (rect.bottom + 4) + "px";
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      if (spaceBelow >= estMenuH + 4 || spaceBelow >= spaceAbove) {
+        menu.style.left = rect.left + "px";
+        menu.style.top = (rect.bottom + 4) + "px";
+      } else {
+        menu.style.left = rect.left + "px";
+        menu.style.top = (rect.top - 4 - estMenuH) + "px";
+      }
       Object.entries(typeCn).forEach(([k,v]) => {
         const opt = document.createElement("div");
         opt.style.cssText = "padding:6px 16px;cursor:pointer;white-space:nowrap;font-size:13px;color:var(--text,#e0e0e0)";

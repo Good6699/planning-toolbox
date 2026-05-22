@@ -198,6 +198,18 @@
 - **解决方案**：将弹窗上下文同步存储到 `overlay.dataset.modalCtx`（DOM dataset），`_wfModalDoSave` 优先读本地 `_modalCtx`，读不到时从 `overlay.dataset.modalCtx` fallback。同时在新闭包中直接通过 `document.getElementById` 操作弹窗 DOM，不依赖旧闭包中的变量引用
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### web 版 _exec_lock_svn 缺失 update_dirs 逻辑
+- **场景**：工作流中 lock_svn 步骤配置了更新目录，但执行后只有锁定日志，没有 svn update 的日志
+- **根因**：web 版 `_exec_lock_svn` 只实现了 `svn lock`，完全跳过了 `update_dirs` 的 `svn update --accept theirs-full` 逻辑。而 tkinter 桌面版 `_wf_execute_lock_svn` 有完整的实现
+- **解决方案**：在 `_exec_lock_svn` 中增加与 tkinter 版一致的 update_dirs 循环处理，逐目录执行 svn update 并输出日志
+- **教训**：web 版迁移工作流执行逻辑时，必须逐步骤与 tkinter 桌面版对比，遗漏的分支逻辑会导致功能不完整
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### 浮动菜单智能定位（上/下自适应）
+- **场景**：添加步骤的类型选择菜单固定在按钮下方，靠近窗口底部时被裁剪看不到
+- **解决方案**：计算菜单预估高度 `itemCount * 30 + 8`（7 项约 218px），比较下方空间与上方空间，空间不足时显示在按钮上方
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

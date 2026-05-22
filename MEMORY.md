@@ -472,5 +472,11 @@ while (true):
 
 ### 教训
 - `_parse_excel_lxml` 虽快但全量解析 6MB+/12万行 会导致 OOM，双文件无法在同一个进程完成
+
+### 语义合并版本计数不刷新的 bug
+- **场景**：2026-05-22 语义合并页签全选→清空/反选后，底部已选版本数不刷新，始终显示全选时的数字
+- **根因**：`_updateMergeVersionCount()` 用 `Object.keys(_mergeData.checkedRevs).length` 计数，但清除操作只把值设为 `false`，key 仍然存在于对象中，导致 `Object.keys` 始终返回全选时的数量
+- **解决方案**：改为 `Object.values(_mergeData.checkedRevs).filter(Boolean).length`，只统计值为 `true` 的 key 数量
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 - 双文件对比的正确策略：先轻量级探测（ZIP hash）→ 只对差异 sheet 做重解析
 - 同 size 不同 hash 的 sheet 是格式/样式/压缩差异，不影响单元格数据

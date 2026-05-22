@@ -3018,7 +3018,7 @@ function _refreshMergeFileList() {
 }
 function _updateMergeVersionCount() {
   const el = document.getElementById("merge_version_count_bottom");
-  const total = Object.keys(_mergeData.checkedRevs).length;
+  const total = Object.values(_mergeData.checkedRevs).filter(Boolean).length;
   if (total > 0) {
     el.textContent = `已选 ${total} 个`;
     el.classList.remove("merge-ops-hidden");

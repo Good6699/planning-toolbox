@@ -378,7 +378,7 @@ When a capability is needed:
 | **github-push** | `.trae/skills/github-push/SKILL.md` | 一键提交并推送 GitHub：git status → 确认 message → flake8 → commit → push。当用户说"push/推送/提交/上传/保存"时自动调用。 |
 | **kill-all** | `.trae/skills/kill-all/SKILL.md` | 一键关闭策划工具箱桌面端所有进程（Flask端口18123 + Python进程）。当用户说"关闭/退出/杀掉/kill/关掉工具箱/停止"或端口被占用需清理时自动调用。 |
 | **step-by-step** | `.trae/skills/step-by-step/SKILL.md` | 步骤化实施：将实现任务分解为精确变更点，每个变更点包含文件路径、before/after 代码、依赖关系。当实现多步功能或修复复杂 bug 时自动调用。 |
-| **lesson-log** | `.trae/skills/lesson-log/SKILL.md` | 将开发中遇到的问题、踩坑记录、修复方案写入 MEMORY.md 知识库。用户说"记下来/写到知识库"时或解决复杂问题后主动调用。 |
+| **graphify-and-record** | `.trae/skills/graphify-and-record/SKILL.md` | 图谱增量更新 + 经验记录 + Git 提交。改完代码后调用：检测变更→AST提取→图谱合并→记录经验→Git提交。 |
 | **problem-solver** | `.trae/skills/problem-solver/SKILL.md` | 结构化根因分析：Fishbone 图 + 5 Whys。在诊断 bug、分析非预期行为时 PROACTIVELY 调用，不得跳过根因直接改代码。 |
 
 Operational/local information such as:

@@ -2414,6 +2414,7 @@ function saveTrLangAdvSettings() {
 let _wfRunningTasks = 0;
 async function runTask(url, body, btn, logId, label) {
   const logEl = document.getElementById(logId);
+  logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
   if (label) {
     if (_wfRunningTasks === 0) {
       const statusBar = document.getElementById("status_bar");
@@ -3158,6 +3159,7 @@ async function runMergeRun() {
   btn.innerHTML = '<span class="spinner"></span>合并中...';
   const logEl = document.getElementById("merge_log");
   logEl.innerHTML = "";
+  logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
   const body = {
     source_url: sourceUrl,
     target_path: targetPath,

@@ -2819,19 +2819,17 @@ def write_excel(results: List[dict], output_path: str,
         wb.save(output_path)
         return
 
-    # 排序：按sheet分组（如果有），每组内按ID数字排序
-    def _extract_id_num(row: dict) -> int:
-        """从ID中提取数字部分用于排序"""
+    # 排序：按sheet分组（如果有），每组内按文本前缀分组再按数值排序，删除行排到最后
+    def _extract_sort_key(row: dict) -> tuple:
+        """从ID中提取排序键：(前缀文本, 数字部分)"""
         sid = row.get("ID", "")
         if not sid:
-            return 0
-        # 提取所有数字
+            return ("", 0)
         import re
-        nums = re.findall(r'\d+', str(sid))
-        if nums:
-            # 取最后一个数字（通常是序号）
-            return int(nums[-1])
-        return 0
+        m = re.match(r'^(.*?)(\d+)$', str(sid))
+        if m:
+            return (m.group(1), int(m.group(2)))
+        return (str(sid), 0)
 
     # 样式
     header_fill = PatternFill("solid", fgColor="4472C4")
@@ -2855,12 +2853,12 @@ def write_excel(results: List[dict], output_path: str,
             if col not in all_cols:
                 all_cols.append(col)
         
-        # 排序：按原表 sheet 顺序，每组内按ID数字排序
+        # 排序：删除行排到最后，其余按原表 sheet 顺序 + 前缀+数字排序
         if sheet_order:
             sheet_order_map = {sn: i for i, sn in enumerate(sheet_order)}
-            results.sort(key=lambda r: (sheet_order_map.get(r.get("sheet", "") or "", 999), _extract_id_num(r)))
+            results.sort(key=lambda r: (r.get("操作")=="删除", sheet_order_map.get(r.get("sheet", "") or "", 999), _extract_sort_key(r)))
         else:
-            results.sort(key=lambda r: (r.get("sheet", "") or "", _extract_id_num(r)))
+            results.sort(key=lambda r: (r.get("操作")=="删除", r.get("sheet", "") or "", _extract_sort_key(r)))
         
         # 写入标题行（根据 title_rows 确定标题行数）
         header_rows = title_rows
@@ -2945,7 +2943,7 @@ def write_excel(results: List[dict], output_path: str,
 
         for sheet_name in sheet_groups:
             sheet_results = sheet_groups[sheet_name]
-            sheet_results.sort(key=lambda r: _extract_id_num(r))
+            sheet_results.sort(key=lambda r: (r.get("操作")=="删除", _extract_sort_key(r)))
 
         sorted_sheets = sheet_order if sheet_order else sorted(sheet_groups.keys())
         for sheet_name in sorted_sheets:
@@ -3049,7 +3047,11 @@ def write_excel(results: List[dict], output_path: str,
     if "Sheet" in wb.sheetnames:
         wb.remove(wb["Sheet"])
 
-    wb.save(output_path)
+    try:
+        wb.save(output_path)
+    except PermissionError:
+        _log(f"[错误] 无法写入 {os.path.basename(output_path)}，文件正在被 Excel 打开，请关闭后重试")
+        raise
 
 
 def _write_excel_fallback(results: List[dict], output_path: str,

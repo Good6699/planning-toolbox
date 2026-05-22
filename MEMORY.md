@@ -171,6 +171,16 @@
 - **教训**：在 pywebview 桌面版环境中，优先用 JS API 桥而非 HTTP fetch 执行本地操作（打开文件、浏览目录等）。检查功能是否正常时不仅要看后端逻辑，还要看前端 fetch 响应是否真的返回了。
 - **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/desktop_main.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### 对比结果排序规则调整
+- **场景**：对比结果中操作=删除的行应排到整个"对比结果"sheet的末尾，不受文件sheet分组影响
+- **解决方案**：sort key 改为 `(删除?, sheet顺序, 前缀+数字)`，将 `删除` 条件提到 sheet 分组之前，而非分组之内
+- **涉及文件**：[svn_oneclick_compare.py](file:///c:/Users/admin/.qclaw/workspace/svn_oneclick_compare.py)
+
+### 文件被 Excel 占用时直接提示关闭
+- **场景**：写入 Excel 文件时 `PermissionError`，不应自动生成带时间戳的副本
+- **解决方案**：捕获 `PermissionError` 后写日志提示"文件正在被 Excel 打开，请关闭后重试"，然后 `raise` 让异常继续传播
+- **涉及文件**：[svn_oneclick_compare.py](file:///c:/Users/admin/.qclaw/workspace/svn_oneclick_compare.py)
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

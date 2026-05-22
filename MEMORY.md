@@ -156,6 +156,21 @@
 - **教训**：新增配置键时，必须同时检查前端的 blur 保存逻辑 + 后端的 GET 白名单。POST 写入没问题不代表 GET 读回没问题。
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### SVN 关键词支持逗号分隔多个筛选词
+- **场景**：`#svn_keyword` 和 `#merge_keyword` 只能输入单个关键词，需要支持逗号分隔的 OR 逻辑
+- **解决方案**：
+  1. 前端占位文字提示逗号分隔
+  2. SVN 对比路径（`web_app.py._run_svn_task`）：将 keyword 拆为多个 `--keyword` 参数，`svn_oneclick_compare.py` 已有 OR 逻辑
+  3. 语义合并路径（`toolbox_merge.py.svn_log`）：多关键词时不用 `--search`，改 Python 端 `any(kw in msg for kw in keywords_list)` 过滤
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### pywebview 环境下打开文件夹不能用 HTTP fetch
+- **场景**：SVN 执行完成后自动打开输出文件夹的功能失效
+- **根因**：`os.startfile(path)` 在 pywebview WebView2 + Werkzeug 子进程环境下阻塞 HTTP 响应（`fetch("/api/open/folder")` 发出后后端不返回），且 `os.startfile` 本身也可能不生效
+- **解决方案**：绕过后端 HTTP 接口，通过 pywebview JS API 桥直接调用 Python 的 `subprocess.Popen(f'explorer "{path}"', shell=True)`
+- **教训**：在 pywebview 桌面版环境中，优先用 JS API 桥而非 HTTP fetch 执行本地操作（打开文件、浏览目录等）。检查功能是否正常时不仅要看后端逻辑，还要看前端 fetch 响应是否真的返回了。
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/desktop_main.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

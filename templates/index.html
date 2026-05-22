@@ -1533,7 +1533,7 @@ function buildSvnTab(panel) {
           <div class="section-label">过滤与输出</div>
           <div class="form-group">
             <label>关键词过滤</label>
-            <input type="text" id="svn_keyword" placeholder="按SVN提交备注过滤" autocomplete="off">
+            <input type="text" id="svn_keyword" placeholder="按SVN提交备注过滤（逗号分隔多个）" autocomplete="off">
           </div>
           <div class="form-group">
             <label>提交者过滤</label>
@@ -2462,13 +2462,11 @@ async function runTask(url, body, btn, logId, label) {
       evtSrc.close();
       _done();
       if (_outputPath) {
-        fetch("/api/open/folder", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:_outputPath})}).then(r=>r.json()).then(d=>{
-          if (!d.ok) console.warn("打开文件夹失败:", d);
-        }).catch(e=>console.warn("打开文件夹请求失败:", e));
         const _hint = document.createElement("div");
-        _hint.textContent = "📂 已打开输出文件夹";
-        _hint.style.color = "var(--accent)";
+        _hint.textContent = "📂 正在打开文件夹: " + _outputPath;
+        _hint.style.cssText = "color:var(--accent);font-size:12px";
         logEl.appendChild(_hint);
+        _openFolder(_outputPath);
       }
       return;
     }
@@ -2492,7 +2490,9 @@ async function runTask(url, body, btn, logId, label) {
       const _m = msg.match(/(?:已生成修改总结|修改总结)[:\s]+(.+?)\\修改总结\.txt/);
       if (_m) _outputPath = _m[1].trim();
       const _pm = msg.match(/\[输出路径\]\s+(.+)/);
-      if (_pm && !_outputPath) _outputPath = _pm[1].trim();
+      if (_pm) {
+        _outputPath = _pm[1].trim();
+      }
       logEl.appendChild(div);
     }
     const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 32;
@@ -2503,6 +2503,13 @@ async function runTask(url, body, btn, logId, label) {
     _done();
     logEl.innerHTML += "\n⚠ 日志连接中断\n";
   };
+}
+function _openFolder(path) {
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.open_folder) {
+    window.pywebview.api.open_folder(path).then(()=>{});
+  } else {
+    fetch("/api/open/folder", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path})}).then(r=>r.json()).catch(e=>console.warn("打开文件夹失败:", e));
+  }
 }
 let dirModal = null;
 async function browseDir(inputId, callback, initialPath) {
@@ -2791,7 +2798,7 @@ function buildMergeTab(panel) {
         </div>
         <div class="form-group">
           <label>备注关键词（留空不限）</label>
-          <input type="text" id="merge_keyword" placeholder="按提交备注模糊匹配">
+          <input type="text" id="merge_keyword" placeholder="按提交备注模糊匹配（逗号分隔多个）">
         </div>
       </div>
       <div class="action-center merge-full" style="display:flex;gap:12px;justify-content:center;margin-bottom:0">
@@ -3256,13 +3263,13 @@ document.addEventListener("click",e=>{
         fetch("/api/svn/open-wc", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:v})})
           .then(r=>r.json()).then(d=>{if(!d.ok) _showToast(d.error||"未找到本地副本");});
       } else {
-        fetch("/api/open/folder", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:v})});
+        _openFolder(v);
       }
       break;
     }
     case "open-svn-output": {
       const _p = document.getElementById("svn_output").value.trim();
-      if (_p) fetch("/api/open/folder", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:_p})});
+      if (_p) _openFolder(_p);
       break;
     }
     case "browse-upload-src": browseDir("upload_src", refreshFiles); break;

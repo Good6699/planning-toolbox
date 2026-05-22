@@ -211,7 +211,10 @@ def _run_svn_task(q, svn_url, mode, start_date, end_date, keyword, author, outpu
         if exclude:
             cmd += ["--exclude-dirs", exclude]
     if keyword:
-        cmd += ["--keyword", keyword]
+        for kw in keyword.split(","):
+            kw = kw.strip()
+            if kw:
+                cmd += ["--keyword", kw]
     if author:
         cmd += ["--author", author]
 
@@ -1696,13 +1699,13 @@ def api_translate_run():  # noqa: C901
 def api_open_folder():
     data = request.get_json(force=True)
     path = data.get("path", "").strip()
-    if path and os.path.isdir(path):
-        try:
-            os.startfile(path)
-            return jsonify({"ok": True})
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-    return jsonify({"error": "路径无效"}), 400
+    if not path:
+        return jsonify({"error": "路径为空"}), 400
+    path = os.path.normpath(path)
+    if os.path.isdir(path):
+        subprocess.Popen(f'start "" "{path}"', shell=True)
+        return jsonify({"ok": True, "path": path})
+    return jsonify({"error": f"路径不是目录: {path}"}), 400
 
 
 @app.route("/api/svn/detect", methods=["POST"])

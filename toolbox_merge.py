@@ -49,8 +49,10 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
            f"{{{start_date}}}:{{{end_date}}}", "--limit", "500"]
     if author:
         cmd += ["--search", author]
-    if keyword:
-        cmd += ["--search", keyword]
+    keywords_list = [k.strip() for k in keyword.split(",")] if keyword else []
+    if len(keywords_list) == 1:
+        cmd += ["--search", keywords_list[0]]
+    # multiple keywords: no --search, fetch all and filter Python-side later
     if verbose:
         cmd += ["--verbose"]
     cmd += _build_svn_auth_args(svn_user, svn_pass)
@@ -82,6 +84,8 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
             versions.append(v)
     except ET.ParseError:
         pass
+    if len(keywords_list) > 1:
+        versions = [v for v in versions if any(kw in v.get("msg", "") for kw in keywords_list)]
     return versions
 
 

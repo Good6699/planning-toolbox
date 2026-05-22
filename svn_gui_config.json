@@ -1,8 +1,8 @@
 {
   "svn_urls": [
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData",
-    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/gameData",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/Client"
   ],
@@ -208,6 +208,7 @@
     "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
   ],
   "svn_keyword_history": [
+    "专武,腐败秘境,职业",
     "专武",
     "裂隙",
     "腐败秘境"

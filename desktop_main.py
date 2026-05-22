@@ -527,6 +527,15 @@ class ResizeApi:
             print("[browseDir]", e)
         return ""
 
+    def open_folder(self, path):
+        try:
+            import subprocess
+            subprocess.Popen(f'explorer "{path}"', shell=True)
+            return True
+        except Exception as e:
+            print("[open_folder]", e)
+            return False
+
 
 def _tray_thread():
     global _tray_icon

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """策划工具箱 - SVN工作流页签"""
 import tkinter as tk
@@ -65,7 +65,7 @@ class WorkflowTabMixin:
             self.wf_step_listbox.configure(yscrollcommand=step_vbar.set)
             for i, s in enumerate(steps):
                 st = s.get("type", "")
-                t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "open_tables": "打开表格"}.get(st, st)
+                t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "unlock_svn": "解锁SVN", "open_tables": "打开表格"}.get(st, st)
                 self.wf_step_listbox.insert("end", f"{i+1}. {t} - {s.get('name', '')}")
             sel_idx = self._selected_step if self._selected_step is not None else 0
             if sel_idx < len(steps):
@@ -87,6 +87,7 @@ class WorkflowTabMixin:
         step_menu.add_command(label="合并翻译", command=lambda: self._wf_add_step(wf_idx, "merge_translation"))
         step_menu.add_command(label="导出错误码", command=lambda: self._wf_add_step(wf_idx, "export_error_code"))
         step_menu.add_command(label="锁定SVN", command=lambda: self._wf_add_step(wf_idx, "lock_svn"))
+        step_menu.add_command(label="解锁SVN", command=lambda: self._wf_add_step(wf_idx, "unlock_svn"))
         step_menu.add_command(label="打开表格", command=lambda: self._wf_add_step(wf_idx, "open_tables"))
         self.wf_add_step_btn.config(menu=step_menu)
 
@@ -145,7 +146,7 @@ class WorkflowTabMixin:
 
         row = 0
         tk.Label(grp1, text="类型：", font=("微软雅黑", 9)).grid(row=row, column=0, sticky="w")
-        type_map = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "open_tables": "打开表格"}
+        type_map = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "unlock_svn": "解锁SVN", "open_tables": "打开表格"}
         tk.Label(grp1, text=type_map.get(step_type, step_type),
                  font=("微软雅黑", 9), fg="#555").grid(row=row, column=1, sticky="w", padx=(5, 0))
 
@@ -160,7 +161,7 @@ class WorkflowTabMixin:
             iid = "wf_" + str(wf_idx) + "_step_" + str(step_idx)
             if hasattr(self, "wf_tree") and self.wf_tree.exists(iid):
                 st = step.get("type", "")
-                t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "open_tables": "打开表格"}.get(st, st)
+                t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "unlock_svn": "解锁SVN", "open_tables": "打开表格"}.get(st, st)
                 self.wf_tree.item(iid, text=str(step_idx + 1) + ". " + t + " - " + step.get("name", ""))
         name_var.trace_add("write", lambda *_: _save_name())
         ttk.Entry(grp1, textvariable=name_var, font=("微软雅黑", 9)).grid(row=row, column=1, sticky="ew", padx=(5, 0), pady=(4, 0))
@@ -177,6 +178,8 @@ class WorkflowTabMixin:
             self._wf_show_export_error_code_config(wf_idx, step_idx, step)
         elif step_type == "lock_svn":
             self._wf_show_lock_svn_config(wf_idx, step_idx, step)
+        elif step_type == "unlock_svn":
+            self._wf_show_unlock_svn_config(wf_idx, step_idx, step)
         elif step_type == "open_tables":
             self._wf_show_open_tables_config(wf_idx, step_idx, step)
 
@@ -738,6 +741,104 @@ class WorkflowTabMixin:
                  font=("微软雅黑", 8), fg="#888", justify="left").grid(
             row=row, column=0, columnspan=3, sticky="w", padx=(5, 0), pady=(6, 0))
 
+    def _wf_show_unlock_svn_config(self, wf_idx, step_idx, step):  # noqa: C901
+        grp2 = tk.LabelFrame(self.wf_detail_frame, text="  解锁SVN设置  ",
+                             font=("微软雅黑", 9), padx=8, pady=6)
+        grp2.pack(fill="x", pady=(8, 0))
+        grp2.columnconfigure(1, weight=1)
+
+        row = 0
+        tk.Label(grp2, text="目标路径：", font=("微软雅黑", 9)).grid(row=row, column=0, sticky="w")
+        target_var = tk.StringVar(value=step.get("target_path", ""))
+        target_entry = ttk.Entry(grp2, textvariable=target_var, font=("微软雅黑", 9))
+        target_entry.grid(row=row, column=1, sticky="ew", padx=(5, 0))
+
+        def _browse_target():
+            f = filedialog.askopenfilename(title="选择要解锁的SVN文件")
+            if not f:
+                f = filedialog.askdirectory(title="选择要解锁的SVN文件夹")
+            if f:
+                target_var.set(f)
+                step["target_path"] = f
+                self._wf_save_config()
+        ttk.Button(grp2, text="浏览…", command=_browse_target,
+                   width=8).grid(row=row, column=2, padx=(5, 0))
+
+        def _on_target_drop(files):
+            if files:
+                f = files[0].strip('"').strip("'")
+                target_var.set(f)
+                step["target_path"] = f
+                self._wf_save_config()
+        _DropTarget(target_entry, _on_target_drop).hook()
+
+        def _save_target(*_):
+            step["target_path"] = target_var.get()
+            self._wf_save_config()
+        target_var.trace_add("write", lambda *_: _save_target())
+
+        row = 1
+        tk.Label(grp2, text="解锁备注：", font=("微软雅黑", 9)).grid(row=row, column=0, sticky="w", pady=(6, 0))
+        msg_var = tk.StringVar(value=step.get("lock_msg", ""))
+        msg_entry = ttk.Entry(grp2, textvariable=msg_var, font=("微软雅黑", 9))
+        msg_entry.grid(row=row, column=1, sticky="ew", padx=(5, 0), pady=(6, 0))
+
+        def _save_msg(*_):
+            step["lock_msg"] = msg_var.get()
+            self._wf_save_config()
+        msg_var.trace_add("write", lambda *_: _save_msg())
+
+        row = 2
+        tk.Label(grp2, text="更新目录：", font=("微软雅黑", 9)).grid(row=row, column=0, sticky="w", pady=(6, 0))
+        dirs_frame = tk.Frame(grp2)
+        dirs_frame.grid(row=row, column=1, columnspan=2, sticky="ew", padx=(5, 0), pady=(6, 0))
+        dirs_frame.columnconfigure(0, weight=1)
+
+        dirs_listbox = tk.Listbox(dirs_frame, font=("Consolas", 9), height=3, activestyle="none")
+        dirs_listbox.grid(row=0, column=0, sticky="ew")
+        for d in step.get("update_dirs", []):
+            dirs_listbox.insert("end", d)
+
+        def _on_dirs_drop(files):
+            for f in files:
+                f = f.strip('"').strip("'")
+                if os.path.isdir(f):
+                    dirs_listbox.insert("end", f)
+                    dirs = step.setdefault("update_dirs", [])
+                    if f not in dirs:
+                        dirs.append(f)
+            self._wf_save_config()
+        _DropTarget(dirs_listbox, _on_dirs_drop).hook()
+
+        def _add_dir():
+            d = filedialog.askdirectory(title="选择要更新的SVN目录")
+            if d:
+                dirs_listbox.insert("end", d)
+                dirs = step.setdefault("update_dirs", [])
+                dirs.append(d)
+                self._wf_save_config()
+
+        def _remove_dir():
+            sel = dirs_listbox.curselection()
+            if sel:
+                idx = sel[0]
+                dirs_listbox.delete(idx)
+                dirs = step.get("update_dirs", [])
+                if idx < len(dirs):
+                    dirs.pop(idx)
+                    self._wf_save_config()
+
+        btn2 = tk.Frame(dirs_frame)
+        btn2.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ttk.Button(btn2, text="添加", command=_add_dir, width=5).pack(side="left", padx=(0, 5))
+        ttk.Button(btn2, text="移除", command=_remove_dir, width=5).pack(side="left")
+
+        row = 3
+        tip_text = "选中后执行 svn unlock 操作，解锁该文件或文件夹。指定更新目录则解锁前先 svn update --accept theirs-full。"
+        tk.Label(grp2, text=tip_text,
+                 font=("微软雅黑", 8), fg="#888", justify="left").grid(
+            row=row, column=0, columnspan=3, sticky="w", padx=(5, 0), pady=(6, 0))
+
     def _wf_show_open_tables_config(self, wf_idx, step_idx, step):  # noqa: C901
         grp2 = tk.LabelFrame(self.wf_detail_frame, text="  打开表格设置  ",
                              font=("微软雅黑", 9), padx=8, pady=6)
@@ -944,7 +1045,7 @@ class WorkflowTabMixin:
             iid = "wf_" + str(wf_idx) + "_step_" + str(step_idx)
             if hasattr(self, "wf_tree") and self.wf_tree.exists(iid):
                 st = step.get("type", "")
-                t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "open_tables": "打开表格"}.get(st, st)
+                t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "unlock_svn": "解锁SVN", "open_tables": "打开表格"}.get(st, st)
                 self.wf_tree.item(iid, text=str(step_idx + 1) + ". " + t + " - " + step.get("name", ""))
 
     def _wf_update_step_listbox(self, wf_idx, select_idx=None):
@@ -953,7 +1054,7 @@ class WorkflowTabMixin:
             wf = self._wf_data[wf_idx]
             for i, s in enumerate(wf.get("steps", [])):
                 st = s.get("type", "")
-                t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "open_tables": "打开表格"}.get(st, st)
+                t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "unlock_svn": "解锁SVN", "open_tables": "打开表格"}.get(st, st)
                 self.wf_step_listbox.insert("end", f"{i+1}. {t} - {s.get('name', '')}")
             if select_idx is not None and select_idx < self.wf_step_listbox.size():
                 self.wf_step_listbox.selection_set(select_idx)
@@ -978,6 +1079,8 @@ class WorkflowTabMixin:
             steps.append({"type": "export_error_code", "name": "", "root_dir": "", "lang_codes": ""})
         elif step_type == "lock_svn":
             steps.append({"type": "lock_svn", "name": "", "target_path": "", "update_dirs": [], "lock_msg": "锁定中，请勿修改"})
+        elif step_type == "unlock_svn":
+            steps.append({"type": "unlock_svn", "name": "", "target_path": "", "update_dirs": [], "lock_msg": ""})
         elif step_type == "merge_translation":
             steps.append({"type": "merge_translation", "name": "", "input_file": "", "original_file": "", "sheet_name": ""})
         elif step_type == "open_tables":
@@ -1044,7 +1147,7 @@ class WorkflowTabMixin:
                 iid = "wf_" + str(wf_idx) + "_step_" + str(step_idx)
                 if hasattr(self, "wf_tree") and self.wf_tree.exists(iid):
                     st = step.get("type", "")
-                    t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "open_tables": "打开表格"}.get(st, st)
+                    t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "unlock_svn": "解锁SVN", "open_tables": "打开表格"}.get(st, st)
                     self.wf_tree.item(iid, text=str(step_idx + 1) + ". " + t + " - " + step.get("name", ""))
 
     def _wf_refresh_tree(self, select_iid=None):
@@ -1057,7 +1160,7 @@ class WorkflowTabMixin:
             pid = self.wf_tree.insert("", "end", text=name, iid="wf_" + str(i))
             for j, step in enumerate(wf.get("steps", [])):
                 st = step.get("type", "")
-                t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "open_tables": "打开表格"}.get(st, st)
+                t = {"export_text": "导出文字表", "upload_svn": "上传SVN", "merge_table": "合并表格", "merge_translation": "合并翻译", "export_error_code": "导出错误码", "lock_svn": "锁定SVN", "unlock_svn": "解锁SVN", "open_tables": "打开表格"}.get(st, st)
                 self.wf_tree.insert(pid, "end", text=str(j+1) + ". " + t + " - " + step.get("name", ""),
                                     iid="wf_" + str(i) + "_step_" + str(j))
         f = tkfont.Font(font=ttk.Style().lookup("Treeview", "font"))
@@ -1374,6 +1477,8 @@ class WorkflowTabMixin:
                 ok = self._wf_execute_export_error_code(step)
             elif step_type == "lock_svn":
                 ok = self._wf_execute_lock_svn(step)
+            elif step_type == "unlock_svn":
+                ok = self._wf_execute_unlock_svn(step)
             elif step_type == "open_tables":
                 ok = self._wf_execute_open_tables(step)
             else:
@@ -1406,6 +1511,8 @@ class WorkflowTabMixin:
             self._wf_execute_export_error_code(step)
         elif step_type == "lock_svn":
             self._wf_execute_lock_svn(step)
+        elif step_type == "unlock_svn":
+            self._wf_execute_unlock_svn(step)
         elif step_type == "open_tables":
             self._wf_execute_open_tables(step)
         self._wlog("步骤执行完成", "ok")
@@ -1486,6 +1593,71 @@ class WorkflowTabMixin:
                 return False
         except Exception as e:
             self._wlog("锁定操作异常: " + str(e), "error")
+            import traceback
+            self._wlog(traceback.format_exc(), "error")
+            return False
+        return True
+
+    def _wf_execute_unlock_svn(self, step):
+        target = step.get("target_path", "").strip()
+        lock_msg = step.get("lock_msg", "").strip()
+
+        if not target or not os.path.exists(target):
+            self._wlog("目标路径无效: " + str(target), "error")
+            return False
+
+        self._wlog("目标路径: " + target, "info")
+        self._wlog("解锁备注: " + lock_msg, "info")
+
+        try:
+            svn_exe = _get_svn_path()
+
+            if os.path.isfile(target):
+                check_dir = os.path.dirname(target)
+            else:
+                check_dir = target
+
+            update_dirs = step.get("update_dirs", [])
+            if update_dirs:
+                for d in update_dirs:
+                    d = d.strip()
+                    if not d or not os.path.isdir(d):
+                        self._wlog("更新目录无效: " + str(d), "error")
+                        return False
+                    self._wlog("正在更新目录: " + d, "info")
+                    update_result = subprocess.run(
+                        [svn_exe, "update", "--accept", "theirs-full", d],
+                        capture_output=True, text=True,
+                        **(_get_subprocess_kwargs() if _sys.platform == "win32" else {})
+                    )
+                    if update_result.returncode == 0:
+                        out = update_result.stdout.strip()
+                        self._wlog("✅ 更新完成: " + d, "ok")
+                        for line in out.splitlines():
+                            line = line.strip()
+                            if line:
+                                self._wlog("  " + line, "info")
+                    else:
+                        err = update_result.stderr.strip()
+                        self._wlog("❌ 更新失败: " + d + " - " + err, "error")
+                        return False
+
+            unlock_args = [svn_exe, "unlock", target]
+            if lock_msg:
+                unlock_args += ["-m", lock_msg]
+            unlock_result = subprocess.run(
+                unlock_args,
+                capture_output=True, text=True,
+                **(_get_subprocess_kwargs() if _sys.platform == "win32" else {})
+            )
+            if unlock_result.returncode == 0:
+                self._wlog("✅ 解锁成功: " + target, "ok")
+            else:
+                err = unlock_result.stderr.strip()
+                self._wlog("❌ 解锁失败: " + err, "error")
+                return False
+        except Exception as e:
+            self._wlog("解锁操作异常: " + str(e), "error")
             import traceback
             self._wlog(traceback.format_exc(), "error")
             return False

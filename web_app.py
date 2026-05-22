@@ -761,6 +761,8 @@ def _run_wf_task(q, wf, steps, task_id):
                 ok = _exec_export_error_code(step, _put)
             elif stype == "lock_svn":
                 ok = _exec_lock_svn(step, _put, task_id)
+            elif stype == "unlock_svn":
+                ok = _exec_unlock_svn(step, _put, task_id)
             elif stype == "open_tables":
                 ok = _exec_open_tables(step, _put)
             else:
@@ -958,6 +960,69 @@ def _exec_lock_svn(step, put, task_id=None):
         if proc:
             _unregister_proc(proc, task_id)
         put(f"锁定异常: {e}\n")
+    return True
+
+
+def _exec_unlock_svn(step, put, task_id=None):
+    target_path = step.get("target_path", "").strip()
+    if not target_path or not os.path.isfile(target_path):
+        put(f"解锁目标无效: {target_path}\n")
+        return False
+    svn = _get_svn_path()
+    put(f"SVN 解锁: {target_path}\n")
+
+    update_dirs = step.get("update_dirs", [])
+    if update_dirs:
+        for d in update_dirs:
+            d = d.strip()
+            if not d or not os.path.isdir(d):
+                put(f"更新目录无效: {d}\n")
+                return False
+            put(f"正在更新目录: {d}\n")
+            proc = None
+            try:
+                proc = subprocess.Popen([svn, "update", "--accept", "theirs-full", d],
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        text=True, **_get_subprocess_kwargs())
+                _register_proc(proc, task_id)
+                try:
+                    stdout, stderr = proc.communicate(timeout=120)
+                    if proc.returncode == 0:
+                        for line in stdout.strip().splitlines():
+                            line = line.strip()
+                            if line:
+                                put(f"  {line}\n")
+                        put(f"更新完成: {d}\n")
+                    else:
+                        put(f"更新失败: {d} - {stderr[-200:]}\n")
+                        return False
+                finally:
+                    _unregister_proc(proc, task_id)
+            except Exception as e:
+                if proc:
+                    _unregister_proc(proc, task_id)
+                put(f"更新异常: {e}\n")
+                return False
+
+    proc = None
+    try:
+        proc = subprocess.Popen([svn, "unlock", target_path],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, **_get_subprocess_kwargs())
+        _register_proc(proc, task_id)
+        try:
+            stdout, stderr = proc.communicate(timeout=60)
+            if proc.returncode == 0:
+                put("解锁成功\n")
+                return True
+            else:
+                put(f"解锁失败: {stderr[-200:]}\n")
+        finally:
+            _unregister_proc(proc, task_id)
+    except Exception as e:
+        if proc:
+            _unregister_proc(proc, task_id)
+        put(f"解锁异常: {e}\n")
     return True
 
 

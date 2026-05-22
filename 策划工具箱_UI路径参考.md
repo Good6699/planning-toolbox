@@ -169,6 +169,7 @@ upload > L > 文件.3     → 复制合并左列第4个文件
 🌐 merge_translation合并翻译     紫色
 ⚠  export_error_code导出错误码   红色
 🔒 lock_svn         锁定SVN      深橙
+🔓 unlock_svn       解锁SVN      绿色
 📂 open_tables      打开表格     青色
 ```
 
@@ -195,6 +196,7 @@ upload > L > 文件.3     → 复制合并左列第4个文件
 | `merge_translation` | 翻译文件, 原始文件, Sheet名称 | 文件+文本 |
 | `export_error_code` | 根目录, 语言代码 | 目录+文本 |
 | `lock_svn` | 目标文件路径, 更新目录, 锁定消息 | 逗号分隔 |
+| `unlock_svn` | 目标文件路径, 更新目录, 解锁消息 | 逗号分隔 |
 | `open_tables` | 文件路径 | 逗号分隔多个 |
 
 ---

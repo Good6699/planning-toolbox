@@ -210,6 +210,11 @@
 - **解决方案**：计算菜单预估高度 `itemCount * 30 + 8`（7 项约 218px），比较下方空间与上方空间，空间不足时显示在按钮上方
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### 新增解锁SVN步骤类型
+- **场景**：工作流缺少解锁SVN步骤，与锁定SVN功能相反
+- **解决方案**：在 CSS（绿色标签 `.unlock_svn`）、web 版（`_exec_unlock_svn`）、tkinter 版（`_wf_execute_unlock_svn` / `_wf_show_unlock_svn_config`）以及前端 typeCn/typeIcon/设置表单/自动命名中，同步新增 `unlock_svn` 类型。解锁不加 `--force`，别人锁住的无法强制解锁
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[toolbox_tab_workflow.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_tab_workflow.py)
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

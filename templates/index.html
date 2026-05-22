@@ -548,6 +548,7 @@ input::placeholder,textarea::placeholder{
 .wf-child-type.merge_translation{background:rgba(200,150,255,.15);color:#c896ff;}
 .wf-child-type.export_error_code{background:rgba(255,99,125,.15);color:#ff637d;}
 .wf-child-type.lock_svn{background:rgba(255,140,0,.15);color:#ff8c00;}
+.wf-child-type.unlock_svn{background:rgba(100,200,100,.15);color:#64c864;}
 .wf-child-type.open_tables{background:rgba(100,200,255,.15);color:#64c8ff;}
 .wf-add-step-item{
   display:flex;align-items:center;gap:8px;position:relative;
@@ -1748,8 +1749,8 @@ function runUpload() {
 }
 function buildWorkflowTab(panel) {
   const wfs = config.workflows || [];
-  const typeCn = {export_text:"导出文字表",upload_svn:"上传SVN",merge_table:"合并表格",merge_translation:"合并翻译",export_error_code:"导出错误码",lock_svn:"锁定SVN",open_tables:"打开表格"};
-  const typeIcon = {export_text:"📄",upload_svn:"📤",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",lock_svn:"🔒",open_tables:"📂"};
+  const typeCn = {export_text:"导出文字表",upload_svn:"上传SVN",merge_table:"合并表格",merge_translation:"合并翻译",export_error_code:"导出错误码",lock_svn:"锁定SVN",unlock_svn:"解锁SVN",open_tables:"打开表格"};
+  const typeIcon = {export_text:"📄",upload_svn:"📤",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",lock_svn:"🔒",unlock_svn:"🔓",open_tables:"📂"};
   const isEmpty = !wfs.length;
   panel.innerHTML = `
     <div class="wf-layout">
@@ -2050,6 +2051,10 @@ function buildWorkflowTab(panel) {
         ${_fb("目标文件路径","target_path","wf_m_target_path","file")}
         <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="多个目录用,分隔"></div>
         <div class="form-group"><label>锁定消息</label><input type="text" class="wf-modal-input" id="wf_m_lock_msg" data-key="lock_msg" value="${v("lock_msg")}"></div>`,
+      unlock_svn: `
+        ${_fb("目标文件路径","target_path","wf_m_target_path","file")}
+        <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="多个目录用,分隔"></div>
+        <div class="form-group"><label>解锁消息</label><input type="text" class="wf-modal-input" id="wf_m_lock_msg" data-key="lock_msg" value="${v("lock_msg")}"></div>`,
       open_tables: `
         <div class="form-group"><label>文件路径（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_file_paths" data-key="file_paths" value="${v("file_paths")}" placeholder="多个文件用,分隔"></div>`,
     };
@@ -2221,6 +2226,11 @@ function _wfAutoName(step) {
     return paths.map(p => { const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/")); return i >= 0 ? p.substring(i+1) : p; }).filter(Boolean).join(",");
   }
   if (t === "lock_svn") {
+    const p = step.target_path || "";
+    const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
+    return i >= 0 ? p.substring(i+1) : p;
+  }
+  if (t === "unlock_svn") {
     const p = step.target_path || "";
     const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
     return i >= 0 ? p.substring(i+1) : p;

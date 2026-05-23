@@ -237,6 +237,12 @@
 - **教训**：编写长 click handler 时，跨多个代码块用了两次 `const mode`，导致 SyntaxError 页面白屏。教训：同一作用域不要重复声明同名变量，改动涉及分散的代码块时应检查变量名冲突
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
+### 两个页签共享历史记录时下拉建议不同步
+- **场景**：SVN记录和语义合并页签的作者、关键词共用同一个 `svn_author_history` / `svn_keyword_history` 池，但任一侧输入后另一侧的下拉看不到新记录
+- **根因**：两个问题——① blur 保存时只 `initSuggest` 了当前输入框、没刷新另一侧；② `merge_keyword` 缺少 `autocomplete="off"`，`focusin` 事件匹配不到它，下拉弹不出来
+- **解决方案**：SVN侧的 blur 增加 `initSuggest(peerId, ...)` 刷新merge侧的下拉；merge侧的 blur 增加 `initSuggest("svn_author"/"svn_keyword", ...)` 刷新SVN侧；补上 `autocomplete="off"`
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

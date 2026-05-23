@@ -1600,7 +1600,9 @@ function buildSvnTab(panel) {
       const key = id==="svn_keyword" ? "svn_keyword_history" : "svn_author_history";
       if (val && !(config[key]||[]).includes(val)) {
         saveConfig({[key]: [val, ...(config[key]||[])].slice(0,20)});
+        const peerId = id==="svn_keyword" ? "merge_keyword" : "merge_author";
         initSuggest(id, config[key]);
+        initSuggest(peerId, config[key]);
       }
     });
   });
@@ -2957,7 +2959,7 @@ function buildMergeTab(panel) {
         </div>
         <div class="form-group">
           <label>备注关键词（留空不限）</label>
-          <input type="text" id="merge_keyword" placeholder="按提交备注模糊匹配（逗号分隔多个）">
+          <input type="text" id="merge_keyword" placeholder="按提交备注模糊匹配（逗号分隔多个）" autocomplete="off">
         </div>
       </div>
       <div class="action-center merge-full" style="display:flex;gap:12px;justify-content:center;margin-bottom:0">
@@ -3080,10 +3082,12 @@ function buildMergeTab(panel) {
     ta.placeholder = "config\nData2/腐败秘境开发";
     Object.assign(ta.style, {
       width:"100%", boxSizing:"border-box", minHeight:"250px",
-      background:"var(--bg2)", border:"1px solid rgba(94,162,255,.18)", borderRadius:"8px",
+      background:"var(--bg2)", border:"1px solid var(--panel2)", borderRadius:"8px",
       padding:"6px 8px", color:"var(--text)", fontSize:"12px", outline:"none",
       resize:"vertical", fontFamily:"inherit"
     });
+    ta.addEventListener("focus", () => { ta.style.borderColor = "var(--accent)"; ta.style.borderWidth = "1px"; });
+    ta.addEventListener("blur", () => { ta.style.borderColor = "var(--panel2)"; ta.style.borderWidth = "1px"; });
     const textKey = "merge_file_filter_" + mode + "_text";
     const saved = config[textKey] || "";
     ta.value = saved ? saved.replace(/,/g, "\n") : "";
@@ -3126,6 +3130,7 @@ function buildMergeTab(panel) {
     if (val && !(config.svn_author_history||[]).includes(val)) {
       saveConfig({svn_author_history:[val, ...(config.svn_author_history||[])].slice(0,20)});
       initSuggest("merge_author", config.svn_author_history);
+      initSuggest("svn_author", config.svn_author_history);
     }
   });
   document.getElementById("merge_keyword").addEventListener("blur", ()=>{
@@ -3133,6 +3138,7 @@ function buildMergeTab(panel) {
     if (val && !(config.svn_keyword_history||[]).includes(val)) {
       saveConfig({svn_keyword_history:[val, ...(config.svn_keyword_history||[])].slice(0,20)});
       initSuggest("merge_keyword", config.svn_keyword_history);
+      initSuggest("svn_keyword", config.svn_keyword_history);
     }
   });
 }

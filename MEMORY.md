@@ -571,3 +571,20 @@ while (true):
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 - 双文件对比的正确策略：先轻量级探测（ZIP hash）→ 只对差异 sheet 做重解析
 - 同 size 不同 hash 的 sheet 是格式/样式/压缩差异，不影响单元格数据
+
+### 配置丢失——提交了精简版 config 覆盖了完整运行数据
+- **场景**：2026-05-23 提交 `3d33ea3`（`chore: add config file svn_gui_config.json`）时将不含工作流/翻译/对比预设等运行数据的精简版 config 提交到了 Git，导致 `svn_gui_config.json` 中的 6 个工作流、翻译 API 配置、对比预设全部丢失
+- **根因**：提交时只包含了 `svn_urls` 和合并筛选等基础配置，没有将正在使用的完整 config 文件一并提交。`saveConfig()` 每次保存都会覆盖整个文件，所以运行过程中写入的完整数据就此丢失，无法通过 Git 回退恢复（因为当前 commit 的版本就是精简版）
+- **补救**：从旧提交 `315af1a` 中提取含完整数据的 config，编写合并脚本将新旧配置合并（旧版有新版没有的 key 直接添加、历史记录列表合并去重、当前独有配置保留不动），最终恢复所有数据
+- **教训**：**配置和代码必须完整上传，不能精简。** 任何提交 config 文件的 commit，都必须用当时正在运行中的完整 `svn_gui_config.json`（含 workflows/tr_*/cmp_file_settings 等运行数据），不能创建"干净版"或"模板版"覆盖上去。代码也一样——只传核心文件不传配套文件会导致运行环境不完整
+- **涉及文件**：[svn_gui_config.json](file:///c:/Users/admin/.qclaw/workspace/svn_gui_config.json)
+
+### 工作流播放按钮改为双向停止 + 步骤级独立执行按钮
+- **场景**：2026-05-23 工作流每个父工作流 header 的 ▶ 播放按钮在执行中应变为 ⏹ 停止按钮，点击弹窗确认后取消；同时每个子步骤的 ⚙ 设置按钮左边增加一个 ▶ 按钮，支持单步骤独立执行
+- **解决方案**：
+  - 前端新增 `_wfPlayState` 全局变量跟踪每个工作流/步骤的运行状态，▶ 按钮 click handler 改为双向逻辑：未运行时执行并变 ⏹，运行中弹窗确认后调用 `/api/task/cancel` 取消并恢复 ▶
+  - 后端新增 `_cancelled_tasks` 集合，`api_task_cancel()` 将 task_id 加入集合，`_run_wf_task()` 每次迭代前检查取消信号并 break，确保取消后后续步骤不执行
+  - 移除底部全局"执行选中步骤"按钮（`runWorkflow` 函数及相关 HTML/JS）
+  - 每个步骤的 ▶ 使用独立 stateKey `"step_wfIdx_stepIdx"`，与父工作流的 `wfIdx` 键不冲突，两者可并行运行
+  - 所有工作流按钮图标从 Unicode（▶⏹⚙）替换为统一 14×14 SVG，解决不同字符视觉面积不一致的问题
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)

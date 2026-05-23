@@ -476,6 +476,14 @@ input::placeholder,textarea::placeholder{
   color:#fff;
   transform:scale(1.12);
 }
+.wf-play-btn.stop{
+  color:#ff6b6b;
+}
+.wf-play-btn.stop:hover{
+  background:rgba(255,107,107,.25);
+  color:#ff6b6b;
+  transform:scale(1.12);
+}
 .wf-copy-btn{
   width:26px;height:26px;
   display:flex;align-items:center;justify-content:center;
@@ -582,10 +590,40 @@ input::placeholder,textarea::placeholder{
   flex-shrink:0;
   font-size:14px;
   margin-right:5px;
+  padding:0;
+  line-height:1;
 }
 .wf-settings-btn:hover{
   background:rgba(94,162,255,.15);
   color:var(--accent);
+}
+.wf-step-play-btn{
+  width:28px;height:28px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:none;
+  background:rgba(255,255,255,.04);
+  border-radius:6px;
+  color:var(--dim);
+  cursor:pointer;
+  transition:.15s;
+  flex-shrink:0;
+  font-size:14px;
+  margin-right:5px;
+  padding:0;
+  line-height:1;
+}
+.wf-step-play-btn:hover{
+  background:rgba(94,162,255,.25);
+  color:#fff;
+}
+.wf-step-play-btn.stop{
+  color:#ff6b6b;
+}
+.wf-step-play-btn.stop:hover{
+  background:rgba(255,107,107,.25);
+  color:#ff6b6b;
 }
 .wf-child-del-btn{
   position:absolute;top:0;right:0;
@@ -1403,6 +1441,11 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   </div>
 </div>
 <script>
+const _WF_ICONS = {
+  play: '<svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M4 2v10l8-5z"/></svg>',
+  stop: '<svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/></svg>',
+  settings: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="7" cy="7" r="2.8"/><path d="M7 1v2M7 11v2M13 7h-2M3 7H1M11.3 2.7l-1.4 1.4M4.1 9.9l-1.4 1.4M11.3 11.3l-1.4-1.4M4.1 4.1 2.7 2.7"/></svg>'
+};
 const S = {};
 const nav = [
   {key:"svn",label:"SVN 记录"},
@@ -1748,7 +1791,7 @@ function buildWorkflowTab(panel) {
                 <span class="wf-arrow">▶</span>
                 <input type="checkbox" class="wf-parent-check">
                 <span class="wf-parent-name">${escapeHtml(wf.name)}&nbsp;&nbsp;<span style="color:var(--dim);font-weight:400">${(wf.steps||[]).length}步骤</span><span class="wf-edit-icon"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5L10.5 3.5"/><path d="M2 10L3.5 6.5L8.5 1.5L10.5 3.5L5.5 8.5L2 10Z"/></svg></span></span>
-                <button class="wf-play-btn" title="执行本工作流勾选的步骤">▶</button>
+                <button class="wf-play-btn" title="执行本工作流勾选的步骤">${_WF_ICONS.play}</button>
                 <button class="wf-copy-btn" title="复制工作流"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M10 4H11V11.5C11 12.328 10.328 13 9.5 13H3.5C2.672 13 2 12.328 2 11.5V5C2 4.172 2.672 3.5 3.5 3.5H4" stroke="currentColor" stroke-width="1.2"/></svg></button>
               </div>
               <button class="wf-del-btn" title="删除工作流">✕</button>
@@ -1758,7 +1801,8 @@ function buildWorkflowTab(panel) {
                     <input type="checkbox" class="wf-child-check">
                     <span class="wf-child-type ${s.type}">${typeIcon[s.type]||''} ${typeCn[s.type]||s.type}</span>
                     <span class="wf-child-name">${escapeHtml(s.name)}</span>
-                    <button class="wf-settings-btn" title="步骤设置">⚙</button>
+                    <button class="wf-step-play-btn" title="执行本步骤">${_WF_ICONS.play}</button>
+                    <button class="wf-settings-btn" title="步骤设置">${_WF_ICONS.settings}</button>
                     <button class="wf-child-del-btn" title="删除步骤">✕</button>
                   </div>
                 `).join('')}
@@ -1773,9 +1817,6 @@ function buildWorkflowTab(panel) {
         <div class="wf-toolbar">
           <button class="btn btn-normal" data-action="wf-create">+ 新建</button>
         </div>
-      </div>
-      <div class="action-center">
-        <button class="btn btn-primary" data-action="run-workflow">执行选中步骤</button>
       </div>
       <div class="wf-log-wrap">
         <div class="card">
@@ -1829,8 +1870,19 @@ function buildWorkflowTab(panel) {
       });
     });
     const playBtn = el.querySelector(".wf-play-btn");
-    playBtn.addEventListener("click", (e) => {
+    playBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
+      const wfIdx = Number(el.dataset.idx);
+      const state = _wfPlayState[wfIdx];
+      if (state) {
+        if (!(await showConfirm({title:"确认", message:"确定要结束本工作流吗？"}))) return;
+        fetch("/api/task/cancel", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task_id: state.taskId})}).catch(()=>{});
+        delete _wfPlayState[wfIdx];
+        playBtn.innerHTML = _WF_ICONS.play;
+        playBtn.classList.remove("stop");
+        playBtn.title = "执行本工作流勾选的步骤";
+        return;
+      }
       const children = el.querySelector(".wf-children");
       const checkedSteps = el.querySelectorAll(".wf-child-check:checked");
       const stepIndices = [];
@@ -1840,7 +1892,6 @@ function buildWorkflowTab(panel) {
         if (stepIdx >= 0) stepIndices.push(stepIdx);
       });
       if (!stepIndices.length) { _showToast("请先勾选要执行的步骤"); return; }
-      const wfIdx = Number(el.dataset.idx);
       const wfName = config.workflows[wfIdx]?.name || "工作流";
       const logContainer = document.getElementById("wf_log");
       const bodyId = "wf_log_" + wfIdx + "_" + Date.now();
@@ -1848,7 +1899,18 @@ function buildWorkflowTab(panel) {
       section.className = "wf-log-section";
       section.innerHTML = `<div class="wf-log-section-header">${escapeHtml(wfName)}</div><div class="wf-log-body" id="${bodyId}"></div>`;
       logContainer.appendChild(section);
-      runTask("/api/workflow/run", {wf_idx: wfIdx, step_indices: stepIndices}, null, bodyId, wfName);
+      playBtn.innerHTML = _WF_ICONS.stop;
+      playBtn.classList.add("stop");
+      playBtn.title = "点击停止本工作流";
+      _wfPlayState[wfIdx] = {taskId: ""};
+      runTask("/api/workflow/run", {wf_idx: wfIdx, step_indices: stepIndices}, null, bodyId, wfName, () => {
+        if (_wfPlayState[wfIdx]) {
+          delete _wfPlayState[wfIdx];
+          playBtn.innerHTML = _WF_ICONS.play;
+          playBtn.classList.remove("stop");
+          playBtn.title = "执行本工作流勾选的步骤";
+        }
+      });
     });
     const copyBtn = el.querySelector(".wf-copy-btn");
     copyBtn.addEventListener("click", (e) => {
@@ -2153,6 +2215,48 @@ function buildWorkflowTab(panel) {
       _wfRebuild();
     });
   });
+  panel.querySelectorAll(".wf-step-play-btn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const child = btn.closest(".wf-child");
+      const parent = btn.closest(".wf-parent");
+      if (!child || !parent) return;
+      const wfIdx = Number(parent.dataset.idx);
+      const stepIdx = [...parent.querySelector(".wf-children").children].indexOf(child);
+      const step = config.workflows[wfIdx]?.steps?.[stepIdx];
+      if (!step) return;
+      const stateKey = "step_" + wfIdx + "_" + stepIdx;
+      const state = _wfPlayState[stateKey];
+      if (state) {
+        if (!(await showConfirm({title:"确认", message:"确定要结束本步骤吗？"}))) return;
+        fetch("/api/task/cancel", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task_id: state.taskId})}).catch(()=>{});
+        delete _wfPlayState[stateKey];
+        btn.innerHTML = _WF_ICONS.play;
+        btn.classList.remove("stop");
+        btn.title = "执行本步骤";
+        return;
+      }
+      const wfName = config.workflows[wfIdx]?.name || "工作流";
+      const logContainer = document.getElementById("wf_log");
+      const bodyId = "wf_log_step_" + wfIdx + "_" + stepIdx + "_" + Date.now();
+      const section = document.createElement("div");
+      section.className = "wf-log-section";
+      section.innerHTML = `<div class="wf-log-section-header">${escapeHtml(wfName)} > ${escapeHtml(step.name||"步骤"+(stepIdx+1))}</div><div class="wf-log-body" id="${bodyId}"></div>`;
+      logContainer.appendChild(section);
+      btn.innerHTML = _WF_ICONS.stop;
+      btn.classList.add("stop");
+      btn.title = "点击停止本步骤";
+      _wfPlayState[stateKey] = {taskId: ""};
+      runTask("/api/workflow/run", {wf_idx: wfIdx, step_indices: [stepIdx], _stateKey: stateKey}, null, bodyId, wfName, () => {
+        if (_wfPlayState[stateKey]) {
+          delete _wfPlayState[stateKey];
+          btn.innerHTML = _WF_ICONS.play;
+          btn.classList.remove("stop");
+          btn.title = "执行本步骤";
+        }
+      });
+    });
+  });
 
   const sortableOptions = {
     animation: 150,
@@ -2224,43 +2328,6 @@ function wfCreate() {
   config.workflows.push({name:"新工作流",steps:[]});
   saveConfig({workflows:config.workflows});
   _wfRebuild();
-}
-function runWorkflow() {
-  const pairs = [];
-  document.querySelectorAll(".wf-parent").forEach((parent) => {
-    const wfIdx = Number(parent.dataset.idx);
-    const checks = parent.querySelectorAll(".wf-child-check:checked");
-    checks.forEach(cb => {
-      const child = cb.closest(".wf-child");
-      const stepIdx = [...parent.querySelector(".wf-children").children].indexOf(child);
-      if (stepIdx >= 0) pairs.push({wf_idx: wfIdx, step_idx: stepIdx});
-    });
-  });
-  if (!pairs.length) { _showToast("请勾选要执行的步骤"); return; }
-  const byWf = {};
-  pairs.forEach(p => {
-    if (!byWf[p.wf_idx]) byWf[p.wf_idx] = [];
-    byWf[p.wf_idx].push(p.step_idx);
-  });
-  const keys = Object.keys(byWf).map(Number).sort();
-    const wfNames = {};
-    document.querySelectorAll(".wf-parent").forEach(el => {
-      wfNames[Number(el.dataset.idx)] = config.workflows[Number(el.dataset.idx)]?.name || "工作流";
-    });
-    const logContainer = document.getElementById("wf_log");
-    logContainer.innerHTML = "";
-    keys.forEach(wfIdx => {
-      const name = wfNames[wfIdx] || `工作流${wfIdx}`;
-      const section = document.createElement("div");
-      section.className = "wf-log-section";
-      section.innerHTML = `<div class="wf-log-section-header">${escapeHtml(name)}</div><div class="wf-log-body" data-wf="${wfIdx}"></div>`;
-      logContainer.appendChild(section);
-    });
-    keys.forEach(wfIdx => {
-      const body = logContainer.querySelector(`.wf-log-body[data-wf="${wfIdx}"]`);
-      const name = wfNames[wfIdx] || `工作流${wfIdx}`;
-      runTask("/api/workflow/run", {wf_idx: wfIdx, step_indices: byWf[wfIdx]}, null, body.id || (body.id = "wf_log_"+wfIdx+"_"+Date.now()), name);
-    });
 }
 function escapeHtml(s){
   return (s||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -2554,7 +2621,8 @@ function saveTrLangAdvSettings() {
   });
 }
 let _wfRunningTasks = 0;
-async function runTask(url, body, btn, logId, label) {
+let _wfPlayState = {};
+async function runTask(url, body, btn, logId, label, onDone) {
   const logEl = document.getElementById(logId);
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
   if (label) {
@@ -2575,6 +2643,10 @@ async function runTask(url, body, btn, logId, label) {
   }
   const r = await fetch(url, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const d = await r.json();
+  if (body.wf_idx !== undefined) {
+    const sk = body._stateKey || body.wf_idx;
+    if (_wfPlayState[sk]) _wfPlayState[sk].taskId = d.task_id;
+  }
 
   function _done() {
     if (label) {
@@ -2584,6 +2656,7 @@ async function runTask(url, body, btn, logId, label) {
         sb.classList.remove("running");
         sb.querySelector("span").textContent = "系统空闲";
       }
+      if (onDone) onDone();
     } else {
       btn.disabled = false;
       btn.textContent = btn.dataset.orig;
@@ -3434,7 +3507,6 @@ document.addEventListener("click",e=>{
     case "run-svn": runSvn(); break;
     case "run-upload": runUpload(); break;
     case "run-translate": runTranslate(); break;
-    case "run-workflow": runWorkflow(); break;
     case "wf-create": wfCreate(); break;
     case "svn-today": {
       const today = `${cy}-${String(cm).padStart(2,"0")}-${String(cd).padStart(2,"0")}`;

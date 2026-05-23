@@ -77,6 +77,7 @@ def _get_next_task_id():
 
 _active_subprocesses = []
 _active_tasks = {}
+_cancelled_tasks = set()
 
 
 def _register_proc(proc, task_id=None):
@@ -321,6 +322,8 @@ def api_task_cancel():
             q.put(None)
         except Exception:
             pass
+
+    _cancelled_tasks.add(task_id)
 
     return jsonify({"status": "cancelled", "task_id": task_id})
 
@@ -748,6 +751,9 @@ def _run_wf_task(q, wf, steps, task_id):
 
     blocked = False
     for i, step in enumerate(steps):
+        if task_id in _cancelled_tasks:
+            _put("工作流已被取消\n")
+            break
         _put(f"-- [{i+1}/{len(steps)}] {step.get('name', '')} --\n")
         if blocked:
             _put("已阻断，跳过\n")
@@ -782,6 +788,7 @@ def _run_wf_task(q, wf, steps, task_id):
             blocked = True
     _put(f"\n{'='*50}\n")
     _put("工作流执行完成\n" if not blocked else "工作流执行完成（有失败步骤）\n")
+    _cancelled_tasks.discard(task_id)
     _put(None)
 
 

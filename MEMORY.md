@@ -214,6 +214,17 @@
 - **解决方案**：在 CSS（绿色标签 `.unlock_svn`）、web 版（`_exec_unlock_svn`）、tkinter 版（`_wf_execute_unlock_svn` / `_wf_show_unlock_svn_config`）以及前端 typeCn/typeIcon/设置表单/自动命名中，同步新增 `unlock_svn` 类型。解锁不加 `--force`，别人锁住的无法强制解锁
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
+### 语义合并页签—筛选条件拆为独立卡片并适配宽窄屏
+- **场景**：2026-05-23 语义合并页签的 SVN 地址和筛选条件在同一张卡片里，需要拆成两张卡片：宽屏时左右并排等高，窄屏时上下铺满全宽排列
+- **解决方案**：
+  - `.merge-layout` grid 从 `1fr 480px` 改为 `minmax(0,1fr) 420px`（与 SVN 记录页签一致的双列结构）
+  - 筛选条件从原大 card 中拆出，放入独立的 `.merge-side` 容器，SVN 地址保留在 `.merge-main` 中
+  - `.merge-main{align-self:start}`（左列自然高度）、`.merge-side{align-self:stretch}` + `.merge-side>.card{flex:1; min-height:0}`（右列拉伸等高）
+  - 窄屏媒体查询 `@media (max-width:1100px)`：`.merge-layout{grid-template-columns:1fr}`、`.merge-side{order:2}`（排在按钮下面）、`.merge-full{order:3}`（其他全宽元素排在最后）
+  - 去掉 action-center 上的 `merge-full` 类，避免窄屏时按钮被 `order:3` 误排到底部
+  - **关键教训**：CSS 媒体查询 `.merge-layout{1fr}` 必须出现在非媒体 `.merge-layout{minmax(0,1fr) 420px}` **之后**才能胜出。因此需要增加 `.workbench.merge-layout` 双类选择器提高优先级，或调整定义顺序
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ### 翻译页签 API+输出卡片改为自适应并排/堆叠布局
 - **场景**：2026-05-23 翻译页签的 API 设置和输出设置两个卡片以前始终在右侧列，用户希望它们始终在翻译文件+语言列+开始翻译按钮下方，并且宽屏时左右并排、窄屏时上下堆叠
 - **解决方案**：

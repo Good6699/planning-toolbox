@@ -944,12 +944,22 @@ input::placeholder,textarea::placeholder{
 }
 @media (max-width:1100px){
   .svn-layout,
-  .upload-layout{
+  .upload-layout,
+  .merge-layout{
+    grid-template-columns:1fr;
+  }
+  .workbench.merge-layout{
     grid-template-columns:1fr;
   }
   .svn-side,
   .upload-side{
     order:2;
+  }
+  .merge-side{
+    order:2;
+  }
+  .merge-full{
+    order:3;
   }
   .svn-log-wrap,
   .upload-log-wrap,
@@ -1221,9 +1231,29 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 /* ── SVN 合并页签 ── */
 .merge-layout{
   display:grid;
-  grid-template-columns:1fr 480px;
+  grid-template-columns:minmax(0,1fr) 420px;
   gap:16px;
   align-content:start;
+}
+.merge-main{
+  align-self:stretch;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+.merge-main>.card{
+  flex:1;
+  min-height:0;
+}
+.merge-side{
+  align-self:stretch;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+.merge-side>.card{
+  flex:1;
+  min-height:0;
 }
 .merge-full{
   grid-column:1/-1;
@@ -3011,35 +3041,41 @@ function buildMergeTab(panel) {
   const yearStart = `${cy}-01-01`;
   panel.innerHTML = `
     <div class="workbench merge-layout">
-      <div class="merge-full card">
-        <div class="card-title">SVN 地址</div>
-        <div class="form-group">
-          <label>源SVN地址（读取版本、变更文件）</label>
-          <input type="text" id="merge_source" placeholder="输入源SVN仓库URL，如 http://svn/repo/branches/xxx" autocomplete="off">
-        </div>
-        <div class="form-group">
-          <label>目标路径（合并落地的本地工作副本路径）</label>
-          <input type="text" id="merge_target" placeholder="输入本地SVN工作副本路径，如 D:/workspace/project" autocomplete="off">
-        </div>
-        <div class="card-title" style="margin-top:16px">筛选条件</div>
-        <div class="form-group">
-          <label>时间范围</label>
-          <div class="flex-row" style="align-items:center">
-            <input type="date" id="merge_start" value="${yearStart}" style="flex:1;min-width:0">
-            <span style="color:var(--dim)">—</span>
-            <input type="date" id="merge_end" value="${today}" style="flex:1;min-width:0">
+      <div class="merge-main">
+        <div class="card">
+          <div class="card-title">SVN 地址</div>
+          <div class="form-group">
+            <label>源SVN地址（读取版本、变更文件）</label>
+            <input type="text" id="merge_source" placeholder="输入源SVN仓库URL，如 http://svn/repo/branches/xxx" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label>目标路径（合并落地的本地工作副本路径）</label>
+            <input type="text" id="merge_target" placeholder="输入本地SVN工作副本路径，如 D:/workspace/project" autocomplete="off">
           </div>
         </div>
-        <div class="form-group">
-          <label>提交者（留空不限）</label>
-          <input type="text" id="merge_author" placeholder="按SVN用户名过滤" autocomplete="off">
-        </div>
-        <div class="form-group">
-          <label>备注关键词（留空不限）</label>
-          <input type="text" id="merge_keyword" placeholder="按提交备注模糊匹配（逗号分隔多个）" autocomplete="off">
+      </div>
+      <div class="merge-side">
+        <div class="card">
+          <div class="section-label">筛选条件</div>
+          <div class="form-group">
+            <label>时间范围</label>
+            <div class="flex-row" style="align-items:center">
+              <input type="date" id="merge_start" value="${yearStart}" style="flex:1;min-width:0">
+              <span style="color:var(--dim)">—</span>
+              <input type="date" id="merge_end" value="${today}" style="flex:1;min-width:0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>提交者（留空不限）</label>
+            <input type="text" id="merge_author" placeholder="按SVN用户名过滤" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label>备注关键词（留空不限）</label>
+            <input type="text" id="merge_keyword" placeholder="按提交备注模糊匹配（逗号分隔多个）" autocomplete="off">
+          </div>
         </div>
       </div>
-      <div class="action-center merge-full" style="display:flex;gap:12px;justify-content:center;margin-bottom:0">
+      <div class="action-center" style="display:flex;gap:12px;justify-content:center;margin-bottom:0">
         <button class="btn btn-primary" data-action="merge-query" id="merge_query_btn" style="min-width:180px">筛选查询</button>
         <button class="btn btn-primary" data-action="merge-run" id="merge_run_btn" style="min-width:180px" disabled>开始合并</button>
       </div>

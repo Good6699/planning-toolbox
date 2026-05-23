@@ -607,6 +607,21 @@ while (true):
 - **根因**：提交时只包含了 `svn_urls` 和合并筛选等基础配置，没有将正在使用的完整 config 文件一并提交。`saveConfig()` 每次保存都会覆盖整个文件，所以运行过程中写入的完整数据就此丢失，无法通过 Git 回退恢复（因为当前 commit 的版本就是精简版）
 - **补救**：从旧提交 `315af1a` 中提取含完整数据的 config，编写合并脚本将新旧配置合并（旧版有新版没有的 key 直接添加、历史记录列表合并去重、当前独有配置保留不动），最终恢复所有数据
 - **教训**：**配置和代码必须完整上传，不能精简。** 任何提交 config 文件的 commit，都必须用当时正在运行中的完整 `svn_gui_config.json`（含 workflows/tr_*/cmp_file_settings 等运行数据），不能创建"干净版"或"模板版"覆盖上去。代码也一样——只传核心文件不传配套文件会导致运行环境不完整
+
+### Splash 启动画面实现（单窗口内嵌进度条）
+- **场景**：2026-05-23 为桌面版增加启动 splash 画面，要求"打开即见完整内容"且带实际进度指示
+- **根因与探索过程**：
+  - `transparent=True`：Windows 不支持（官方文档说明），显示为白色背景
+  - `hidden=True` + `show()`：loaded 事件不触发，窗口卡死
+  - `x=-32000/y=-32000`：窗口移出屏幕后 WebView2 不完成初始化
+  - `data:` URI：pywebview 6.x 将其当作文件路径解析导致 404
+  - 最小窗口 1×1：WinForms 强制最小尺寸约 100px，加 `min_size=(1,1)` 仍无效
+- **最终方案**：
+  - `create_window(html=SPLASH_HTML, x=屏幕中心)` + `background_color="#0f1115"`（深色，与 splash 底色一致，无缝过渡）
+  - `loaded` 事件触发后，`_boot_app` 线程用 `window.evaluate_js()` 更新中文进度状态（界面就绪→初始化服务中→后端就绪→加载模块中→准备就绪→启动中）和进度条宽度
+  - 进度条 CSS：`width:800px; height:12px; border-radius:999px`，蓝色渐变带发光阴影
+  - `min_size=(win_w, win_h)` 锁定窗口尺寸，消除 background_color 与 WebView2 区域之间的像素差
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/desktop_main.py)
 - **涉及文件**：[svn_gui_config.json](file:///c:/Users/admin/.qclaw/workspace/svn_gui_config.json)
 
 ### 工作流播放按钮改为双向停止 + 步骤级独立执行按钮

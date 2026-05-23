@@ -66,6 +66,12 @@ button,input,textarea,select{
   height:100%;
   display:grid;
   grid-template-columns:var(--sidebar-width) minmax(0,1fr);
+  opacity:0;
+  animation:appFadeIn .45s ease forwards;
+}
+@keyframes appFadeIn{
+  from{ opacity:0; }
+  to{ opacity:1; }
 }
 .sidebar{
   background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.005));
@@ -4004,6 +4010,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   switchTab("svn");
   setTimeout(checkZoom, 300);
   _zoomPollTimer = setInterval(checkZoom, 1500);
+  try {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.app_ready) {
+      await window.pywebview.api.app_ready();
+    }
+  } catch(e) {
+    console.warn("[Splash] app_ready not available", e);
+  }
 });
 document.getElementById("close_btn")?.addEventListener("click", ()=>{
   fetch("/api/close", {method:"POST"});

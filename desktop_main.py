@@ -3,13 +3,18 @@
 """策划工具箱桌面壳 — pywebview + Flask + QQ式贴边 + 系统托盘"""
 import sys
 import os
+
+_pm = os.path.join(os.path.dirname(os.path.abspath(__file__)), "py_modules")
+if os.path.isdir(_pm) and _pm not in sys.path:
+    sys.path.insert(0, _pm)
+
 import json
 import threading
 import time
 import socket
 import signal
-import ctypes
 import urllib.request
+import ctypes.wintypes
 import webview
 import win32gui
 import win32con
@@ -20,6 +25,38 @@ from toolbox_config import load_config, save_config
 
 WINDOW_W = 1100
 WINDOW_H = 700
+
+SPLASH_HTML = """<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>策划工具箱</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#0f1115;font-family:"Segoe UI","Microsoft YaHei UI",sans-serif}
+body{background:radial-gradient(circle at top,#1c2540 0%,#0f1115 45%)}
+.f{position:absolute;inset:-10%;background:radial-gradient(circle at 30% 20%,rgba(94,162,255,.08),transparent 40%);filter:blur(80px);animation:f 14s ease-in-out infinite alternate}
+.r{position:relative;width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.lw{display:flex;flex-direction:column;align-items:center;animation:r2 .9s cubic-bezier(.2,.8,.2,1) forwards}
+.lb{width:84px;height:84px;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center}
+.lb svg{width:58px;height:58px}
+.t{margin-top:20px;font-size:30px;font-weight:700;letter-spacing:1px;color:#fff}
+.st{margin-top:8px;font-size:13px;color:#8b96ad;letter-spacing:3px}
+.p{position:absolute;bottom:64px;width:800px;text-align:center}
+.pt{font-size:11px;letter-spacing:2px;color:#8b96ad;margin-bottom:12px}
+.pw{width:100%;height:9px;background:rgba(255,255,255,.06);overflow:hidden;border-radius:999px}
+.pb{width:0%;height:100%;background:linear-gradient(90deg,#5ea2ff,#7cb8ff);box-shadow:0 0 20px rgba(94,162,255,.7);transition:width .35s ease}
+.pn{font-size:11px;color:#5f6b80;margin-top:8px;letter-spacing:1px}
+@keyframes r2{0%{opacity:0;transform:scale(.96)}100%{opacity:1;transform:scale(1)}}
+@keyframes f{0%{transform:translateX(-40px)}100%{transform:translateX(40px)}}
+</style>
+</head>
+<body>
+<div class="f"></div>
+<div class="r">
+<div class="lw"><div class="lb"><svg viewBox="0 0 24 24"><path d="M22.5,3 L18,1.5 L12,4.5 L6,10.5 L3,16.5 L3,22.5 L12,22.5 L18,16.5 Z" fill="#5ea2ff"/><line x1="3" y1="22.5" x2="22.5" y2="3" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><line x1="18" y1="16.5" x2="6" y2="16.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg></div><div class="t">策划工具箱</div><div class="st">Game Pipeline Toolkit</div></div>
+<div class="p"><div class="pt" id="stxt">初始化中...</div><div class="pw"><div class="pb" id="sbar"></div></div><div class="pn" id="spct">0%</div></div>
+</div>
+</body>
+</html>"""
 
 EDGE_THRESHOLD = 8
 DOCK_VISIBLE = 4
@@ -502,6 +539,9 @@ class ResizeApi:
         _is_dragging = False
         self._active = False
 
+    def app_ready(self):
+        pass
+
     def browseFile(self, directory=""):
         try:
             w = webview.windows[0]
@@ -595,11 +635,13 @@ def _center_on_cursor_screen(hwnd):
 
 def _save_window_rect():
     try:
-        if not webview.windows:
+        hwnd = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
+        if not hwnd:
             return
-        win = webview.windows[0]
-        w = win.width
-        h_ = win.height
+        rect = ctypes.wintypes.RECT()
+        ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        w = rect.right - rect.left
+        h_ = rect.bottom - rect.top
         if w >= 400 and h_ >= 300:
             config = load_config()
             config["window_w"] = w
@@ -793,15 +835,22 @@ def _init_dnd(window):
     window.events.shown += _dnd_on_shown
 
 
+def _set_progress(window, pct, text):
+    try:
+        window.evaluate_js(
+            f"var e=document.getElementById('sbar');if(e)e.style.width='{pct}%';"
+            f"var t=document.getElementById('stxt');if(t)t.innerText='{text}';"
+            f"var p=document.getElementById('spct');if(p)p.innerText='{pct}%'"
+        )
+    except Exception:
+        pass
+
+
 def main():
     _acquire_instance_lock()
 
     flask_thread = threading.Thread(target=_start_flask, daemon=True)
     flask_thread.start()
-
-    if not _wait_for_flask(timeout=15):
-        print("[错误] Flask 未能在 15 秒内就绪", file=sys.stderr)
-        sys.exit(1)
 
     tray_thread = threading.Thread(target=_tray_thread, daemon=True)
     tray_thread.start()
@@ -810,21 +859,24 @@ def main():
     saved_w = config.get("window_w", 0)
     saved_h = config.get("window_h", 0)
     has_saved = saved_w >= 800 and saved_h >= 400
-    init_cx, init_cy = _get_cursor_screen_center()
+    win_w = saved_w if has_saved else WINDOW_W
+    win_h = saved_h if has_saved else WINDOW_H
+    init_cx, init_cy = _get_cursor_screen_center(win_w, win_h)
 
     resize_api = ResizeApi()
 
     window = webview.create_window(
         "策划工具箱",
-        url="http://127.0.0.1:18123",
-        width=WINDOW_W,
-        height=WINDOW_H,
+        html=SPLASH_HTML,
+        width=win_w,
+        height=win_h,
         x=init_cx,
         y=init_cy,
         frameless=True,
         easy_drag=False,
         shadow=True,
         background_color="#0f1115",
+        min_size=(win_w, win_h),
         text_select=True,
         zoomable=False,
         resizable=True,
@@ -833,6 +885,7 @@ def main():
     resize_api.set_window(window)
 
     _init_dnd(window)
+    window.events.resized += _save_window_rect
 
     if has_saved:
         def _restore_window_size():
@@ -860,18 +913,42 @@ def main():
     else:
         threading.Thread(target=_init_window, daemon=True).start()
 
-    global _docker
-    docker = EdgeDocker(window)
-    _docker = docker
-    docker.start()
-
     def _sigint_handler(signum, frame):
         os._exit(0)
 
     signal.signal(signal.SIGINT, _sigint_handler)
 
+    def _boot_app(window):
+        window.events.loaded.wait(timeout=30)
+        _set_progress(window, 15, "界面就绪")
+
+        global _docker
+        docker = EdgeDocker(window)
+        _docker = docker
+        docker.start()
+        _set_progress(window, 30, "初始化服务中")
+
+        if not _wait_for_flask(timeout=15):
+            print("[错误] Flask 未能在 15 秒内就绪", file=sys.stderr)
+            return
+        _set_progress(window, 55, "后端就绪")
+
+        for i in range(6):
+            time.sleep(0.4)
+            _set_progress(window, 55 + i * 5, "加载模块中")
+
+        _set_progress(window, 90, "准备就绪")
+        time.sleep(0.4)
+        _set_progress(window, 100, "启动中")
+        time.sleep(0.1)
+
+        try:
+            window.load_url("http://127.0.0.1:18123")
+        except Exception as e:
+            print(f"[load_url] {e}", file=sys.stderr)
+
     try:
-        webview.start(debug=False)
+        webview.start(_boot_app, window, debug=False)
     finally:
         if not _tray_stop.is_set():
             _tray_stop.set()

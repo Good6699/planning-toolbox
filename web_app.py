@@ -167,7 +167,9 @@ def api_get_config():
         "_wf_history_paths": cfg.get("_wf_history_paths", []),
         "_wf_history_texts": cfg.get("_wf_history_texts", []),
         "_wf_history_msgs": cfg.get("_wf_history_msgs", []),
-        "merge_exclude_paths": cfg.get("merge_exclude_paths", []),
+        "merge_file_filter_mode": cfg.get("merge_file_filter_mode", "include"),
+        "merge_file_filter_include_text": cfg.get("merge_file_filter_include_text", ""),
+        "merge_file_filter_exclude_text": cfg.get("merge_file_filter_exclude_text", ""),
     }
     return jsonify(safe)
 

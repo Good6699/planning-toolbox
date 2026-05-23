@@ -46,7 +46,7 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
             svn_user=None, svn_pass=None, verbose=False):
     """查询SVN提交日志，返回版本列表。verbose=True 时返回文件列表"""
     cmd = ["log", source_url, "--xml", "-r",
-           f"{{{start_date}}}:{{{end_date}}}", "--limit", "500"]
+           f"{{{start_date}}}:{{{end_date}}}"]
     if author:
         cmd += ["--search", author]
     keywords_list = [k.strip() for k in keyword.split(",")] if keyword else []

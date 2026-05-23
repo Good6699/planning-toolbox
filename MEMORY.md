@@ -231,6 +231,12 @@
 - **解决方案**：扫描全部版本，取每个文件所有操作，规则：最新操作为 del → 标记删除（灰色+标签）、不是删除且任一版本有 add → 标记新增、全是 mod → 标记修改。删除文件可勾选，合并时自动处理为删除操作。已不存在的文件跳过
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)
 
+### merge 文件列表筛选（包含/排除双模式）
+- **场景**：排除设置不好用，需要更灵活的路径筛选
+- **解决方案**：改为在版本列表头部加 ⚙ 按钮，弹出浮窗支持两种模式（只包含/只排除），每行一个路径，两种模式独立存储切换时保存当前编辑内容、加载对方内容。`_isPathExcluded` 根据当前 mode 返回不同结果
+- **教训**：编写长 click handler 时，跨多个代码块用了两次 `const mode`，导致 SyntaxError 页面白屏。教训：同一作用域不要重复声明同名变量，改动涉及分散的代码块时应检查变量名冲突
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

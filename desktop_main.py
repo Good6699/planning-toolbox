@@ -16,6 +16,7 @@ import win32con
 import win32api
 import pystray
 from PIL import Image, ImageDraw
+from toolbox_config import load_config, save_config
 
 WINDOW_W = 1100
 WINDOW_H = 700
@@ -402,10 +403,14 @@ def _show_window(icon, item=None):
     except Exception:
         pass
     if hwnd:
-        _undock_and_center(hwnd)
+        if _docker and _docker.docked:
+            _undock_and_center(hwnd)
+        else:
+            win32gui.SetForegroundWindow(hwnd)
 
 
 def _quit_app(icon, item=None):
+    _save_window_rect()
     icon.stop()
 
 
@@ -556,28 +561,52 @@ def _tray_thread():
 _wnd_proc_ref = None
 
 
-def _get_cursor_screen_center():
+def _get_cursor_screen_center(win_w=None, win_h=None):
+    if win_w is None:
+        win_w = WINDOW_W
+    if win_h is None:
+        win_h = WINDOW_H
     try:
         cursor = win32api.GetCursorPos()
         monitor = win32api.MonitorFromPoint(cursor, win32con.MONITOR_DEFAULTTONEAREST)
         info = win32api.GetMonitorInfo(monitor)
         ml, mt, mr, mb = info["Monitor"]
-        cx = ml + (mr - ml - WINDOW_W) // 2
-        cy = mt + (mb - mt - WINDOW_H) // 2
+        cx = ml + (mr - ml - win_w) // 2
+        cy = mt + (mb - mt - win_h) // 2
     except Exception:
         sw = win32api.GetSystemMetrics(0)
         sh = win32api.GetSystemMetrics(1)
-        cx = (sw - WINDOW_W) // 2
-        cy = (sh - WINDOW_H) // 2
+        cx = (sw - win_w) // 2
+        cy = (sh - win_h) // 2
     return cx, cy
 
 
 def _center_on_cursor_screen(hwnd):
-    cx, cy = _get_cursor_screen_center()
+    rect = ctypes.wintypes.RECT()
+    ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+    win_w = max(rect.right - rect.left, 800)
+    win_h = max(rect.bottom - rect.top, 400)
+    cx, cy = _get_cursor_screen_center(win_w, win_h)
     ex = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
     ctypes.windll.user32.SetWindowLongW(hwnd, -20, ex & ~0x8)
-    win32gui.SetWindowPos(hwnd, win32con.HWND_NOTOPMOST, cx, cy, WINDOW_W, WINDOW_H,
+    win32gui.SetWindowPos(hwnd, win32con.HWND_NOTOPMOST, cx, cy, win_w, win_h,
                           win32con.SWP_NOACTIVATE)
+
+
+def _save_window_rect():
+    try:
+        if not webview.windows:
+            return
+        win = webview.windows[0]
+        w = win.width
+        h_ = win.height
+        if w >= 400 and h_ >= 300:
+            config = load_config()
+            config["window_w"] = w
+            config["window_h"] = h_
+            save_config(config)
+    except Exception:
+        pass
 
 
 def _undock_and_center(hwnd):
@@ -613,6 +642,7 @@ def _fallback_subclass(hwnd):
     def _wnd_proc(hwnd_inner, msg, wparam, lparam):
         global _window_visible
         if msg == 0x0010:
+            _save_window_rect()
             try:
                 for w in webview.windows:
                     w.hide()
@@ -655,6 +685,7 @@ def _subclass_window(hwnd):
     def _subclass_proc(hwnd_inner, msg, wparam, lparam, uId, dwRef):
         global _window_visible
         if msg == 0x0010:
+            _save_window_rect()
             try:
                 for w in webview.windows:
                     w.hide()
@@ -775,6 +806,10 @@ def main():
     tray_thread = threading.Thread(target=_tray_thread, daemon=True)
     tray_thread.start()
 
+    config = load_config()
+    saved_w = config.get("window_w", 0)
+    saved_h = config.get("window_h", 0)
+    has_saved = saved_w >= 800 and saved_h >= 400
     init_cx, init_cy = _get_cursor_screen_center()
 
     resize_api = ResizeApi()
@@ -798,6 +833,16 @@ def main():
     resize_api.set_window(window)
 
     _init_dnd(window)
+
+    if has_saved:
+        def _restore_window_size():
+            try:
+                cx, cy = _get_cursor_screen_center(saved_w, saved_h)
+                window.move(cx, cy)
+                window.resize(saved_w, saved_h)
+            except Exception:
+                pass
+        window.events.shown += _restore_window_size
 
     def _init_window(hwnd=None):
         if hwnd is None:

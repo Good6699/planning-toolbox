@@ -243,6 +243,12 @@
 - **解决方案**：SVN侧的 blur 增加 `initSuggest(peerId, ...)` 刷新merge侧的下拉；merge侧的 blur 增加 `initSuggest("svn_author"/"svn_keyword", ...)` 刷新SVN侧；补上 `autocomplete="off"`
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### pywebview 窗口尺寸保存/恢复的坐标系问题
+- **场景**：为策划工具箱添加窗口大小保存功能，但每次重启窗口越来越大或越来越小，且托盘还原时尺寸被重置
+- **根因**：pywebview 使用**逻辑像素**（logical pixels），而 Win32 `GetWindowRect`/`SetWindowPos` 使用**物理像素**（physical pixels）。在高 DPI 显示器（125%/150%缩放）下两者不一致，保存→恢复形成反馈闭环产生累计偏差。另外点击托盘图标恢复时无条件调用了 `_undock_and_center` 强制 `SetWindowPos` 覆盖尺寸
+- **解决方案**：① 保存用 `webview.windows[0].width/height`（逻辑像素），恢复用 `window.resize(w, h)`（逻辑像素），不碰 Win32 API；② 窗口启动后通过 `events.shown` 回调调用 pywebview 原生 resize，不在 `_init_window` 中用 `SetWindowPos`；③ 托盘恢复时判断是否贴边，仅贴边时取消贴边，未贴边时仅 `SetForegroundWindow`；④ 退出时在 `_quit_app` 开头主动调用 `_save_window_rect`，因为托盘退出走 `os._exit(0)` 不会触发 `WM_CLOSE`
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/desktop_main.py)
+
 ## 行为准则
 
 - **严标按用户指令行事，不自由发挖。** 用户的每个字是意图，不猜测、不延伸、不加戏。有疑问先问。

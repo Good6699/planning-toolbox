@@ -876,7 +876,7 @@ input::placeholder,textarea::placeholder{
 }
 .tr-layout{
   display:grid;
-  grid-template-columns:minmax(0,1fr) 580px;
+  grid-template-columns:1fr;
   gap:16px;
 }
 .tr-log-wrap{
@@ -935,15 +935,20 @@ input::placeholder,textarea::placeholder{
   flex:1;
   min-height:0;
 }
+.tr-side{
+  flex-direction:row;
+  flex-wrap:wrap;
+}
+.tr-side>.card{
+  flex:1 1 360px;
+}
 @media (max-width:1100px){
   .svn-layout,
-  .upload-layout,
-  .tr-layout{
+  .upload-layout{
     grid-template-columns:1fr;
   }
   .svn-side,
-  .upload-side,
-  .tr-side{
+  .upload-side{
     order:2;
   }
   .svn-log-wrap,
@@ -1510,16 +1515,15 @@ function switchTab(key) {
 function buildTab(key) {
   const panel = S[key].panel;
   panel.innerHTML = '<div class="empty-state">加载中…</div>';
-  setTimeout(() => {
-    switch(key) {
-      case "svn": buildSvnTab(panel); break;
-      case "merge": buildMergeTab(panel); break;
-      case "upload": buildUploadTab(panel); break;
-      case "workflow": buildWorkflowTab(panel); break;
-      case "translate": buildTranslateTab(panel); break;
-    }
-    S[key].built = true;
-  }, 20);
+  void panel.offsetHeight;
+  switch(key) {
+    case "svn": buildSvnTab(panel); break;
+    case "merge": buildMergeTab(panel); break;
+    case "upload": buildUploadTab(panel); break;
+    case "workflow": buildWorkflowTab(panel); break;
+    case "translate": buildTranslateTab(panel); break;
+  }
+  S[key].built = true;
 }
 const now = new Date();
 const cy = now.getFullYear();

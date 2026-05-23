@@ -27,13 +27,13 @@
 
 ### 后端 (`web_app.py`)
 - Flask，端口18123，SSE日志流 `/api/log/stream/<task_id>`
-- 路由清单：`GET /` `GET/POST /api/config` `POST /api/svn/run` `POST /api/upload/run` `POST /api/translate/run` `POST /api/workflow/run` `POST /api/files/list` `POST /api/dir/browse` `GET /api/log/stream/<id>` `GET /api/static/<path>`
-- 工作流后端 `POST /api/workflow/run` 支持7种步骤类型：lock_svn/export_text/upload_svn/open_tables（已实现）、export_error_code/merge_translation/merge_table（需桌面版）
+- 路由清单：`GET /` `GET/POST /api/config` `POST /api/svn/run` `POST /api/upload/run` `POST /api/translate/run` `POST /api/workflow/run` `POST /api/workflow/list` `POST /api/workflow/save` `POST /api/files/list` `POST /api/path/verify` `POST /api/dir/browse` `POST /api/task/cancel` `POST /api/open/folder` `POST /api/svn/detect` `POST /api/svn/clear-changelist` `POST /api/svn/find-wc` `POST /api/svn/open-wc` `POST /api/cache/clear` `POST /api/merge/query` `POST /api/merge/run` `GET/POST /api/translate/lang-id-map` `POST /api/close` `GET /api/log/stream/<id>` `GET /api/static/<path>`
+- 工作流后端 `POST /api/workflow/run` 支持8种步骤类型：lock_svn/unlock_svn/export_text/upload_svn/open_tables/export_error_code/merge_translation/merge_table（全部已实现web版）
 - SSE心跳15s，超时断开保护
 
 ### 前端 (`templates/index.html`)
 - 单文件SPA：CSS变量 + HTML模板 + JS事件委托
-- 四个页签：SVN记录/上传SVN/工作流/翻译
+- 五个页签：SVN记录/语义合并/复制合并/工作流/翻译
 
 ### CSS设计系统
 - **8px网格**：所有尺寸只取4/8/12/16/20/24/32/40/48，禁止魔数
@@ -68,7 +68,6 @@
 | 类别 | 文件 | 说明 |
 |------|------|------|
 | 桌面入口 | `desktop_main.py` | pywebview 桌面壳（`策划工具箱.bat` 启动） |
-| 纯Web调试 | `web_launcher.py` | 浏览器直接访问，无 pywebview API |
 | 后端 | `web_app.py` | Flask API + 路由 |
 | 前端 | `templates/index.html` | 单文件 SPA |
 | 配置 | `svn_gui_config.json` | 用户配置持久化 |
@@ -213,7 +212,21 @@
 ### 新增解锁SVN步骤类型
 - **场景**：工作流缺少解锁SVN步骤，与锁定SVN功能相反
 - **解决方案**：在 CSS（绿色标签 `.unlock_svn`）、web 版（`_exec_unlock_svn`）、tkinter 版（`_wf_execute_unlock_svn` / `_wf_show_unlock_svn_config`）以及前端 typeCn/typeIcon/设置表单/自动命名中，同步新增 `unlock_svn` 类型。解锁不加 `--force`，别人锁住的无法强制解锁
-- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[toolbox_tab_workflow.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_tab_workflow.py)
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### 翻译页签 API+输出卡片改为自适应并排/堆叠布局
+- **场景**：2026-05-23 翻译页签的 API 设置和输出设置两个卡片以前始终在右侧列，用户希望它们始终在翻译文件+语言列+开始翻译按钮下方，并且宽屏时左右并排、窄屏时上下堆叠
+- **解决方案**：
+  - `.tr-layout` 从双列 `minmax(0,1fr) 580px` 改为单列 `1fr`
+  - `.tr-side` 从 `flex-direction:column` 覆盖为 `flex-direction:row; flex-wrap:wrap`，两个子 card 设置 `flex:1 1 360px`（窄于 736px 自动换行堆叠）
+  - 清理 `@media (max-width:1100px)` 中 translate 的冗余覆盖规则（单列已无需断点切换）
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### WebView2 首次渲染跳过——`offsetHeight` 强制 reflow 替代 `setTimeout`
+- **场景**：2026-05-23 翻译页签布局改为单列后，首次打开（切换 tab 时）grid/flex 子元素不渲染，内容空白，重新切一次 tab 就好了
+- **根因**：WebView2（Chromium 内核）在 `display:none → display:block` 的同时注入 grid/flex 内容时，优化跳过首次布局计算，导致子元素未被渲染。`setTimeout(fn, 20)` 是碰运气，不可靠
+- **解决方案**：在 `panel.innerHTML` 之后、注入真实内容之前，加 `void panel.offsetHeight` 强制同步 reflow，让浏览器完成布局计算后再注入内容。比 `setTimeout` 快 0ms（同步执行 vs 至少等 20ms）
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[toolbox_tab_workflow.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_tab_workflow.py)
 
 ### 弹窗输入框历史记录共享
 - **场景**：工作流设置弹窗每次手动输入，没有历史记忆

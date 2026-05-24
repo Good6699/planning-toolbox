@@ -2190,6 +2190,65 @@ def api_merge_run():
 
 
 # ═══════════════════════════════════════════════════════════
+# 语义分析 API
+# ═══════════════════════════════════════════════════════════
+
+@app.route("/api/merge/analyze", methods=["POST"])
+def api_merge_analyze():
+    """语义分析：对勾选的版本做结构化解构，输出 txt 报告"""
+    data = request.get_json(force=True)
+    source_url = data.get("source_url", "").strip()
+    target_path = data.get("target_path", "").strip()
+    revisions = data.get("revisions", [])
+    version_files = data.get("version_files", [])
+    rev_file_map = data.get("rev_file_map", {})
+    if not source_url:
+        return jsonify({"error": "源SVN地址不能为空"}), 400
+    if not revisions:
+        return jsonify({"error": "请至少勾选一个版本"}), 400
+    cfg = load_config()
+    svn_user = cfg.get("svn_user", "")
+    svn_pass = cfg.get("svn_pass", "")
+    if svn_pass:
+        from toolbox_config import decrypt_key
+        svn_pass = decrypt_key(svn_pass)
+    task_id = _get_next_task_id()
+    t = threading.Thread(target=_merge_analyze_worker,
+                         args=(task_id, source_url, target_path, revisions,
+                               version_files, rev_file_map,
+                               svn_user or None, svn_pass or None),
+                         daemon=True)
+    t.start()
+    return jsonify({"task_id": task_id})
+
+
+def _merge_analyze_worker(task_id, source_url, target_path, revisions,
+                          version_files, rev_file_map, svn_user, svn_pass):
+    """后台语义分析线程"""
+    q = _log_queues.setdefault(task_id, queue.Queue())
+
+    def _log(msg, level="info"):
+        ts = datetime.now().strftime("%H:%M:%S")
+        tag = f"[{ts}][{level}]" if level != "info" else f"[{ts}]"
+        q.put(f"{tag} {msg}\n")
+
+    try:
+        from _merge_analyzer import analyze_source_url
+        analyze_source_url(source_url, revisions, target_path,
+                           version_files=version_files,
+                           rev_file_map=rev_file_map,
+                           svn_user=svn_user, svn_pass=svn_pass,
+                           log_callback=_log)
+        _log("语义分析完成")
+    except Exception as e:
+        import traceback
+        _log(f"语义分析失败: {e}", "error")
+        _log(traceback.format_exc(), "error")
+    finally:
+        q.put(None)
+
+
+# ═══════════════════════════════════════════════════════════
 # SSE 日志流
 # ═══════════════════════════════════════════════════════════
 @app.route("/api/log/stream/<task_id>")

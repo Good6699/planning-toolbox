@@ -214,6 +214,20 @@
 - **解决方案**：在 CSS（绿色标签 `.unlock_svn`）、web 版（`_exec_unlock_svn`）、tkinter 版（`_wf_execute_unlock_svn` / `_wf_show_unlock_svn_config`）以及前端 typeCn/typeIcon/设置表单/自动命名中，同步新增 `unlock_svn` 类型。解锁不加 `--force`，别人锁住的无法强制解锁
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
+### SVN 语义分析模块——结构化变更分析引擎
+- **场景**：2026-05-24 新增语义分析按钮，对勾选的 SVN 版本做结构化分析，输出人类可读的变更摘要（而非原始 svn diff 文本）。支持 .prefab/.unity 的 YAML 语义解析、.cs 的代码变更分析、GUID→资源名按需查询
+- **关键设计**：
+  - 对 .prefab 解析 svn diff 的 YAML 变更，正则提取 `--- !u!` 块和 `-/+ m_Xxx` 成对属性，输出"新增/移除节点、组件、属性变更"等语义描述
+  - 对 .cs 解析 svn diff 的 `+public void MethodName` 模式，输出"新增方法/类"描述
+  - GUID 映射改为按需查询——从 diff 中提取 `guid:` 后，在 `Assets/**/*.meta` 中只搜索这些 GUID，找到即停止
+  - 多版本并行分析：分片后 Popen 子进程独立执行，通过 pickle 临时文件通信
+- **关键教训**：
+  - `svn diff -c REV` 不能混合 URL 和本地路径作为两个独立目标（`svn diff -c REV URL -- PATH` 报 E205000），必须拼接成完整的文件 URL：`svn diff -c REV URL/relative_path`
+  - `svn log --verbose` 返回的文件路径以 `/` 开头（仓库绝对路径），匹配 URL 路径时需要先 lstrip 再后缀匹配（从 URL 路径尾部向前匹配），不能用前缀匹配
+  - 非语义文件（.xlsm/.png/.bin 等）完全不调 svn diff，避免大文件性能开销
+  - 版本列表输出排序：UI 用 `sort((a,b) => b.rev - a.rev)`，后端并行收集后用 `sort(reverse=True)`，保证最新版在最前
+- **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)、[_merge_analyze_worker.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyze_worker.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ### 语义合并页签—筛选条件拆为独立卡片并适配宽窄屏
 - **场景**：2026-05-23 语义合并页签的 SVN 地址和筛选条件在同一张卡片里，需要拆成两张卡片：宽屏时左右并排等高，窄屏时上下铺满全宽排列
 - **解决方案**：

@@ -324,6 +324,13 @@ input::placeholder,textarea::placeholder{
 .btn-primary:hover{
   box-shadow:0 16px 40px rgba(74,141,255,.44),inset 0 1px 0 rgba(255,255,255,.3);
 }
+.btn-primary:disabled{
+  background:rgba(255,255,255,.08);
+  color:rgba(255,255,255,.25);
+  box-shadow:none;
+  cursor:not-allowed;
+  transform:none;
+}
 .btn-normal{
   background:rgba(255,255,255,.04);
   color:var(--sub);
@@ -854,7 +861,7 @@ input::placeholder,textarea::placeholder{
 .action-center{
   display:flex;
   justify-content:center;
-  margin:20px 0 8px;
+  margin:14px 0;
   grid-column:1 / -1;
 }
 .action-center .btn{
@@ -3081,8 +3088,9 @@ function buildMergeTab(panel) {
           </div>
         </div>
       </div>
-      <div class="action-center" style="display:flex;gap:12px;justify-content:center;margin-bottom:0">
+      <div class="action-center" style="display:flex;gap:30px;justify-content:center;margin:14px 0">
         <button class="btn btn-primary" data-action="merge-query" id="merge_query_btn" style="min-width:180px">筛选查询</button>
+        <button class="btn btn-primary" data-action="merge-analyze" id="merge_analysis_btn" style="min-width:180px" disabled>语义分析</button>
         <button class="btn btn-primary" data-action="merge-run" id="merge_run_btn" style="min-width:180px" disabled>开始合并</button>
       </div>
       <div class="merge-full">
@@ -3340,7 +3348,7 @@ async function runMergeQuery() {
 }
 function renderMergeVersions() {
   const container = document.getElementById("merge_version_list");
-  const versions = _mergeData.versions;
+  const versions = _mergeData.versions.slice().sort((a,b) => b.rev - a.rev);
   if (!versions.length) {
     container.innerHTML = '<div class="merge-empty">暂无符合筛选条件的版本记录</div>';
     document.getElementById("merge_ver_all_btn").classList.add("merge-ops-hidden");
@@ -3400,6 +3408,7 @@ function _updateMergeVersionCount() {
   } else {
     el.classList.add("merge-ops-hidden");
   }
+  document.getElementById("merge_analysis_btn").disabled = total === 0;
 }
 function _isPathExcluded(path) {
   const mode = config.merge_file_filter_mode || "include";
@@ -3545,6 +3554,64 @@ async function runMergeRun() {
     btn.textContent = "开始精准合并";
   }
 }
+async function runMergeAnalysis() {
+  const sourceUrl = document.getElementById("merge_source").value.trim();
+  const targetPath = document.getElementById("merge_target").value.trim();
+  if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
+  if (!targetPath) { _showToast("请输入目标路径（用于GUID映射查询）"); return; }
+  const checkedRevs = Object.keys(_mergeData.checkedRevs).filter(k => _mergeData.checkedRevs[k]).map(Number);
+  if (!checkedRevs.length) { _showToast("请至少勾选一个版本"); return; }
+  const versionFiles = [];
+  const revFileMap = {};
+  _mergeData.versions.forEach(v => {
+    if (_mergeData.checkedRevs[v.rev] && v.files) {
+      const filtered = v.files.filter(f => !_isPathExcluded(f.path));
+      filtered.forEach(f => { versionFiles.push(f.path); });
+      if (filtered.length) {
+        revFileMap[v.rev] = filtered.map(f => ({path: f.path, action: f.action}));
+      }
+    }
+  });
+  const btn = document.getElementById("merge_analysis_btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>分析中...';
+  const logEl = document.getElementById("merge_log");
+  logEl.innerHTML = "";
+  logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
+  const body = { source_url: sourceUrl, target_path: targetPath, revisions: checkedRevs, version_files: versionFiles, rev_file_map: revFileMap };
+  try {
+    const r = await fetch("/api/merge/analyze", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const d = await r.json();
+    if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent="语义分析"; return; }
+    const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
+    evtSrc.onmessage = (e) => {
+      if (e.data === "[DONE]") {
+        evtSrc.close();
+        btn.disabled = false;
+        btn.textContent = "语义分析";
+        const sb = document.getElementById("status_bar");
+        if (sb) { sb.classList.remove("running"); const sp = sb.querySelector("span"); if (sp) sp.textContent = "系统空闲"; }
+        return;
+      }
+      if (e.data.startsWith("[RESULT]")) {
+        try { JSON.parse(e.data.slice(8)); } catch(_) {}
+        return;
+      }
+      for (const raw of e.data.split("\n")) {
+        if (!raw.trim()) continue;
+        const div = document.createElement("div");
+        div.textContent = raw;
+        logEl.appendChild(div);
+      }
+      const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 32;
+      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+    };
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "语义分析";
+    _showToast("请求失败: " + err.message);
+  }
+}
 document.addEventListener("click",e=>{
   const target = e.target.closest("[data-action]");
   if(!target) return;
@@ -3632,6 +3699,7 @@ document.addEventListener("click",e=>{
       break;
     }
     case "merge-query": runMergeQuery(); break;
+    case "merge-analyze": runMergeAnalysis(); break;
     case "merge-run": runMergeRun(); break;
     case "merge-select-all": _selectAllMergeFiles(true); break;
     case "merge-select-invert": {

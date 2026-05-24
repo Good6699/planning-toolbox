@@ -115,11 +115,16 @@
 - **解决方案**：① `_parse_unity_yaml(text, target_file_ids=None)` 新增参数，在 YAML 解析前先用正则提取 fileID，不在目标集中的块直接 `continue` 跳过；② 用 `yaml.load(text, Loader=yaml.CSafeLoader)`（C 实现）替代 `yaml.safe_load`，快 5-10x；③ 如果 CSafeLoader 失败（罕见情况），回退 `yaml.safe_load`；④ `_collect_parse_ids` 只标记"变化的块 + GameObject + Transform"需要解析。实测 300-blocks prefab 仅改 6 个块时，解析时间从 0.123s → 0.040s（3.0x 加速）
 - **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
 
-### 多版本语义分析 squash 汇总模式
-- **场景**：选中多个版本做语义分析时，之前逐个版本输出，同一节点的多次修改会重复出现（如 r103 改了 X，r105 又改了 X，两个版本分开显示）
-- **根因**：`analyze_source_url` 对每个版本分别调用 `_analyze_revision_data`，单独对比 `rev-1 → rev`，不感知其他版本的变更
-- **解决方案**：当选中版本数 > 1 时，改用 squash 模式：base = 最早修订号 - 1，latest = 最晚修订号，直接下载 base 和 latest 两个版本的完整文件做一次 YAML 树对比，输出净变化。中间版本的同属性多次修改被自动合并，只保留最终值
-- **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
+### 多版本语义分析 squash 汇总模式（最终方案）
+- **场景**：选中多个版本做语义分析时，需要汇总输出所有修改，但相同文件相同属性只保留最新版本的值
+- **根因**：最初直接用 base=最早版本-1 vs latest=最晚版本 做一次对比（中间版本回滚被吞掉）；后来改为逐版本分析结构化 diff 按 (fileID, prop_key) 去重，过于复杂且易出错
+- **解决方案**：最终采用"按版本分片并行 + 文件路径合并"的简化方案：
+  1. 主进程按版本分片启动子进程（`_squash_worker.py`）
+  2. 每个子进程内：逐版本分析 `rev-1 → rev` 所有变更文件，直接输出已格式化的 `parsed_lines`
+  3. 主进程将各子进程返回的 entries 按 `path` 合并到 dict（后写入的覆盖先写入的 = 新版本覆盖旧版本）
+  4. Worker 内部 svn cat + _compare_prefab_texts_fast 直接出最终结果
+- **关键教训**：不要过早引入结构化中间格式。简单的"每个 worker 独立输出格式化结果 → 主进程 dict 合并"即可满足需求，避免了 200+ 行无用代码和 `string indices must be integers` 等复杂 bug
+- **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)、[_squash_worker.py](file:///c:/Users/admin/.qclaw/workspace/_squash_worker.py)
 - Texts.xlsm 的 header 列名是 ::ID:: 和 ::SC::（带 :: 前后缀），列名匹配必须包含 ::ID:: 和 ::SC:: 才能正确识别
 - **Windows文件名禁止冒号**：cache_key拼入 `::ID::` 等含冒号的列名后作为文件名，Windows拒绝创建（`OSError [Errno 22]`），必须用 `_safe_cache_key()` 替换非法字符。`except: pass` 吞掉此类异常会导致缓存永远为空且无报错。
 - **多进程IPC开销**：worker返回parsed dict（18MB/个），32个pair需传1.15GB数据到主进程，严重影响性能。应让worker直接写磁盘缓存，只返回轻量结果（diff_rows + 元数据）。

@@ -375,8 +375,18 @@ def _build_node_path(fid, blocks):
 
 def _compare_prefab_trees(old_blocks, new_blocks, guid_map):
     """对比两个版本的 prefab 结构树，返回人类可读的变更列表"""
+    structured = _compare_prefab_trees_structured(old_blocks, new_blocks, guid_map)
+    return _format_structured_diffs(structured)
+
+
+def _compare_prefab_trees_structured(old_blocks, new_blocks, guid_map):
+    """对比两个版本的 prefab 结构树，返回结构化变更列表
+
+    返回 list[dict]：
+    {hierarchy_path, comp_label, fileID, prop_key, sub_lines}
+    """
     all_ids = set(old_blocks.keys()) | set(new_blocks.keys())
-    node_changes = {}  # key → [change_strings]
+    result = []
 
     for fid in all_ids:
         old = old_blocks.get(fid)
@@ -388,78 +398,92 @@ def _compare_prefab_trees(old_blocks, new_blocks, guid_map):
         merged_blocks.update(old_blocks)
         merged_blocks.update(new_blocks)
         hierarchy_path = _build_node_path(fid, merged_blocks)
-        label_key = f"{hierarchy_path} → {_COMPONENT_NAMES.get(old_type, comp_name)}"
+        comp_label = _COMPONENT_NAMES.get(old_type, comp_name)
 
         if old and not new:
-            if old_type == "1":
-                node_changes.setdefault(label_key, []).append("移除节点")
-            else:
-                node_changes.setdefault(label_key, []).append("移除了组件")
+            result.append({
+                "hierarchy_path": hierarchy_path,
+                "comp_label": comp_label,
+                "fileID": fid,
+                "prop_key": "__node__",
+                "sub_lines": ["移除节点" if old_type == "1" else "移除了组件"],
+            })
             continue
 
         if new and not old:
-            if new["type"] == "1":
-                node_changes.setdefault(label_key, []).append("新增节点")
-            else:
-                node_changes.setdefault(label_key, []).append("新增了组件")
+            result.append({
+                "hierarchy_path": hierarchy_path,
+                "comp_label": comp_label,
+                "fileID": fid,
+                "prop_key": "__node__",
+                "sub_lines": ["新增节点" if new["type"] == "1" else "新增了组件"],
+            })
             continue
 
         old_props = old["props"]
         new_props = new["props"]
-        prop_diffs = _compare_props(old_props, new_props, guid_map)
-        if prop_diffs:
-            node_changes.setdefault(label_key, []).extend(prop_diffs)
+        prop_diffs = _compare_props_structured(old_props, new_props, guid_map)
+        for pd in prop_diffs:
+            pd["hierarchy_path"] = hierarchy_path
+            pd["comp_label"] = comp_label
+            pd["fileID"] = fid
+            result.append(pd)
 
-    result = []
-    for label, diffs in node_changes.items():
-        result.append("")
-        result.append(f"{_GRP}{label}")
-        for d in diffs:
-            result.append(f"{_DTA}{d}")
     return result
 
 
-def _compare_props(old_props, new_props, guid_map):
-    """对比两个 props dict，返回变更描述列表"""
+def _format_structured_diffs(structured_list):
+    """将结构化 diff 列表格式化为人类可读字符串列表"""
+    groups = {}
+    for item in structured_list:
+        label = f"{item['hierarchy_path']} → {item['comp_label']}"
+        groups.setdefault(label, []).append(item)
+
+    result = []
+    for label, items in groups.items():
+        result.append("")
+        result.append(f"{_GRP}{label}")
+        for item in items:
+            for sub in item["sub_lines"]:
+                result.append(f"{_DTA}{sub}")
+    return result
+
+
+def _compare_props_structured(old_props, new_props, guid_map):
+    """对比两个 props dict，返回结构化变更列表"""
     changes = []
     all_keys = set(old_props.keys()) | set(new_props.keys())
 
     for key in all_keys:
         old_val = old_props.get(key)
         new_val = new_props.get(key)
+        raw = None
 
         if key not in new_props:
-            r = _format_prop_change(key, old_val, "", guid_map, deleted=True)
-            if r:
-                changes.append(r)
+            raw = _format_prop_change(key, old_val, "", guid_map, deleted=True)
+            if raw:
+                changes.append({"prop_key": key, "sub_lines": raw.split("\n")})
             continue
 
         if key not in old_props:
-            r = _format_prop_change(key, "", new_val, guid_map, added=True)
-            if r:
-                changes.append(r)
+            raw = _format_prop_change(key, "", new_val, guid_map, added=True)
+            if raw:
+                changes.append({"prop_key": key, "sub_lines": raw.split("\n")})
             continue
 
         if old_val == new_val:
             continue
 
         if isinstance(old_val, dict) and isinstance(new_val, dict):
-            if old_val != new_val:
-                r = _format_prop_change(key, str(old_val), str(new_val), guid_map)
-                if r:
-                    changes.append(r)
+            raw = _format_prop_change(key, str(old_val), str(new_val), guid_map) if old_val != new_val else None
         elif isinstance(old_val, list) and isinstance(new_val, list):
-            old_str = _list_summary(old_val)
-            new_str = _list_summary(new_val)
-            if old_str != new_str:
-                r = _format_prop_change(key, old_str, new_str, guid_map)
-                if r:
-                    changes.append(r)
+            raw = _format_prop_change(key, _list_summary(old_val), _list_summary(new_val), guid_map)
         else:
-            r = _format_prop_change(key, str(old_val) if old_val is not None else "",
-                                    str(new_val) if new_val is not None else "", guid_map)
-            if r:
-                changes.append(r)
+            ov = str(old_val) if old_val is not None else ""
+            nv = str(new_val) if new_val is not None else ""
+            raw = _format_prop_change(key, ov, nv, guid_map)
+        if raw:
+            changes.append({"prop_key": key, "sub_lines": raw.split("\n")})
 
     return changes
 
@@ -653,13 +677,20 @@ def _collect_parse_ids(all_ids, changed_ids, old_raw, new_raw):
     return parse_old_ids, parse_new_ids
 
 
-def _compare_prefab_texts_fast(old_text, new_text, guid_map, _log=None):
-    """对比两个版本的 prefab 文本，只 YAML 解析有变化的块以加速
+def _parse_unity_yaml_blocks(text, file_ids):
+    """解析 YAML 文本中指定 fileID 的块，返回 {fileID: {type, node_name, component, props}}"""
+    if not text or not text.strip() or not file_ids:
+        return {}
+    full = _parse_unity_yaml(text, target_file_ids=file_ids)
+    result = {}
+    for fid in file_ids:
+        if fid in full:
+            result[fid] = full[fid]
+    return result
 
-    Strategy: 先按 fileID 拆分为原始文本块 → MD5 哈希对比
-    → 只有哈希不同的块才做完整的 YAML 解析 + 属性对比
-    → GameObject 块（类型1）始终解析（节点路径需要）
-    """
+
+def _compare_prefab_texts_fast(old_text, new_text, guid_map, _log=None):
+    """对比两个版本的 prefab 文本，只 YAML 解析有变化的块以加速"""
     old_raw = _extract_raw_blocks(old_text)
     new_raw = _extract_raw_blocks(new_text)
     all_ids, changed_ids = _detect_changed_blocks(old_raw, new_raw, _log=_log)
@@ -677,47 +708,9 @@ def _compare_prefab_texts_fast(old_text, new_text, guid_map, _log=None):
     return _compare_prefab_trees(old_parsed, new_parsed, guid_map)
 
 
-def _parse_unity_yaml_blocks(text, file_ids):
-    """解析 YAML 文本中指定 fileID 的块，返回 {fileID: {type, node_name, component, props}}"""
-    if not text or not text.strip() or not file_ids:
-        return {}
-    full = _parse_unity_yaml(text, target_file_ids=file_ids)
+def _build_rev_file_map(sorted_revs, rev_file_map, source_url, auth_args):
+    """筛选出选中版本中的语义文件列表"""
     result = {}
-    for fid in file_ids:
-        if fid in full:
-            result[fid] = full[fid]
-    return result
-
-
-def _compare_file_between_revs(file_url, fname, base_rev, latest_rev, auth_args, guid_map, target_path, _log=None):
-    """下载文件在 base_rev 和 latest_rev 两个版本，直接对比 YAML 树差异"""
-    if _log:
-        _log(f"  下载 {fname} r{base_rev}...")
-    try:
-        old_text = _run_svn(["cat", "-r", str(base_rev), file_url] + auth_args, timeout=120)
-    except RuntimeError:
-        old_text = ""
-
-    if _log:
-        _log(f"  下载 {fname} r{latest_rev}...")
-    try:
-        new_text = _run_svn(["cat", "-r", str(latest_rev), file_url] + auth_args, timeout=120)
-    except RuntimeError:
-        new_text = ""
-
-    if _log:
-        _log(f"  对比 {fname} ({base_rev} → {latest_rev})...")
-    all_guids = _extract_guids_from_diff(old_text + new_text)
-    lazy_map = {}
-    if all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
-        lazy_map = _find_meta_for_guids(all_guids, target_path)
-    lazy_map.update(guid_map)
-    return _compare_prefab_texts_fast(old_text, new_text, lazy_map, _log=_log)
-
-
-def _collect_semantic_files_from_revs(sorted_revs, source_url, auth_args, rev_file_map):
-    """收集多个版本中变更的语义文件（.prefab/.unity/.cs），返回 {path: action}"""
-    files = {}
     for rev in sorted_revs:
         file_list = (rev_file_map or {}).get(str(rev))
         if file_list is None:
@@ -725,24 +718,106 @@ def _collect_semantic_files_from_revs(sorted_revs, source_url, auth_args, rev_fi
                 file_list = _get_changed_files(source_url, rev, auth_args)
             except RuntimeError:
                 continue
-        for cf in file_list:
-            ext = os.path.splitext(cf["path"])[1].lower()
-            if ext in (".prefab", ".unity", ".cs"):
-                if cf["path"] not in files:
-                    files[cf["path"]] = cf["action"]
-    return files
+        semantic = [cf for cf in file_list if os.path.splitext(cf["path"])[1].lower() in (".prefab", ".unity", ".cs")]
+        if semantic:
+            result[str(rev)] = semantic
+    return result
 
 
-def _analyze_squash_revisions(sorted_revs, source_url, guid_map, auth_args, rev_file_map, target_path, _log=None):
-    """对多个版本做汇总分析：base=min_rev-1 vs latest=max_rev，只输出净变化"""
+def _run_parallel_squash_revs(rev_chunks, source_url, rev_file_map, svn_user, svn_pass, target_path, _log):
+    """按版本分片启动子进程并行分析，每个 worker 返回 entries"""
+    worker_script = os.path.join(_script_dir, "_squash_worker.py")
+    auth_dict = {"svn_user": svn_user, "svn_pass": svn_pass}
+    running = {}
+    all_entries = []
+
+    for chunk in rev_chunks:
+        arg_fd, arg_path = tempfile.mkstemp(suffix=".pkl", prefix="sq_arg_")
+        os.close(arg_fd)
+        res_fd, res_path = tempfile.mkstemp(suffix=".pkl", prefix="sq_res_")
+        os.close(res_fd)
+        _WORKER_TEMPFILES.extend([arg_path, res_path])
+
+        chunk_rfm = {str(r): rev_file_map.get(str(r), []) for r in chunk}
+
+        worker_args = {
+            "source_url": source_url,
+            "revisions": chunk,
+            "rev_file_map": chunk_rfm,
+            "auth": auth_dict,
+            "target_path": target_path,
+        }
+        try:
+            with open(arg_path, "wb") as f:
+                pickle.dump(worker_args, f)
+        except Exception:
+            _cleanup_worker_tempfiles()
+            raise
+
+        proc = subprocess.Popen(
+            [sys.executable, worker_script, arg_path, res_path],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+        )
+        running[proc] = (arg_path, res_path)
+
+    for proc in running:
+        _read_worker_progress(proc, _log)
+        proc.wait()
+        _, res_path = running[proc]
+        try:
+            with open(res_path, "rb") as f:
+                entries = pickle.load(f)
+                if entries:
+                    all_entries.extend(entries)
+        except Exception as e:
+            _log(f"    读取worker结果失败: {e}", "warn")
+
+    _cleanup_worker_tempfiles()
+    return all_entries
+
+
+def _analyze_single_rev_prefabs(rev, file_list, source_url, auth_args, target_path, _log):
+    """分析单个版本中所有 .prefab/.unity 文件，返回 entries"""
+    entries = []
+    prv_rev = max(1, rev - 1)
+    for cf in [cf for cf in file_list if os.path.splitext(cf["path"])[1].lower() in (".prefab", ".unity")]:
+        rel_path = _strip_repo_prefix(source_url, cf["path"])
+        file_url = source_url.rstrip("/") + "/" + rel_path
+        try:
+            old_text = _run_svn(["cat", "-r", str(prv_rev), file_url] + auth_args, timeout=120)
+        except RuntimeError:
+            old_text = ""
+        try:
+            new_text = _run_svn(["cat", "-r", str(rev), file_url] + auth_args, timeout=120)
+        except RuntimeError:
+            new_text = ""
+        all_guids = _extract_guids_from_diff(old_text + new_text)
+        lazy_map = {}
+        if all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
+            lazy_map = _find_meta_for_guids(all_guids, target_path)
+        parsed = _compare_prefab_texts_fast(old_text, new_text, lazy_map, _log=_log)
+        if parsed:
+            entries.append({"path": cf["path"], "action": "M", "parsed_lines": parsed})
+    return entries
+
+
+def _analyze_squash_revisions(sorted_revs, source_url, guid_map, auth_args, rev_file_map, target_path, _log=None, svn_user=None, svn_pass=None):
+    """对多个版本做汇总分析：按版本分片并行 → 文件路径合并（最新覆盖）
+
+    流程：
+    1. 构建 {rev: [语义文件列表]}
+    2. 按版本分片，各片并行分析（子进程）
+    3. 每个子进程内：逐版本分析 (rev-1 → rev) 直接输出已格式化的 parsed_lines
+    4. 主进程按文件路径合并，后写入的（新版本）覆盖先写入的（旧版本）
+    5. .cs 文件单独处理
+    """
     min_rev = min(sorted_revs)
     max_rev = max(sorted_revs)
-    base_rev = max(1, min_rev - 1)
 
     if _log:
-        _log(f"汇总模式：{len(sorted_revs)} 个版本，基准 r{base_rev}，最新 r{max_rev}")
+        _log(f"汇总模式：{len(sorted_revs)} 个版本 (r{min_rev} → r{max_rev})，按版本并行分析")
 
-    semantic_files = _collect_semantic_files_from_revs(sorted_revs, source_url, auth_args, rev_file_map)
+    rev_file_map_filtered = _build_rev_file_map(sorted_revs, rev_file_map, source_url, auth_args)
 
     result = {
         "rev": f"{min_rev}-{max_rev}",
@@ -753,29 +828,46 @@ def _analyze_squash_revisions(sorted_revs, source_url, guid_map, auth_args, rev_
         "_squash": True,
     }
 
-    for path, action in semantic_files.items():
-        entry = {"path": path, "action": action, "parsed_lines": []}
-        ext = os.path.splitext(path)[1].lower()
-        if ext in (".prefab", ".unity"):
-            rel_path = _strip_repo_prefix(source_url, path)
-            file_url = source_url.rstrip("/") + "/" + rel_path
-            fname = os.path.basename(path)
-            try:
-                parsed = _compare_file_between_revs(file_url, fname, base_rev, max_rev, auth_args, guid_map, target_path, _log=_log)
-                entry["parsed_lines"] = parsed
-            except RuntimeError as e:
-                entry["parsed_lines"] = [f"(分析失败: {e})"]
-        elif ext == ".cs":
-            rel_path = _strip_repo_prefix(source_url, path)
+    n_revs = len(sorted_revs)
+    if n_revs == 1:
+        all_entries = []
+        for rev in sorted_revs:
+            file_list = rev_file_map_filtered.get(str(rev), [])
+            all_entries.extend(_analyze_single_rev_prefabs(rev, file_list, source_url, auth_args, target_path, _log))
+    else:
+        max_workers = min(n_revs, os.cpu_count() or 4)
+        rev_chunks = _split_revisions(sorted_revs, max_workers)
+        if _log:
+            _log(f"  按 {len(rev_chunks)} 个分片并行分析 {n_revs} 个版本...")
+        all_entries = _run_parallel_squash_revs(rev_chunks, source_url, rev_file_map_filtered, svn_user, svn_pass, target_path, _log)
+
+    # 按文件路径合并（后写入 = 新版本 覆盖旧版本）
+    path_map = {}
+    for entry in all_entries:
+        path_map[entry["path"]] = entry
+
+    # .cs 文件单独处理
+    cs_handled = set()
+    for rev in sorted_revs:
+        file_list = rev_file_map_filtered.get(str(rev), [])
+        for cf in file_list:
+            if cf["path"] in cs_handled:
+                continue
+            if os.path.splitext(cf["path"])[1].lower() != ".cs":
+                continue
+            cs_handled.add(cf["path"])
+            rel_path = _strip_repo_prefix(source_url, cf["path"])
             file_url = source_url.rstrip("/") + "/" + rel_path
             try:
                 diff_raw = _run_svn(["diff", "-c", str(max_rev), file_url] + auth_args, timeout=120)
+                entry = {"path": cf["path"], "action": "M", "parsed_lines": []}
                 if diff_raw.strip():
                     entry["parsed_lines"] = _parse_cs_diff(diff_raw)
+                path_map[cf["path"]] = entry
             except RuntimeError as e:
-                entry["parsed_lines"] = [f"(分析失败: {e})"]
-        result["files"].append(entry)
+                path_map[cf["path"]] = {"path": cf["path"], "action": "M", "parsed_lines": [f"(分析失败: {e})"]}
 
+    result["files"] = list(path_map.values())
     return result
 
 
@@ -962,7 +1054,8 @@ def analyze_source_url(source_url, revisions, target_path,
         all_results = [_analyze_squash_revisions(
             sorted_revs, source_url, {}, auth_args,
             rev_file_map=rev_file_map or {},
-            target_path=target_path, _log=_log
+            target_path=target_path, _log=_log,
+            svn_user=svn_user, svn_pass=svn_pass,
         )]
     else:
         max_workers = min(os.cpu_count() or 4, len(sorted_revs))

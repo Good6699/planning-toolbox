@@ -214,18 +214,21 @@
 - **解决方案**：在 CSS（绿色标签 `.unlock_svn`）、web 版（`_exec_unlock_svn`）、tkinter 版（`_wf_execute_unlock_svn` / `_wf_show_unlock_svn_config`）以及前端 typeCn/typeIcon/设置表单/自动命名中，同步新增 `unlock_svn` 类型。解锁不加 `--force`，别人锁住的无法强制解锁
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
-### SVN 语义分析模块——结构化变更分析引擎
-- **场景**：2026-05-24 新增语义分析按钮，对勾选的 SVN 版本做结构化分析，输出人类可读的变更摘要（而非原始 svn diff 文本）。支持 .prefab/.unity 的 YAML 语义解析、.cs 的代码变更分析、GUID→资源名按需查询
-- **关键设计**：
-  - 对 .prefab 解析 svn diff 的 YAML 变更，正则提取 `--- !u!` 块和 `-/+ m_Xxx` 成对属性，输出"新增/移除节点、组件、属性变更"等语义描述
-  - 对 .cs 解析 svn diff 的 `+public void MethodName` 模式，输出"新增方法/类"描述
-  - GUID 映射改为按需查询——从 diff 中提取 `guid:` 后，在 `Assets/**/*.meta` 中只搜索这些 GUID，找到即停止
+### SVN 语义分析模块——结构化变更分析引擎（v2: YAML 树对比）
+- **场景**：2026-05-24 新增语义分析按钮，对勾选的 SVN 版本做结构化分析，输出人类可读的变更摘要。支持 .prefab/.unity 的 YAML 语义解析、.cs 的代码变更分析、GUID→资源名按需查询
+- **关键设计（v2 重构）**：
+  - v1：解析 svn diff 文本，正则匹配 `-/+` 成对行 → 漏掉了非 m_ 前缀属性、整块删除/新增、嵌套属性
+  - v2：`svn cat -r (rev-1)` + `svn cat -r rev` 下载完整文件，用 PyYAML 分别解析为结构化 dict，再做树对比（key-by-key diff）。精度 100%，无遗漏
+  - GUID 映射改为按需查询——从完整文本中提取所有 `guid:`，在 `Assets/**/*.meta` 中只搜索这些 GUID，找到即停止
   - 多版本并行分析：分片后 Popen 子进程独立执行，通过 pickle 临时文件通信
+  - 每个文件的下载/解析/对比阶段输出进度日志
 - **关键教训**：
-  - `svn diff -c REV` 不能混合 URL 和本地路径作为两个独立目标（`svn diff -c REV URL -- PATH` 报 E205000），必须拼接成完整的文件 URL：`svn diff -c REV URL/relative_path`
-  - `svn log --verbose` 返回的文件路径以 `/` 开头（仓库绝对路径），匹配 URL 路径时需要先 lstrip 再后缀匹配（从 URL 路径尾部向前匹配），不能用前缀匹配
-  - 非语义文件（.xlsm/.png/.bin 等）完全不调 svn diff，避免大文件性能开销
-  - 版本列表输出排序：UI 用 `sort((a,b) => b.rev - a.rev)`，后端并行收集后用 `sort(reverse=True)`，保证最新版在最前
+  - `svn diff -c REV` 不能混合 URL 和本地路径作为两个独立目标，必须拼接成完整的文件 URL
+  - svn diff 中删除块的 YAML 头是 `---- !u!1`（4 短横），新增块是 `+--- !u!1`（3 短横）
+  - 解析 svn diff 总是有遗漏的风险，下载完整文件做树对比才是可靠方案
+  - Unity YAML 可用 PyYAML 的 `yaml.safe_load()` 直接解析（去掉 `--- !u!N &fileID` 头即可）
+  - 非语义文件（.xlsm/.png/.bin 等）完全不调 svn cat，避免大文件性能开销
+  - 版本列表输出排序：UI 和输出文件都按从新到旧（rev 降序）
 - **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)、[_merge_analyze_worker.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyze_worker.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
 ### 语义合并页签—筛选条件拆为独立卡片并适配宽窄屏

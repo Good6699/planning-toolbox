@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import pickle
 import time
+import yaml
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -70,6 +71,7 @@ _PROPERTY_NAMES = {
     "m_Height": "高度",
     "m_AnchorMin": "锚点最小值",
     "m_AnchorMax": "锚点最大值",
+    "m_AnchoredPosition": "锚点偏移 position",
     "m_Pivot": "轴心",
     "m_SizeDelta": "尺寸偏移",
     "m_RaycastTarget": "射线检测",
@@ -84,13 +86,8 @@ _PROPERTY_NAMES = {
 
 # ── 正则表达式 ──
 _GUID_IN_TEXT_RE = re.compile(r'guid:\s*([a-f0-9]{32})')
-_YAML_BLOCK_ADD_RE = re.compile(r'^\+--- !u!(\d+)', re.MULTILINE)
-_YAML_BLOCK_DEL_RE = re.compile(r'^---- !u!(\d+)', re.MULTILINE)
-_NODE_NAME_RE = re.compile(r'^[+-]\s+m_Name:\s*(.+)', re.MULTILINE)
-_PROP_CHANGE_RE = re.compile(r'^([+-])\s+(m_\w+):\s*(.+)')
 _CS_METHOD_RE = re.compile(r'^\+{1,3}\s+(public|private|protected|internal)\s+(void|string|int|float|bool|double|class|struct|enum|interface)\s+(\w+)')
 _CS_ADD_LINE_RE = re.compile(r'^\+[^+]')
-_OLD_NEW_PAIR_RE = re.compile(r'^-\s+(m_\w+):\s*(.+)\n\+\s+\1:\s*(.+)', re.MULTILINE)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -168,96 +165,225 @@ def _resolve_guid(guid, guid_map):
 
 
 # ═══════════════════════════════════════════════════════════
-# .prefab / .unity 语义解析
+# Unity YAML 解析（使用 PyYAML）
 # ═══════════════════════════════════════════════════════════
 
-def _collect_node_names(diff_text):
-    """从 diff 文本中统计节点名和 fileID 的映射"""
-    names = {}
-    for m in _NODE_NAME_RE.finditer(diff_text):
-        name = m.group(1).strip().strip("\"'")
-        if name:
-            names[name] = name
-    return names
+_YAML_DOC_RE = re.compile(r'^--- !u!(\d+) &(\d+)', re.MULTILINE)
 
 
-def _parse_prefab_diff(diff_text, guid_map):
-    """解析 .prefab/.unity 的 diff 文本，返回语义变更描述列表"""
-    changes = []
+def _parse_unity_yaml(text):
+    """解析 Unity .prefab/.unity 为 {fileID: {type, node_name, component, props}}"""
+    if not text or not text.strip():
+        return {}
+    blocks = {}
+    docs = text.strip().split("\n--- ")
+    for doc in docs:
+        doc = doc.strip()
+        if not doc:
+            continue
+        try:
+            # 用 PyYAML 解析整个文档，保留标签头
+            full_text = doc
+            if not full_text.startswith("---"):
+                full_text = "--- " + full_text
+            data = yaml.safe_load(full_text)
+            if not isinstance(data, dict):
+                continue
+        except yaml.YAMLError:
+            continue
 
-    # ── 1. 检测新增/移除的 YAML 块（节点+组件） ──
-    added_types = {}
-    for m in _YAML_BLOCK_ADD_RE.finditer(diff_text):
-        t = m.group(1)
-        added_types[t] = added_types.get(t, 0) + 1
-    removed_types = {}
-    for m in _YAML_BLOCK_DEL_RE.finditer(diff_text):
-        t = m.group(1)
-        removed_types[t] = removed_types.get(t, 0) + 1
+        # 从原始文本中提取 fileID
+        m = _YAML_DOC_RE.match(doc)
+        if not m:
+            continue
+        comp_type = m.group(1)
+        file_id = m.group(2)
 
-    # GameObject（!u!1）的新增/移除
-    added_nodes = added_types.pop("1", 0)
-    removed_nodes = removed_types.pop("1", 0)
-    if added_nodes > 0:
-        node_names = _collect_node_names(diff_text)
-        if node_names:
-            changes.append(f"新增 {added_nodes} 个节点：{'、'.join(sorted(node_names.keys()))}")
-        else:
-            changes.append(f"新增 {added_nodes} 个节点")
-    if removed_nodes > 0:
-        changes.append(f"移除 {removed_nodes} 个节点")
+        # data 是一个 dict，key 是组件名，value 是属性 dict
+        node_name = ""
+        component = ""
+        props = data if isinstance(data, dict) else {}
+        for k, v in data.items():
+            component = k
+            if isinstance(v, dict):
+                props = v
+                if comp_type == "1" and "m_Name" in v:
+                    node_name = str(v["m_Name"]) if v["m_Name"] is not None else ""
+            break
 
-    # 其他组件的新增/移除
-    for t, count in sorted(added_types.items()):
-        cn = _COMPONENT_NAMES.get(t, f"组件(!u!{t})")
-        changes.append(f"新增 {count} 个{cn}")
-    for t, count in sorted(removed_types.items()):
-        cn = _COMPONENT_NAMES.get(t, f"组件(!u!{t})")
-        changes.append(f"移除 {count} 个{cn}")
+        blocks[file_id] = {
+            "type": comp_type,
+            "fileID": file_id,
+            "component": component,
+            "node_name": node_name,
+            "props": props,
+        }
+    return blocks
 
-    # ── 2. 检测属性变更（- m_Xxx: old / + m_Xxx: new 成对出现） ──
-    prop_pairs = _OLD_NEW_PAIR_RE.findall(diff_text)
-    for prop, old_val, new_val in prop_pairs:
-        old_val = old_val.strip()
-        new_val = new_val.strip()
 
-        # GUID 引用字段
-        if prop in _GUID_FIELDS:
-            old_guid_m = _GUID_IN_TEXT_RE.search(old_val)
-            new_guid_m = _GUID_IN_TEXT_RE.search(new_val)
-            old_name = _resolve_guid(old_guid_m.group(1), guid_map) if old_guid_m else ""
-            new_name = _resolve_guid(new_guid_m.group(1), guid_map) if new_guid_m else ""
-            field_cn = _GUID_FIELDS[prop]
-            if old_name and new_name and old_name != new_name:
-                changes.append(f"修改 {field_cn}：从 [{old_name}] 改为 [{new_name}]")
-            elif old_name and not new_name:
-                changes.append(f"修改 {field_cn}：从 [{old_name}] 改为 [新资源（未匹配到本地文件）]")
-            elif not old_name and new_name:
-                changes.append(f"修改 {field_cn}：改为 [{new_name}]")
+def _compare_prefab_trees(old_blocks, new_blocks, guid_map):
+    """对比两个版本的 prefab 结构树，返回人类可读的变更列表"""
+    all_ids = set(old_blocks.keys()) | set(new_blocks.keys())
+    node_changes = {}  # key → [change_strings]
+
+    for fid in all_ids:
+        old = old_blocks.get(fid)
+        new = new_blocks.get(fid)
+        old_type = old["type"] if old else (new["type"] if new else "")
+        old_name = old["node_name"] if old else (new["node_name"] if new else "")
+        comp_name = old["component"] if old else (new["component"] if new else "")
+
+        label_key = f"{old_name or f'节点({fid})'} → {_COMPONENT_NAMES.get(old_type, comp_name)}"
+
+        if old and not new:
+            # 该块被删除
+            if old_type == "1" and old_name:
+                node_changes.setdefault(label_key, []).append("移除节点")
             else:
-                changes.append(f"修改 {field_cn}：已变更")
+                node_changes.setdefault(label_key, []).append("移除组件")
             continue
 
-        # 向量类型
-        if prop in ("m_LocalPosition", "m_LocalRotation", "m_LocalScale"):
-            old_v = _format_vec3(old_val)
-            new_v = _format_vec3(new_val)
-            prop_cn = _PROPERTY_NAMES.get(prop, prop)
-            changes.append(f"修改 {prop_cn}：从 {old_v} 改为 {new_v}")
+        if new and not old:
+            new_name = new["node_name"]
+            if new["type"] == "1" and new_name:
+                node_changes.setdefault(label_key, []).append("新增节点")
+            else:
+                node_changes.setdefault(label_key, []).append("新增组件")
             continue
 
-        # 普通属性
-        prop_cn = _PROPERTY_NAMES.get(prop, prop)
-        changes.append(f"修改 {prop_cn}：从 {old_val} 改为 {new_val}")
+        # 都存在，比较 props
+        old_props = old["props"]
+        new_props = new["props"]
+        prop_diffs = _compare_props(old_props, new_props, guid_map)
+        if prop_diffs:
+            node_changes.setdefault(label_key, []).extend(prop_diffs)
 
-    if not changes:
-        changes.append("文件无检测到的结构化变更（可能仅格式差异）")
+    result = []
+    for label, diffs in node_changes.items():
+        for d in diffs:
+            result.append(f"{label} → {d}")
+    return result
+
+
+def _compare_props(old_props, new_props, guid_map):
+    """对比两个 props dict，返回变更描述列表"""
+    changes = []
+    all_keys = set(old_props.keys()) | set(new_props.keys())
+
+    for key in all_keys:
+        old_val = old_props.get(key)
+        new_val = new_props.get(key)
+
+        if key not in new_props:
+            r = _format_prop_change(key, old_val, "", guid_map, deleted=True)
+            if r:
+                changes.append(f"删除 {r[3:]}")
+            continue
+
+        if key not in old_props:
+            r = _format_prop_change(key, "", new_val, guid_map, added=True)
+            if r:
+                changes.append(f"新增 {r[3:]}")
+            continue
+
+        # 两边都有
+        if old_val == new_val:
+            continue
+
+        # 不同类型或不同值
+        if isinstance(old_val, dict) and isinstance(new_val, dict):
+            # dict值比较（如 m_Sprite: {guid: xxx, fileID: yyy}）
+            if old_val != new_val:
+                r = _format_prop_change(key, str(old_val), str(new_val), guid_map)
+                if r:
+                    changes.append(r)
+        elif isinstance(old_val, list) and isinstance(new_val, list):
+            # 列表比较
+            old_str = _list_summary(old_val)
+            new_str = _list_summary(new_val)
+            if old_str != new_str:
+                r = _format_prop_change(key, old_str, new_str, guid_map)
+                if r:
+                    changes.append(r)
+        else:
+            r = _format_prop_change(key, str(old_val) if old_val is not None else "",
+                                    str(new_val) if new_val is not None else "", guid_map)
+            if r:
+                changes.append(r)
 
     return changes
 
 
+def _list_summary(lst):
+    """生成列表的简短摘要"""
+    if not lst:
+        return "[]"
+    parts = []
+    for item in lst[:5]:
+        if isinstance(item, dict):
+            parts.append(str(item))
+        else:
+            parts.append(str(item))
+    s = ", ".join(parts)
+    if len(lst) > 5:
+        s += f", ...({len(lst)}项)"
+    return s
+
+
+def _format_prop_change(prop, old_val, new_val, guid_map, deleted=False, added=False):
+    """格式化单个属性变更为中文描述"""
+    prop_cn = _PROPERTY_NAMES.get(prop, prop)
+
+    if prop in _GUID_FIELDS:
+        field_cn = _GUID_FIELDS[prop]
+        if deleted:
+            return f"移除 {field_cn} 引用"
+        if added:
+            new_guid_m = _GUID_IN_TEXT_RE.search(new_val)
+            new_name = _resolve_guid(new_guid_m.group(1), guid_map) if new_guid_m else ""
+            if new_name:
+                return f"新增 {field_cn}：[{new_name}]"
+            return f"新增 {field_cn} 引用"
+        old_guid_m = _GUID_IN_TEXT_RE.search(old_val)
+        new_guid_m = _GUID_IN_TEXT_RE.search(new_val)
+        old_name = _resolve_guid(old_guid_m.group(1), guid_map) if old_guid_m else ""
+        new_name = _resolve_guid(new_guid_m.group(1), guid_map) if new_guid_m else ""
+        if old_name and new_name and old_name != new_name:
+            return f"修改 {field_cn}：从 [{old_name}] 改为 [{new_name}]"
+        elif new_name:
+            return f"修改 {field_cn}：改为 [{new_name}]"
+        return f"修改 {field_cn}：已变更"
+
+    if prop in ("m_LocalPosition", "m_LocalRotation", "m_LocalScale"):
+        if deleted:
+            return f"移除 {prop_cn}"
+        if added:
+            return f"新增 {prop_cn}：{_format_vec3(new_val)}"
+        old_v = _format_vec3(old_val)
+        new_v = _format_vec3(new_val)
+        return f"修改 {prop_cn}：从 {old_v} 改为 {new_v}"
+
+    if deleted:
+        if old_val and old_val != "{}":
+            return f"移除 {prop_cn}：原值 {old_val}"
+        return f"移除 {prop_cn}"
+    if added:
+        if new_val and new_val != "{}":
+            return f"新增 {prop_cn}：{new_val}"
+        return f"新增 {prop_cn}"
+
+    if old_val == new_val:
+        return None
+    return f"修改 {prop_cn}：从 {old_val} 改为 {new_val}"
+
+
 def _format_vec3(raw):
     """格式化 Unity 向量为可读字符串"""
+    if isinstance(raw, dict):
+        x = raw.get("x", "")
+        y = raw.get("y", "")
+        z = raw.get("z", "")
+        return f"({x}, {y}, {z})"
     raw = raw.strip().strip("{}")
     parts = [x.strip() for x in raw.split(",")]
     return f"({', '.join(parts[:3])})"
@@ -324,7 +450,43 @@ def _strip_repo_prefix(source_url, file_path):
     return fp
 
 
-def _analyze_revision_data(rev, source_url, guid_map, auth_args, file_list=None, target_path=None):
+def _analyze_prefab_file(cf, source_url, rev, auth_args, guid_map, target_path, _log=None):
+    """分析 .prefab/.unity 文件的语义变更（下载旧版+新版，YAML 树对比）"""
+    rel_path = _strip_repo_prefix(source_url, cf["path"])
+    file_url = source_url.rstrip("/") + "/" + rel_path
+    fname = os.path.basename(cf["path"])
+
+    if _log:
+        _log(f"  r{rev} {fname}: 下载旧版...")
+    prv_rev = max(1, rev - 1)
+    try:
+        old_text = _run_svn(["cat", "-r", str(prv_rev), file_url] + auth_args, timeout=120)
+    except RuntimeError:
+        old_text = ""
+
+    if _log:
+        _log(f"  r{rev} {fname}: 下载新版...")
+    try:
+        new_text = _run_svn(["cat", "-r", str(rev), file_url] + auth_args, timeout=120)
+    except RuntimeError:
+        new_text = ""
+
+    if _log:
+        _log(f"  r{rev} {fname}: 解析 YAML...")
+    old_blocks = _parse_unity_yaml(old_text)
+    new_blocks = _parse_unity_yaml(new_text)
+
+    if _log:
+        _log(f"  r{rev} {fname}: 对比中 ({len(old_blocks)}→{len(new_blocks)} 个块)...")
+    all_guids = _extract_guids_from_diff(old_text + new_text)
+    lazy_map = {}
+    if all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
+        lazy_map = _find_meta_for_guids(all_guids, target_path)
+    lazy_map.update(guid_map)
+    return _compare_prefab_trees(old_blocks, new_blocks, lazy_map)
+
+
+def _analyze_revision_data(rev, source_url, guid_map, auth_args, file_list=None, target_path=None, _log=None):
     """分析单个版本，返回结构化数据（guid_map 按需构建）"""
     result = {"rev": rev, "author": "", "date": "", "msg": "", "files": []}
     try:
@@ -358,23 +520,19 @@ def _analyze_revision_data(rev, source_url, guid_map, auth_args, file_list=None,
             rel_path = _strip_repo_prefix(source_url, cf["path"])
             file_url = source_url.rstrip("/") + "/" + rel_path
             try:
-                diff_raw = _run_svn(
-                    ["diff", "-c", str(rev), file_url] + auth_args,
-                    timeout=120
-                )
-                if diff_raw.strip():
-                    if ext in (".prefab", ".unity"):
-                        guids = _extract_guids_from_diff(diff_raw)
-                        if guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
-                            lazy_map = _find_meta_for_guids(guids, target_path)
-                        else:
-                            lazy_map = {}
-                        lazy_map.update(guid_map)
-                        entry["parsed_lines"] = _parse_prefab_diff(diff_raw, lazy_map)
-                    else:
+                if ext in (".prefab", ".unity"):
+                    if _log:
+                        _log(f"  r{rev}: 分析 {os.path.basename(cf['path'])}...")
+                    entry["parsed_lines"] = _analyze_prefab_file(cf, source_url, rev, auth_args, guid_map, target_path, _log=_log)
+                else:
+                    diff_raw = _run_svn(
+                        ["diff", "-c", str(rev), file_url] + auth_args,
+                        timeout=120
+                    )
+                    if diff_raw.strip():
                         entry["parsed_lines"] = _parse_cs_diff(diff_raw)
             except RuntimeError as e:
-                entry["parsed_lines"] = [f"(diff 查询失败: {e})"]
+                entry["parsed_lines"] = [f"(分析失败: {e})"]
         result["files"].append(entry)
 
     return result
@@ -465,7 +623,7 @@ def analyze_source_url(source_url, revisions, target_path,
         for idx, rev in enumerate(sorted_revs):
             _log(f"正在分析 r{rev} ({idx+1}/{len(sorted_revs)})...")
             file_list = (rev_file_map or {}).get(str(rev))
-            rd = _analyze_revision_data(rev, source_url, {}, auth_args, file_list=file_list, target_path=target_path)
+            rd = _analyze_revision_data(rev, source_url, {}, auth_args, file_list=file_list, target_path=target_path, _log=_log)
             all_results.append(rd)
     else:
         _log(f"启动 {len(chunks)} 个子进程并行分析...")

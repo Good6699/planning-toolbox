@@ -35,11 +35,18 @@ def main():
 
     auth_args = _build_svn_auth_args(svn_user, svn_pass)
     results = []
+    total = len(revisions)
 
-    for rev in sorted(revisions):
+    for idx, rev in enumerate(sorted(revisions)):
+        sys.stderr.write(f"r{rev} ({idx+1}/{total}): 分析中...\n")
         file_list = rev_file_map.get(str(rev))
         rd = _analyze_revision_data(rev, source_url, guid_map, auth_args, file_list=file_list, target_path=target_path)
         results.append(rd)
+        has_semantic = any(f.get("parsed_lines") for f in rd.get("files", []))
+        if has_semantic:
+            sys.stderr.write(f"r{rev} ({idx+1}/{total}): 完成\n")
+        else:
+            sys.stderr.write(f"r{rev} ({idx+1}/{total}): 无语义文件\n")
 
     try:
         with open(res_path, "wb") as f:

@@ -104,6 +104,12 @@
   - 通过管道执行批处理时（如`echo input | script.bat`），反斜杠会被当作转义符，导致`\.q`被解析为命令
   - 用户输入常带引号（如`"2.txt"`而非`2.txt`），必须用`for /f`循环去除，简单的`%VAR:"=%`不够可靠
 - svn info返回的URL是编码后的中文路径，需用urllib.parse.unquote解码
+
+### Unity YAML type 解析索引错位修复
+- **场景**：`_merge_analyzer.py` 的 `_parse_unity_yaml` 中 type 字段全部解析为空字符串，导致无法识别 GameObject 类型块，节点路径退化为 `节点(1229026825479412)`
+- **根因**：① `orig_docs = orig_text.strip().split("\n--- ")` 包含 `%YAML`/`%TAG` 头行为第 0 元素，`docs` 从预处理后文本 split 不含头行，两者索引错位 1；② 回退正则 `re.search(r'&(\d+)', doc)` 只提取 fileID 不提取 comp_type；③ YAML 预处理后 `--- &100001` 的 dict 第一个 key 是锚点引用（值为 None），原代码 break 后取到了错误数据
+- **解决方案**：① split 前从 `orig_text` 移除 `%YAML`/`%TAG` 头行使索引对齐；② 改用 `!u!(\d+)\s+&(\d+)` 正则同时提取 type+fileID；③ YAML 解析时跳过 `not isinstance(v, dict)` 的 key
+- **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
 - Texts.xlsm 的 header 列名是 ::ID:: 和 ::SC::（带 :: 前后缀），列名匹配必须包含 ::ID:: 和 ::SC:: 才能正确识别
 - **Windows文件名禁止冒号**：cache_key拼入 `::ID::` 等含冒号的列名后作为文件名，Windows拒绝创建（`OSError [Errno 22]`），必须用 `_safe_cache_key()` 替换非法字符。`except: pass` 吞掉此类异常会导致缓存永远为空且无报错。
 - **多进程IPC开销**：worker返回parsed dict（18MB/个），32个pair需传1.15GB数据到主进程，严重影响性能。应让worker直接写磁盘缓存，只返回轻量结果（diff_rows + 元数据）。

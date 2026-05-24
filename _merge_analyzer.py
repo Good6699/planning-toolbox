@@ -84,6 +84,10 @@ _PROPERTY_NAMES = {
     "m_VerticalOverflow": "垂直溢出",
 }
 
+# ── 输出分组标记 ──
+_GRP = "\x00GRP\x00"
+_DTA = "\x00DTA\x00"
+
 # ── 正则表达式 ──
 _GUID_IN_TEXT_RE = re.compile(r'guid:\s*([a-f0-9]{32})')
 _CS_METHOD_RE = re.compile(r'^\+{1,3}\s+(public|private|protected|internal)\s+(void|string|int|float|bool|double|class|struct|enum|interface)\s+(\w+)')
@@ -171,18 +175,40 @@ def _resolve_guid(guid, guid_map):
 _YAML_DOC_RE = re.compile(r'^--- !u!(\d+) &(\d+)', re.MULTILINE)
 
 
+def _preprocess_unity_yaml(text):
+    """预处理 Unity YAML：去掉 %TAG 指令和 !u! 标签，使 PyYAML 可解析"""
+    lines = text.splitlines()
+    result = []
+    for line in lines:
+        # 跳过 %YAML, %TAG 指令行
+        if line.startswith("%YAML") or line.startswith("%TAG"):
+            continue
+        # 替换行内的 !u!N 标签
+        line = re.sub(r'!u!\d+\s*', '', line)
+        result.append(line)
+    return "\n".join(result)
+
+
 def _parse_unity_yaml(text):
     """解析 Unity .prefab/.unity 为 {fileID: {type, node_name, component, props}}"""
     if not text or not text.strip():
         return {}
+    # 保留原始文本用于提取 fileID 和组件类型
+    orig_text = text
+    # 预处理去掉 Unity 自定义标签
+    text = _preprocess_unity_yaml(text)
+    # 预处理前去匹配 fileID 和组件类型
+    # 移除 %YAML/%TAG 头行，使 orig_docs 与 docs 索引对齐
+    orig_lines = [ln for ln in orig_text.splitlines() if not ln.startswith("%YAML") and not ln.startswith("%TAG")]
+    orig_clean = "\n".join(orig_lines)
+    orig_docs = orig_clean.strip().split("\n--- ")
     blocks = {}
     docs = text.strip().split("\n--- ")
-    for doc in docs:
+    for i, doc in enumerate(docs):
         doc = doc.strip()
         if not doc:
             continue
         try:
-            # 用 PyYAML 解析整个文档，保留标签头
             full_text = doc
             if not full_text.startswith("---"):
                 full_text = "--- " + full_text
@@ -192,23 +218,36 @@ def _parse_unity_yaml(text):
         except yaml.YAMLError:
             continue
 
-        # 从原始文本中提取 fileID
-        m = _YAML_DOC_RE.match(doc)
+        # 从原始文本提取 fileID 和组件类型
+        orig_doc = orig_docs[i] if i < len(orig_docs) else ""
+        m = _YAML_DOC_RE.match(orig_doc) or _YAML_DOC_RE.search(orig_doc)
         if not m:
-            continue
-        comp_type = m.group(1)
-        file_id = m.group(2)
+            # 尝试用 !u!N &fileID 回退（split 后 --- 前缀丢失）
+            m2 = re.search(r'!u!(\d+)\s+&(\d+)', orig_doc)
+            if m2:
+                comp_type = m2.group(1)
+                file_id = m2.group(2)
+            else:
+                # 最后回退：仅提取 fileID
+                m3 = re.search(r'&(\d+)', doc)
+                if not m3:
+                    continue
+                file_id = m3.group(1)
+                comp_type = ""
+        else:
+            comp_type = m.group(1)
+            file_id = m.group(2)
 
-        # data 是一个 dict，key 是组件名，value 是属性 dict
         node_name = ""
         component = ""
         props = data if isinstance(data, dict) else {}
         for k, v in data.items():
+            if not isinstance(v, dict):
+                continue
             component = k
-            if isinstance(v, dict):
-                props = v
-                if comp_type == "1" and "m_Name" in v:
-                    node_name = str(v["m_Name"]) if v["m_Name"] is not None else ""
+            props = v
+            if comp_type == "1" and "m_Name" in v:
+                node_name = str(v["m_Name"]) if v["m_Name"] is not None else ""
             break
 
         blocks[file_id] = {
@@ -221,6 +260,101 @@ def _parse_unity_yaml(text):
     return blocks
 
 
+def _walk_hierarchy(go_fid, go_names, go_to_tf, tf_to_go, blocks):
+    """Walk up Transform.m_Father chain to build a /-separated hierarchy path"""
+    path_parts = []
+    current_go_fid = go_fid
+    visited = set()
+    while current_go_fid and current_go_fid not in visited:
+        visited.add(current_go_fid)
+        name = go_names.get(current_go_fid, "")
+        path_parts.insert(0, name or f"节点({current_go_fid})")
+        tf_fid = go_to_tf.get(current_go_fid)
+        if tf_fid and tf_fid in blocks:
+            tf_block = blocks[tf_fid]
+            father_ref = tf_block.get("props", {}).get("m_Father")
+            if isinstance(father_ref, dict) and "fileID" in father_ref:
+                parent_tf_fid = str(father_ref["fileID"])
+                if parent_tf_fid == "0":
+                    break
+                parent_go_fid = tf_to_go.get(parent_tf_fid)
+                if parent_go_fid:
+                    current_go_fid = parent_go_fid
+                else:
+                    break
+            else:
+                break
+        else:
+            break
+    return "/".join(path_parts)
+
+
+def _build_prefab_index(blocks):
+    """Build lookup tables from a Unity prefab block dict:
+
+    Returns (go_names, go_to_tf, tf_to_go, comp_to_go)
+    """
+    go_names = {}
+    go_to_tf = {}
+    tf_to_go = {}
+    comp_to_go = {}
+    for bid, b in blocks.items():
+        props = b.get("props", {})
+        if b["type"] == "1":
+            go_names[bid] = props.get("m_Name", "") or ""
+            comp_list = props.get("m_Component")
+            if isinstance(comp_list, list):
+                for item in comp_list:
+                    if isinstance(item, dict):
+                        cid = None
+                        sub = item.get("component")
+                        if isinstance(sub, dict) and "fileID" in sub:
+                            cid = str(sub["fileID"])
+                        elif "fileID" in item:
+                            cid = str(item["fileID"])
+                        if cid:
+                            comp_to_go[cid] = bid
+        go_ref = props.get("m_GameObject")
+        if isinstance(go_ref, dict) and "fileID" in go_ref:
+            go_id = str(go_ref["fileID"])
+            if b["type"] in ("4", "224"):
+                go_to_tf[go_id] = bid
+                tf_to_go[bid] = go_id
+    return go_names, go_to_tf, tf_to_go, comp_to_go
+
+
+def _find_go_for_block(fid, block, comp_to_go):
+    """Find which GameObject a block belongs to.
+
+    Returns go_fid string or None.
+    """
+    if block["type"] == "1":
+        return str(fid)
+    sfid = str(fid)
+    if sfid in comp_to_go:
+        return comp_to_go[sfid]
+    go_ref = block.get("props", {}).get("m_GameObject")
+    if isinstance(go_ref, dict) and "fileID" in go_ref and str(go_ref["fileID"]) != "0":
+        return str(go_ref["fileID"])
+    return None
+
+
+def _build_node_path(fid, blocks):
+    """Build full hierarchy path like 'Canvas/Panel/Button' for a block fileID"""
+    block = blocks.get(str(fid))
+    if not block:
+        return ""
+
+    go_names, go_to_tf, tf_to_go, comp_to_go = _build_prefab_index(blocks)
+    go_fid = _find_go_for_block(fid, block, comp_to_go)
+
+    if not go_fid:
+        name = go_names.get(str(fid), "")
+        return name or f"节点({fid})"
+
+    return _walk_hierarchy(go_fid, go_names, go_to_tf, tf_to_go, blocks)
+
+
 def _compare_prefab_trees(old_blocks, new_blocks, guid_map):
     """对比两个版本的 prefab 结构树，返回人类可读的变更列表"""
     all_ids = set(old_blocks.keys()) | set(new_blocks.keys())
@@ -230,28 +364,28 @@ def _compare_prefab_trees(old_blocks, new_blocks, guid_map):
         old = old_blocks.get(fid)
         new = new_blocks.get(fid)
         old_type = old["type"] if old else (new["type"] if new else "")
-        old_name = old["node_name"] if old else (new["node_name"] if new else "")
         comp_name = old["component"] if old else (new["component"] if new else "")
 
-        label_key = f"{old_name or f'节点({fid})'} → {_COMPONENT_NAMES.get(old_type, comp_name)}"
+        merged_blocks = {}
+        merged_blocks.update(old_blocks)
+        merged_blocks.update(new_blocks)
+        hierarchy_path = _build_node_path(fid, merged_blocks)
+        label_key = f"{hierarchy_path} → {_COMPONENT_NAMES.get(old_type, comp_name)}"
 
         if old and not new:
-            # 该块被删除
-            if old_type == "1" and old_name:
+            if old_type == "1":
                 node_changes.setdefault(label_key, []).append("移除节点")
             else:
-                node_changes.setdefault(label_key, []).append("移除组件")
+                node_changes.setdefault(label_key, []).append("移除了组件")
             continue
 
         if new and not old:
-            new_name = new["node_name"]
-            if new["type"] == "1" and new_name:
+            if new["type"] == "1":
                 node_changes.setdefault(label_key, []).append("新增节点")
             else:
-                node_changes.setdefault(label_key, []).append("新增组件")
+                node_changes.setdefault(label_key, []).append("新增了组件")
             continue
 
-        # 都存在，比较 props
         old_props = old["props"]
         new_props = new["props"]
         prop_diffs = _compare_props(old_props, new_props, guid_map)
@@ -260,8 +394,10 @@ def _compare_prefab_trees(old_blocks, new_blocks, guid_map):
 
     result = []
     for label, diffs in node_changes.items():
+        result.append("")
+        result.append(f"{_GRP}{label}")
         for d in diffs:
-            result.append(f"{label} → {d}")
+            result.append(f"{_DTA}{d}")
     return result
 
 
@@ -277,28 +413,24 @@ def _compare_props(old_props, new_props, guid_map):
         if key not in new_props:
             r = _format_prop_change(key, old_val, "", guid_map, deleted=True)
             if r:
-                changes.append(f"删除 {r[3:]}")
+                changes.append(r)
             continue
 
         if key not in old_props:
             r = _format_prop_change(key, "", new_val, guid_map, added=True)
             if r:
-                changes.append(f"新增 {r[3:]}")
+                changes.append(r)
             continue
 
-        # 两边都有
         if old_val == new_val:
             continue
 
-        # 不同类型或不同值
         if isinstance(old_val, dict) and isinstance(new_val, dict):
-            # dict值比较（如 m_Sprite: {guid: xxx, fileID: yyy}）
             if old_val != new_val:
                 r = _format_prop_change(key, str(old_val), str(new_val), guid_map)
                 if r:
                     changes.append(r)
         elif isinstance(old_val, list) and isinstance(new_val, list):
-            # 列表比较
             old_str = _list_summary(old_val)
             new_str = _list_summary(new_val)
             if old_str != new_str:
@@ -315,19 +447,18 @@ def _compare_props(old_props, new_props, guid_map):
 
 
 def _list_summary(lst):
-    """生成列表的简短摘要"""
+    """生成列表的简短摘要，每项单独一行"""
     if not lst:
         return "[]"
-    parts = []
+    if len(lst) == 1:
+        return f"[{lst[0]}]"
+    lines = ["["]
     for item in lst[:5]:
-        if isinstance(item, dict):
-            parts.append(str(item))
-        else:
-            parts.append(str(item))
-    s = ", ".join(parts)
+        lines.append(f"        {item},")
     if len(lst) > 5:
-        s += f", ...({len(lst)}项)"
-    return s
+        lines.append(f"        ...({len(lst)}项)")
+    lines.append("]")
+    return "\n".join(lines)
 
 
 def _format_prop_change(prop, old_val, new_val, guid_map, deleted=False, added=False):
@@ -337,44 +468,44 @@ def _format_prop_change(prop, old_val, new_val, guid_map, deleted=False, added=F
     if prop in _GUID_FIELDS:
         field_cn = _GUID_FIELDS[prop]
         if deleted:
-            return f"移除 {field_cn} 引用"
+            return f"移除了 {field_cn}\n      旧值: [{old_val}]"
         if added:
             new_guid_m = _GUID_IN_TEXT_RE.search(new_val)
             new_name = _resolve_guid(new_guid_m.group(1), guid_map) if new_guid_m else ""
             if new_name:
-                return f"新增 {field_cn}：[{new_name}]"
-            return f"新增 {field_cn} 引用"
+                return f"新增了 {field_cn}\n      新值: [{new_name}]"
+            return f"新增了 {field_cn}"
         old_guid_m = _GUID_IN_TEXT_RE.search(old_val)
         new_guid_m = _GUID_IN_TEXT_RE.search(new_val)
         old_name = _resolve_guid(old_guid_m.group(1), guid_map) if old_guid_m else ""
         new_name = _resolve_guid(new_guid_m.group(1), guid_map) if new_guid_m else ""
         if old_name and new_name and old_name != new_name:
-            return f"修改 {field_cn}：从 [{old_name}] 改为 [{new_name}]"
+            return f"修改了 {field_cn}\n      旧值: [{old_name}]\n      新值: [{new_name}]"
         elif new_name:
-            return f"修改 {field_cn}：改为 [{new_name}]"
-        return f"修改 {field_cn}：已变更"
+            return f"修改了 {field_cn}\n      新值: [{new_name}]"
+        return f"修改了 {field_cn}（已变更）"
 
     if prop in ("m_LocalPosition", "m_LocalRotation", "m_LocalScale"):
         if deleted:
-            return f"移除 {prop_cn}"
+            return f"移除了 {prop_cn}\n      旧值: {_format_vec3(old_val)}"
         if added:
-            return f"新增 {prop_cn}：{_format_vec3(new_val)}"
+            return f"新增了 {prop_cn}\n      新值: {_format_vec3(new_val)}"
         old_v = _format_vec3(old_val)
         new_v = _format_vec3(new_val)
-        return f"修改 {prop_cn}：从 {old_v} 改为 {new_v}"
+        return f"修改了 {prop_cn}\n      旧值: {old_v}\n      新值: {new_v}"
 
     if deleted:
         if old_val and old_val != "{}":
-            return f"移除 {prop_cn}：原值 {old_val}"
-        return f"移除 {prop_cn}"
+            return f"移除了 {prop_cn}\n      旧值: {old_val}"
+        return f"移除了 {prop_cn}"
     if added:
         if new_val and new_val != "{}":
-            return f"新增 {prop_cn}：{new_val}"
-        return f"新增 {prop_cn}"
+            return f"新增了 {prop_cn}\n      新值: {new_val}"
+        return f"新增了 {prop_cn}"
 
     if old_val == new_val:
         return None
-    return f"修改 {prop_cn}：从 {old_val} 改为 {new_val}"
+    return f"修改了 {prop_cn}\n      旧值: {old_val}\n      新值: {new_val}"
 
 
 def _format_vec3(raw):
@@ -560,7 +691,19 @@ def _write_revision_to_file(f, idx, rev_data, source_url):
         display = _shorten_path(source_url, fe["path"])
         f.write(f"\n  [{action_cn.get(fe['action'], fe['action'])}] {display}\n")
         for line_txt in fe["parsed_lines"]:
-            f.write(f"    - {line_txt}\n")
+            if not line_txt:
+                f.write("\n")
+            elif line_txt.startswith(_GRP):
+                f.write(f"    - {line_txt[len(_GRP):]}\n")
+            elif line_txt.startswith(_DTA):
+                lines = line_txt[len(_DTA):].split("\n")
+                for j, sub in enumerate(lines):
+                    if j == 0:
+                        f.write(f"      {sub}\n")
+                    else:
+                        f.write(f"        {sub.lstrip()}\n")
+            else:
+                f.write(f"    - {line_txt}\n")
     f.write("\n")
 
 
@@ -647,6 +790,18 @@ def analyze_source_url(source_url, revisions, target_path,
     return output_file
 
 
+def _read_worker_progress(proc, _log):
+    """读取子进程 stderr 中的进度日志并输出"""
+    try:
+        stderr_text = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+        for line in stderr_text.splitlines():
+            line = line.strip()
+            if line:
+                _log(f"  {line}")
+    except Exception:
+        pass
+
+
 def _run_parallel_analysis(chunks, source_url, guid_map,
                            svn_user, svn_pass, sorted_revs, _log,
                            rev_file_map=None,
@@ -698,6 +853,8 @@ def _run_parallel_analysis(chunks, source_url, guid_map,
             arg_path, res_path, chunk_revs = running[proc]
             to_delete.append(proc)
 
+            _read_worker_progress(proc, _log)
+
             if rc == 0 and os.path.getsize(res_path) > 0:
                 try:
                     with open(res_path, "rb") as f:
@@ -706,8 +863,7 @@ def _run_parallel_analysis(chunks, source_url, guid_map,
                 except Exception as e:
                     _log(f"  子进程结果读取失败: {e}", "warn")
             else:
-                stderr_data = proc.stderr.read() if proc.stderr else b""
-                _log(f"  子进程退出码 {rc}: {stderr_data[:200]}", "warn")
+                _log(f"  子进程退出码 {rc}", "warn")
 
             done += len(chunk_revs)
             if done % 5 == 0 or done == total:

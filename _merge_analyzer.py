@@ -10,6 +10,7 @@ import tempfile
 import pickle
 import time
 import yaml
+import threading
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -41,6 +42,35 @@ _COMPONENT_NAMES = {
     "225": "CanvasScaler",
     "226": "GraphicRaycaster",
 }
+
+_SCRIPT_GUID_RE = re.compile(r"guid:\s*([a-f0-9]+)")
+
+
+def _build_comp_label(comp_type, comp_name, old_block, new_block, guid_map):
+    """构建组件显示标签，MonoBehaviour 尝试显示脚本名称"""
+    default = _COMPONENT_NAMES.get(comp_type, comp_name)
+    if comp_type != "114":
+        return default
+    block = old_block or new_block
+    if not block:
+        return default
+    m_script = block.get("props", {}).get("m_Script")
+    if not isinstance(m_script, dict):
+        return default
+    guid_str = str(m_script.get("guid", ""))
+    if not guid_str:
+        guid_match = _SCRIPT_GUID_RE.search(str(m_script))
+        guid_str = guid_match.group(1) if guid_match else ""
+    if not guid_str:
+        return default
+    resolved = guid_map.get(guid_str, "")
+    if not resolved:
+        return default
+    script_name = os.path.splitext(os.path.basename(resolved.replace("\\", "/")))[0]
+    if script_name:
+        return f"{script_name}"
+    return default
+
 
 # ── 图片/材质/字体/脚本 引用字段名 → 中文名 ──
 _GUID_FIELDS = {
@@ -388,17 +418,22 @@ def _compare_prefab_trees_structured(old_blocks, new_blocks, guid_map):
     all_ids = set(old_blocks.keys()) | set(new_blocks.keys())
     result = []
 
+    # 构建 fileID → 组件名 映射表（一次性，用于 m_Component 列表显示）
+    merged_blocks = {}
+    merged_blocks.update(old_blocks)
+    merged_blocks.update(new_blocks)
+    fileid_label_map = {}
+    for bfid, b in merged_blocks.items():
+        fileid_label_map[bfid] = _build_comp_label(b.get("type", ""), b.get("component", ""), b, b, guid_map)
+
     for fid in all_ids:
         old = old_blocks.get(fid)
         new = new_blocks.get(fid)
         old_type = old["type"] if old else (new["type"] if new else "")
         comp_name = old["component"] if old else (new["component"] if new else "")
 
-        merged_blocks = {}
-        merged_blocks.update(old_blocks)
-        merged_blocks.update(new_blocks)
         hierarchy_path = _build_node_path(fid, merged_blocks)
-        comp_label = _COMPONENT_NAMES.get(old_type, comp_name)
+        comp_label = _build_comp_label(old_type, comp_name, old, new, guid_map)
 
         if old and not new:
             result.append({
@@ -422,7 +457,7 @@ def _compare_prefab_trees_structured(old_blocks, new_blocks, guid_map):
 
         old_props = old["props"]
         new_props = new["props"]
-        prop_diffs = _compare_props_structured(old_props, new_props, guid_map)
+        prop_diffs = _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=fileid_label_map)
         for pd in prop_diffs:
             pd["hierarchy_path"] = hierarchy_path
             pd["comp_label"] = comp_label
@@ -449,7 +484,7 @@ def _format_structured_diffs(structured_list):
     return result
 
 
-def _compare_props_structured(old_props, new_props, guid_map):
+def _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=None):
     """对比两个 props dict，返回结构化变更列表"""
     changes = []
     all_keys = set(old_props.keys()) | set(new_props.keys())
@@ -477,7 +512,7 @@ def _compare_props_structured(old_props, new_props, guid_map):
         if isinstance(old_val, dict) and isinstance(new_val, dict):
             raw = _format_prop_change(key, str(old_val), str(new_val), guid_map) if old_val != new_val else None
         elif isinstance(old_val, list) and isinstance(new_val, list):
-            raw = _format_prop_change(key, _list_summary(old_val), _list_summary(new_val), guid_map)
+            raw = _format_list_diff(key, old_val, new_val, guid_map, fileid_label_map=fileid_label_map)
         else:
             ov = str(old_val) if old_val is not None else ""
             nv = str(new_val) if new_val is not None else ""
@@ -500,6 +535,55 @@ def _list_summary(lst):
     if len(lst) > 5:
         lines.append(f"        ...({len(lst)}项)")
     lines.append("]")
+    return "\n".join(lines)
+
+
+def _resolve_list_item_label(item, fileid_label_map):
+    """从列表项 dict 中提取 fileID 并解析为组件名，失败返回 None"""
+    if not isinstance(item, dict) or not fileid_label_map:
+        return None
+    for v in item.values():
+        if isinstance(v, dict) and "fileID" in v:
+            fid = str(v["fileID"])
+            label = fileid_label_map.get(fid)
+            if label:
+                return label
+    return None
+
+
+def _format_list_diff(key, old_list, new_list, guid_map, fileid_label_map=None):
+    """对比两个列表，只输出差异部分（新增/删除项），跳过相同的项"""
+    prop_cn = _PROPERTY_NAMES.get(key, key)
+
+    def _item_str(item):
+        """将列表项转为可读字符串，尝试解析 fileID"""
+        label = _resolve_list_item_label(item, fileid_label_map) if fileid_label_map else None
+        return label or str(item)
+
+    old_strs = [_item_str(item) for item in old_list]
+    new_strs = [_item_str(item) for item in new_list]
+    old_set = set(old_strs)
+    new_set = set(new_strs)
+
+    removed = [s for s in old_strs if s not in new_set]
+    added = [s for s in new_strs if s not in old_set]
+
+    if not removed and not added:
+        return None
+
+    lines = [f"修改了 {prop_cn}"]
+    if removed:
+        lines.append(f"      移除了 {len(removed)} 项:")
+        for r in removed:
+            lines.append(f"        - {r}")
+    if added:
+        lines.append(f"      新增了 {len(added)} 项:")
+        for a in added:
+            lines.append(f"        + {a}")
+    total_old = len(old_list)
+    total_new = len(new_list)
+    if total_old != total_new:
+        lines.append(f"      (共 {total_old} → {total_new} 项)")
     return "\n".join(lines)
 
 
@@ -725,10 +809,14 @@ def _build_rev_file_map(sorted_revs, rev_file_map, source_url, auth_args):
 
 
 def _run_parallel_squash_revs(rev_chunks, source_url, rev_file_map, svn_user, svn_pass, target_path, _log):
-    """按版本分片启动子进程并行分析，每个 worker 返回 entries"""
+    """启动子进程并行分析，返回所有 entries
+
+    结构对齐 _run_parallel_analysis 的成熟模式
+    """
     worker_script = os.path.join(_script_dir, "_squash_worker.py")
     auth_dict = {"svn_user": svn_user, "svn_pass": svn_pass}
     running = {}
+    stderr_threads = {}
     all_entries = []
 
     for chunk in rev_chunks:
@@ -758,22 +846,63 @@ def _run_parallel_squash_revs(rev_chunks, source_url, rev_file_map, svn_user, sv
             [sys.executable, worker_script, arg_path, res_path],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
         )
-        running[proc] = (arg_path, res_path)
+        running[proc] = (arg_path, res_path, chunk)
+        t = threading.Thread(target=_pipe_stderr_to_log, args=(proc, _log), daemon=True)
+        t.start()
+        stderr_threads[proc] = t
 
-    for proc in running:
-        _read_worker_progress(proc, _log)
-        proc.wait()
-        _, res_path = running[proc]
-        try:
-            with open(res_path, "rb") as f:
-                entries = pickle.load(f)
-                if entries:
-                    all_entries.extend(entries)
-        except Exception as e:
-            _log(f"    读取worker结果失败: {e}", "warn")
+    while running:
+        finished = []
+        for proc in list(running):
+            rc = proc.poll()
+            if rc is None:
+                continue
+            arg_path, res_path, chunk_revs = running[proc]
+            finished.append(proc)
 
-    _cleanup_worker_tempfiles()
+            stderr_threads[proc].join(timeout=2)
+
+            if rc == 0 and os.path.getsize(res_path) > 0:
+                try:
+                    with open(res_path, "rb") as f:
+                        entries = pickle.load(f)
+                        if entries:
+                            all_entries.extend(entries)
+                except Exception as e:
+                    if _log:
+                        _log(f"  子进程结果读取失败: {e}", "warn")
+
+            # 立即删除临时文件
+            for p in (arg_path, res_path):
+                try:
+                    if os.path.exists(p):
+                        os.unlink(p)
+                        _WORKER_TEMPFILES.remove(p)
+                except (ValueError, OSError):
+                    pass
+
+        for proc in finished:
+            del running[proc]
+            del stderr_threads[proc]
+
+        if not finished:
+            time.sleep(0.2)
+
     return all_entries
+
+
+def _pipe_stderr_to_log(proc, _log):
+    """线程函数：逐行读取子进程 stderr 并实时输出"""
+    if not _log or not proc.stderr:
+        return
+    try:
+        for line in iter(proc.stderr.readline, b""):
+            text = line.decode("utf-8", errors="replace").rstrip()
+            if text:
+                _log(text)
+        proc.stderr.close()
+    except Exception:
+        pass
 
 
 def _analyze_single_rev_prefabs(rev, file_list, source_url, auth_args, target_path, _log):
@@ -1091,18 +1220,6 @@ def analyze_source_url(source_url, revisions, target_path,
     return output_file
 
 
-def _read_worker_progress(proc, _log):
-    """读取子进程 stderr 中的进度日志并输出"""
-    try:
-        stderr_text = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
-        for line in stderr_text.splitlines():
-            line = line.strip()
-            if line:
-                _log(f"  {line}")
-    except Exception:
-        pass
-
-
 def _run_parallel_analysis(chunks, source_url, guid_map,
                            svn_user, svn_pass, sorted_revs, _log,
                            rev_file_map=None,
@@ -1110,7 +1227,8 @@ def _run_parallel_analysis(chunks, source_url, guid_map,
     """启动子进程并行分析，返回按 rev 排序的结果列表"""
     worker_script = os.path.join(_script_dir, "_merge_analyze_worker.py")
     auth_dict = {"svn_user": svn_user, "svn_pass": svn_pass}
-    running = {}  # Popen → (arg_path, res_path, revisions_in_chunk)
+    running = {}
+    stderr_threads = {}
     all_data = []
 
     for chunk in chunks:
@@ -1142,19 +1260,22 @@ def _run_parallel_analysis(chunks, source_url, guid_map,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
         )
         running[proc] = (arg_path, res_path, chunk)
+        t = threading.Thread(target=_pipe_stderr_to_log, args=(proc, _log), daemon=True)
+        t.start()
+        stderr_threads[proc] = t
 
     done = 0
     total = len(sorted_revs)
     while running:
-        to_delete = []
+        finished = []
         for proc in list(running):
             rc = proc.poll()
             if rc is None:
                 continue
             arg_path, res_path, chunk_revs = running[proc]
-            to_delete.append(proc)
+            finished.append(proc)
 
-            _read_worker_progress(proc, _log)
+            stderr_threads[proc].join(timeout=2)
 
             if rc == 0 and os.path.getsize(res_path) > 0:
                 try:
@@ -1166,17 +1287,26 @@ def _run_parallel_analysis(chunks, source_url, guid_map,
             else:
                 _log(f"  子进程退出码 {rc}", "warn")
 
+            # 立即删除临时文件
+            for p in (arg_path, res_path):
+                try:
+                    if os.path.exists(p):
+                        os.unlink(p)
+                        _WORKER_TEMPFILES.remove(p)
+                except (ValueError, OSError):
+                    pass
+
             done += len(chunk_revs)
             if done % 5 == 0 or done == total:
                 _log(f"  分析进度: {done}/{total}")
 
-        for proc in to_delete:
+        for proc in finished:
             del running[proc]
+            del stderr_threads[proc]
 
-        if not to_delete:
+        if not finished:
             time.sleep(0.2)
 
-    _cleanup_worker_tempfiles()
     all_data.sort(key=lambda x: x.get("rev", 0), reverse=True)
     return all_data
 

@@ -115,6 +115,12 @@
 - **解决方案**：① `_parse_unity_yaml(text, target_file_ids=None)` 新增参数，在 YAML 解析前先用正则提取 fileID，不在目标集中的块直接 `continue` 跳过；② 用 `yaml.load(text, Loader=yaml.CSafeLoader)`（C 实现）替代 `yaml.safe_load`，快 5-10x；③ 如果 CSafeLoader 失败（罕见情况），回退 `yaml.safe_load`；④ `_collect_parse_ids` 只标记"变化的块 + GameObject + Transform"需要解析。实测 300-blocks prefab 仅改 6 个块时，解析时间从 0.123s → 0.040s（3.0x 加速）
 - **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
 
+### 输出可读性：列表 diff 显示组件名和脚本名而非 fileID
+- **场景**：`m_Component` 列表变更和 `MonoBehaviour` 组件标签显示的是 `{'component': {'fileID': 114590987731970414}}` 或 `MonoBehaviour/脚本`，难以快速定位
+- **根因**：`_format_list_diff` 直接用 `str(item)` 输出原始 dict；组件标签统一显示为 `MonoBehaviour/脚本`，没有显示具体脚本名
+- **解决方案**：① 新增 `_build_comp_label` 函数，对 type 114（MonoBehaviour）从 `m_Script.guid` 通过 `guid_map` 反查 `.cs` 文件路径，显示纯文件名；② 在 `_compare_prefab_trees_structured` 中一次性构建 `fileid_label_map`，将所有块 fileID → 组件名/脚本名；③ `_format_list_diff` 新增 `_resolve_list_item_label`，遍历列表项提取 fileID 查映射表，显示为组件名而非原始 dict；④ 新版本第一次迭代时构建 `fileid_label_map` 避免循环内重复构建
+- **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
+
 ### 多版本语义分析 squash 汇总模式（最终方案）
 - **场景**：选中多个版本做语义分析时，需要汇总输出所有修改，但相同文件相同属性只保留最新版本的值
 - **根因**：最初直接用 base=最早版本-1 vs latest=最晚版本 做一次对比（中间版本回滚被吞掉）；后来改为逐版本分析结构化 diff 按 (fileID, prop_key) 去重，过于复杂且易出错

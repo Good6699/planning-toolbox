@@ -109,6 +109,10 @@
 - **场景**：`_merge_analyzer.py` 的 `_parse_unity_yaml` 中 type 字段全部解析为空字符串，导致无法识别 GameObject 类型块，节点路径退化为 `节点(1229026825479412)`
 - **根因**：① `orig_docs = orig_text.strip().split("\n--- ")` 包含 `%YAML`/`%TAG` 头行为第 0 元素，`docs` 从预处理后文本 split 不含头行，两者索引错位 1；② 回退正则 `re.search(r'&(\d+)', doc)` 只提取 fileID 不提取 comp_type；③ YAML 预处理后 `--- &100001` 的 dict 第一个 key 是锚点引用（值为 None），原代码 break 后取到了错误数据
 - **解决方案**：① split 前从 `orig_text` 移除 `%YAML`/`%TAG` 头行使索引对齐；② 改用 `!u!(\d+)\s+&(\d+)` 正则同时提取 type+fileID；③ YAML 解析时跳过 `not isinstance(v, dict)` 的 key
+### Unity YAML 解析优化：target_file_ids 过滤 + CSafeLoader
+- **场景**：`_merge_analyzer.py` 对比两个版本 prefab 时，全量 YAML 解析 300+ 块但实际只改了 2-3 个属性，耗时在 YAML 解析上
+- **根因**：`_parse_unity_yaml` 每次调用都全量解析所有块；`yaml.safe_load` 是纯 Python 实现，速度慢
+- **解决方案**：① `_parse_unity_yaml(text, target_file_ids=None)` 新增参数，在 YAML 解析前先用正则提取 fileID，不在目标集中的块直接 `continue` 跳过；② 用 `yaml.load(text, Loader=yaml.CSafeLoader)`（C 实现）替代 `yaml.safe_load`，快 5-10x；③ 如果 CSafeLoader 失败（罕见情况），回退 `yaml.safe_load`；④ `_collect_parse_ids` 只标记"变化的块 + GameObject + Transform"需要解析。实测 300-blocks prefab 仅改 6 个块时，解析时间从 0.123s → 0.040s（3.0x 加速）
 - **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
 
 ### 多版本语义分析 squash 汇总模式

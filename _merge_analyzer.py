@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """SVN 语义变更分析模块 — 独立于合并逻辑的纯净分析引擎"""
+import hashlib
 import os
 import sys
 import re
@@ -189,54 +190,71 @@ def _preprocess_unity_yaml(text):
     return "\n".join(result)
 
 
-def _parse_unity_yaml(text):
-    """解析 Unity .prefab/.unity 为 {fileID: {type, node_name, component, props}}"""
+def _extract_file_id(orig_doc, doc_text):
+    """从 YAML 文档头中提取 (comp_type, file_id)，支持多种格式"""
+    m = _YAML_DOC_RE.match(orig_doc) or _YAML_DOC_RE.search(orig_doc)
+    if m:
+        return m.group(1), m.group(2)
+    m2 = re.search(r'!u!(\d+)\s+&(\d+)', orig_doc)
+    if m2:
+        return m2.group(1), m2.group(2)
+    m3 = re.search(r'&(\d+)', doc_text)
+    if m3:
+        return "", m3.group(1)
+    return None, None
+
+
+def _unify_yaml_doc(doc_text):
+    """确保 YAML 文档以 --- 开头"""
+    if not doc_text.startswith("---"):
+        return "--- " + doc_text
+    return doc_text
+
+
+def _parse_unity_yaml(text, target_file_ids=None):
+    """解析 Unity .prefab/.unity 为 {fileID: {type, node_name, component, props}}
+
+    如果指定 target_file_ids，只解析这些 fileID 的块（大幅加速）
+    使用 CSafeLoader（C 实现，比 SafeLoader 快 5-10 倍）
+    """
     if not text or not text.strip():
         return {}
-    # 保留原始文本用于提取 fileID 和组件类型
-    orig_text = text
-    # 预处理去掉 Unity 自定义标签
-    text = _preprocess_unity_yaml(text)
     # 预处理前去匹配 fileID 和组件类型
-    # 移除 %YAML/%TAG 头行，使 orig_docs 与 docs 索引对齐
-    orig_lines = [ln for ln in orig_text.splitlines() if not ln.startswith("%YAML") and not ln.startswith("%TAG")]
+    # 移除 %YAML/%TAG 头行
+    orig_lines = [ln for ln in text.splitlines() if not ln.startswith("%YAML") and not ln.startswith("%TAG")]
     orig_clean = "\n".join(orig_lines)
     orig_docs = orig_clean.strip().split("\n--- ")
+    # 预处理去掉 Unity 自定义标签
+    processed_text = _preprocess_unity_yaml(text)
     blocks = {}
-    docs = text.strip().split("\n--- ")
+    docs = processed_text.strip().split("\n--- ")
     for i, doc in enumerate(docs):
         doc = doc.strip()
         if not doc:
             continue
-        try:
-            full_text = doc
-            if not full_text.startswith("---"):
-                full_text = "--- " + full_text
-            data = yaml.safe_load(full_text)
-            if not isinstance(data, dict):
-                continue
-        except yaml.YAMLError:
+
+        # 从原始文本提取 fileID（在 YAML 解析前判断是否跳过）
+        orig_doc = orig_docs[i] if i < len(orig_docs) else ""
+        comp_type, file_id = _extract_file_id(orig_doc, doc)
+        if file_id is None:
             continue
 
-        # 从原始文本提取 fileID 和组件类型
-        orig_doc = orig_docs[i] if i < len(orig_docs) else ""
-        m = _YAML_DOC_RE.match(orig_doc) or _YAML_DOC_RE.search(orig_doc)
-        if not m:
-            # 尝试用 !u!N &fileID 回退（split 后 --- 前缀丢失）
-            m2 = re.search(r'!u!(\d+)\s+&(\d+)', orig_doc)
-            if m2:
-                comp_type = m2.group(1)
-                file_id = m2.group(2)
-            else:
-                # 最后回退：仅提取 fileID
-                m3 = re.search(r'&(\d+)', doc)
-                if not m3:
+        # 如果指定了目标 fileID 且不在其中，跳过（核心加速）
+        if target_file_ids is not None and file_id not in target_file_ids:
+            continue
+
+        try:
+            full_text = _unify_yaml_doc(doc)
+            data = yaml.load(full_text, Loader=yaml.CSafeLoader)
+            if not isinstance(data, dict):
+                continue
+        except Exception:
+            try:
+                data = yaml.safe_load(full_text)
+                if not isinstance(data, dict):
                     continue
-                file_id = m3.group(1)
-                comp_type = ""
-        else:
-            comp_type = m.group(1)
-            file_id = m.group(2)
+            except yaml.YAMLError:
+                continue
 
         node_name = ""
         component = ""
@@ -581,6 +599,96 @@ def _strip_repo_prefix(source_url, file_path):
     return fp
 
 
+_RAW_BLOCK_RE = re.compile(
+    r'^--- !u!(\d+) &(\d+).*?\n(?=(?:--- !u!|\Z))',
+    re.MULTILINE | re.DOTALL
+)
+
+
+def _extract_raw_blocks(text):
+    """Split Unity YAML text into {fileID: raw_block_text} by --- !u! markers"""
+    blocks = {}
+    for m in _RAW_BLOCK_RE.finditer(text):
+        comp_type = m.group(1)
+        file_id = m.group(2)
+        blocks[file_id] = {"raw": m.group(0), "type": comp_type}
+    return blocks
+
+
+def _detect_changed_blocks(old_raw, new_raw, _log=None):
+    """Compare raw block hashes to find which fileIDs changed between two versions.
+
+    Returns (all_ids, changed_ids, changed_count_log)
+    """
+    all_ids = set(old_raw.keys()) | set(new_raw.keys())
+    changed_ids = set()
+    for fid in all_ids:
+        if fid not in old_raw or fid not in new_raw:
+            changed_ids.add(fid)
+        else:
+            old_md5 = hashlib.md5(old_raw[fid]["raw"].encode("utf-8")).hexdigest()
+            new_md5 = hashlib.md5(new_raw[fid]["raw"].encode("utf-8")).hexdigest()
+            if old_md5 != new_md5:
+                changed_ids.add(fid)
+
+    if _log and changed_ids:
+        _log(f"    变化块 fileID: {', '.join(sorted(changed_ids, key=int)[:10])}{'...' if len(changed_ids) > 10 else ''}")
+    return all_ids, changed_ids
+
+
+def _collect_parse_ids(all_ids, changed_ids, old_raw, new_raw):
+    """Determine which blocks need YAML parsing: changed blocks + GameObjects + Transforms (for hierarchy)"""
+    parse_old_ids = set()
+    parse_new_ids = set()
+    for fid in all_ids:
+        b_old = old_raw.get(fid)
+        b_new = new_raw.get(fid)
+        btype = (b_old or b_new)["type"]
+        # Always parse: changes + GameObjects + Transforms (hierarchy needed for paths)
+        if fid in changed_ids or btype in ("1", "4", "224"):
+            if fid in old_raw:
+                parse_old_ids.add(fid)
+            if fid in new_raw:
+                parse_new_ids.add(fid)
+    return parse_old_ids, parse_new_ids
+
+
+def _compare_prefab_texts_fast(old_text, new_text, guid_map, _log=None):
+    """对比两个版本的 prefab 文本，只 YAML 解析有变化的块以加速
+
+    Strategy: 先按 fileID 拆分为原始文本块 → MD5 哈希对比
+    → 只有哈希不同的块才做完整的 YAML 解析 + 属性对比
+    → GameObject 块（类型1）始终解析（节点路径需要）
+    """
+    old_raw = _extract_raw_blocks(old_text)
+    new_raw = _extract_raw_blocks(new_text)
+    all_ids, changed_ids = _detect_changed_blocks(old_raw, new_raw, _log=_log)
+
+    if _log:
+        total = len(all_ids)
+        changed = len(changed_ids)
+        _log(f"    总 {total} 个块，{changed} 个有变化，跳过 {total - changed} 个")
+
+    parse_old_ids, parse_new_ids = _collect_parse_ids(all_ids, changed_ids, old_raw, new_raw)
+
+    old_parsed = _parse_unity_yaml_blocks(old_text, parse_old_ids)
+    new_parsed = _parse_unity_yaml_blocks(new_text, parse_new_ids)
+
+    return _compare_prefab_trees(old_parsed, new_parsed, guid_map)
+
+
+def _parse_unity_yaml_blocks(text, file_ids):
+    """解析 YAML 文本中指定 fileID 的块，返回 {fileID: {type, node_name, component, props}}"""
+    if not text or not text.strip() or not file_ids:
+        return {}
+    full = _parse_unity_yaml(text, target_file_ids=file_ids)
+    result = {}
+    for fid in file_ids:
+        if fid in full:
+            result[fid] = full[fid]
+    return result
+
+
 def _compare_file_between_revs(file_url, fname, base_rev, latest_rev, auth_args, guid_map, target_path, _log=None):
     """下载文件在 base_rev 和 latest_rev 两个版本，直接对比 YAML 树差异"""
     if _log:
@@ -599,15 +707,12 @@ def _compare_file_between_revs(file_url, fname, base_rev, latest_rev, auth_args,
 
     if _log:
         _log(f"  对比 {fname} ({base_rev} → {latest_rev})...")
-    old_blocks = _parse_unity_yaml(old_text)
-    new_blocks = _parse_unity_yaml(new_text)
-
     all_guids = _extract_guids_from_diff(old_text + new_text)
     lazy_map = {}
     if all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
         lazy_map = _find_meta_for_guids(all_guids, target_path)
     lazy_map.update(guid_map)
-    return _compare_prefab_trees(old_blocks, new_blocks, lazy_map)
+    return _compare_prefab_texts_fast(old_text, new_text, lazy_map, _log=_log)
 
 
 def _collect_semantic_files_from_revs(sorted_revs, source_url, auth_args, rev_file_map):
@@ -696,18 +801,13 @@ def _analyze_prefab_file(cf, source_url, rev, auth_args, guid_map, target_path, 
         new_text = ""
 
     if _log:
-        _log(f"  r{rev} {fname}: 解析 YAML...")
-    old_blocks = _parse_unity_yaml(old_text)
-    new_blocks = _parse_unity_yaml(new_text)
-
-    if _log:
-        _log(f"  r{rev} {fname}: 对比中 ({len(old_blocks)}→{len(new_blocks)} 个块)...")
+        _log(f"  r{rev} {fname}: 快速对比中...")
     all_guids = _extract_guids_from_diff(old_text + new_text)
     lazy_map = {}
     if all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
         lazy_map = _find_meta_for_guids(all_guids, target_path)
     lazy_map.update(guid_map)
-    return _compare_prefab_trees(old_blocks, new_blocks, lazy_map)
+    return _compare_prefab_texts_fast(old_text, new_text, lazy_map, _log=_log)
 
 
 def _analyze_revision_data(rev, source_url, guid_map, auth_args, file_list=None, target_path=None, _log=None):

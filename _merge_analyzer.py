@@ -581,6 +581,99 @@ def _strip_repo_prefix(source_url, file_path):
     return fp
 
 
+def _compare_file_between_revs(file_url, fname, base_rev, latest_rev, auth_args, guid_map, target_path, _log=None):
+    """下载文件在 base_rev 和 latest_rev 两个版本，直接对比 YAML 树差异"""
+    if _log:
+        _log(f"  下载 {fname} r{base_rev}...")
+    try:
+        old_text = _run_svn(["cat", "-r", str(base_rev), file_url] + auth_args, timeout=120)
+    except RuntimeError:
+        old_text = ""
+
+    if _log:
+        _log(f"  下载 {fname} r{latest_rev}...")
+    try:
+        new_text = _run_svn(["cat", "-r", str(latest_rev), file_url] + auth_args, timeout=120)
+    except RuntimeError:
+        new_text = ""
+
+    if _log:
+        _log(f"  对比 {fname} ({base_rev} → {latest_rev})...")
+    old_blocks = _parse_unity_yaml(old_text)
+    new_blocks = _parse_unity_yaml(new_text)
+
+    all_guids = _extract_guids_from_diff(old_text + new_text)
+    lazy_map = {}
+    if all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
+        lazy_map = _find_meta_for_guids(all_guids, target_path)
+    lazy_map.update(guid_map)
+    return _compare_prefab_trees(old_blocks, new_blocks, lazy_map)
+
+
+def _collect_semantic_files_from_revs(sorted_revs, source_url, auth_args, rev_file_map):
+    """收集多个版本中变更的语义文件（.prefab/.unity/.cs），返回 {path: action}"""
+    files = {}
+    for rev in sorted_revs:
+        file_list = (rev_file_map or {}).get(str(rev))
+        if file_list is None:
+            try:
+                file_list = _get_changed_files(source_url, rev, auth_args)
+            except RuntimeError:
+                continue
+        for cf in file_list:
+            ext = os.path.splitext(cf["path"])[1].lower()
+            if ext in (".prefab", ".unity", ".cs"):
+                if cf["path"] not in files:
+                    files[cf["path"]] = cf["action"]
+    return files
+
+
+def _analyze_squash_revisions(sorted_revs, source_url, guid_map, auth_args, rev_file_map, target_path, _log=None):
+    """对多个版本做汇总分析：base=min_rev-1 vs latest=max_rev，只输出净变化"""
+    min_rev = min(sorted_revs)
+    max_rev = max(sorted_revs)
+    base_rev = max(1, min_rev - 1)
+
+    if _log:
+        _log(f"汇总模式：{len(sorted_revs)} 个版本，基准 r{base_rev}，最新 r{max_rev}")
+
+    semantic_files = _collect_semantic_files_from_revs(sorted_revs, source_url, auth_args, rev_file_map)
+
+    result = {
+        "rev": f"{min_rev}-{max_rev}",
+        "author": "",
+        "date": "",
+        "msg": f"汇总 {len(sorted_revs)} 个版本 (r{min_rev} → r{max_rev}) 的变更",
+        "files": [],
+        "_squash": True,
+    }
+
+    for path, action in semantic_files.items():
+        entry = {"path": path, "action": action, "parsed_lines": []}
+        ext = os.path.splitext(path)[1].lower()
+        if ext in (".prefab", ".unity"):
+            rel_path = _strip_repo_prefix(source_url, path)
+            file_url = source_url.rstrip("/") + "/" + rel_path
+            fname = os.path.basename(path)
+            try:
+                parsed = _compare_file_between_revs(file_url, fname, base_rev, max_rev, auth_args, guid_map, target_path, _log=_log)
+                entry["parsed_lines"] = parsed
+            except RuntimeError as e:
+                entry["parsed_lines"] = [f"(分析失败: {e})"]
+        elif ext == ".cs":
+            rel_path = _strip_repo_prefix(source_url, path)
+            file_url = source_url.rstrip("/") + "/" + rel_path
+            try:
+                diff_raw = _run_svn(["diff", "-c", str(max_rev), file_url] + auth_args, timeout=120)
+                if diff_raw.strip():
+                    entry["parsed_lines"] = _parse_cs_diff(diff_raw)
+            except RuntimeError as e:
+                entry["parsed_lines"] = [f"(分析失败: {e})"]
+        result["files"].append(entry)
+
+    return result
+
+
 def _analyze_prefab_file(cf, source_url, rev, auth_args, guid_map, target_path, _log=None):
     """分析 .prefab/.unity 文件的语义变更（下载旧版+新版，YAML 树对比）"""
     rel_path = _strip_repo_prefix(source_url, cf["path"])
@@ -676,11 +769,18 @@ def _shorten_path(source_url, file_path):
 
 def _write_revision_to_file(f, idx, rev_data, source_url):
     """将单个版本的结构化数据写入输出文件"""
-    f.write(f"{'─' * 56}\n")
-    f.write(f"#{idx+1}  r{rev_data['rev']} | {rev_data['author']} | {rev_data['date']}\n")
-    if rev_data["msg"]:
-        f.write(f"备注：{rev_data['msg']}\n")
-    f.write(f"{'─' * 56}\n")
+    is_squash = rev_data.get("_squash", False)
+
+    if is_squash:
+        f.write(f"{'─' * 56}\n")
+        f.write(f"  {rev_data['msg']}\n")
+        f.write(f"{'─' * 56}\n")
+    else:
+        f.write(f"{'─' * 56}\n")
+        f.write(f"#{idx+1}  r{rev_data['rev']} | {rev_data['author']} | {rev_data['date']}\n")
+        if rev_data["msg"]:
+            f.write(f"备注：{rev_data['msg']}\n")
+        f.write(f"{'─' * 56}\n")
 
     if not rev_data["files"]:
         f.write("  筛选后无可分析文件\n\n")
@@ -757,24 +857,32 @@ def analyze_source_url(source_url, revisions, target_path,
 
     _log(f"共 {len(sorted_revs)} 个版本待分析")
 
-    max_workers = min(os.cpu_count() or 4, len(sorted_revs))
-    chunks = _split_revisions(sorted_revs, max_workers)
-
-    if len(chunks) <= 1:
-        _log("版本数较少，单进程直接分析...")
-        all_results = []
-        for idx, rev in enumerate(sorted_revs):
-            _log(f"正在分析 r{rev} ({idx+1}/{len(sorted_revs)})...")
-            file_list = (rev_file_map or {}).get(str(rev))
-            rd = _analyze_revision_data(rev, source_url, {}, auth_args, file_list=file_list, target_path=target_path, _log=_log)
-            all_results.append(rd)
-    else:
-        _log(f"启动 {len(chunks)} 个子进程并行分析...")
-        all_results = _run_parallel_analysis(
-            chunks, source_url, {}, svn_user, svn_pass, sorted_revs, _log,
+    if len(sorted_revs) > 1:
+        _log(f"多版本模式（{len(sorted_revs)} 个版本），采用汇总分析（基准 r{max(1, min(sorted_revs)-1)} → 最新 r{max(sorted_revs)}）")
+        all_results = [_analyze_squash_revisions(
+            sorted_revs, source_url, {}, auth_args,
             rev_file_map=rev_file_map or {},
-            target_path=target_path
-        )
+            target_path=target_path, _log=_log
+        )]
+    else:
+        max_workers = min(os.cpu_count() or 4, len(sorted_revs))
+        chunks = _split_revisions(sorted_revs, max_workers)
+
+        if len(chunks) <= 1:
+            _log("单进程直接分析...")
+            all_results = []
+            for idx, rev in enumerate(sorted_revs):
+                _log(f"正在分析 r{rev} ({idx+1}/{len(sorted_revs)})...")
+                file_list = (rev_file_map or {}).get(str(rev))
+                rd = _analyze_revision_data(rev, source_url, {}, auth_args, file_list=file_list, target_path=target_path, _log=_log)
+                all_results.append(rd)
+        else:
+            _log(f"启动 {len(chunks)} 个子进程并行分析...")
+            all_results = _run_parallel_analysis(
+                chunks, source_url, {}, svn_user, svn_pass, sorted_revs, _log,
+                rev_file_map=rev_file_map or {},
+                target_path=target_path
+            )
 
     with open(output_file, "w", encoding="utf-8") as f:
         _write_header(f, source_url, target_path, sorted_revs)

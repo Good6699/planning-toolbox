@@ -110,6 +110,12 @@
 - **根因**：① `orig_docs = orig_text.strip().split("\n--- ")` 包含 `%YAML`/`%TAG` 头行为第 0 元素，`docs` 从预处理后文本 split 不含头行，两者索引错位 1；② 回退正则 `re.search(r'&(\d+)', doc)` 只提取 fileID 不提取 comp_type；③ YAML 预处理后 `--- &100001` 的 dict 第一个 key 是锚点引用（值为 None），原代码 break 后取到了错误数据
 - **解决方案**：① split 前从 `orig_text` 移除 `%YAML`/`%TAG` 头行使索引对齐；② 改用 `!u!(\d+)\s+&(\d+)` 正则同时提取 type+fileID；③ YAML 解析时跳过 `not isinstance(v, dict)` 的 key
 - **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
+
+### 多版本语义分析 squash 汇总模式
+- **场景**：选中多个版本做语义分析时，之前逐个版本输出，同一节点的多次修改会重复出现（如 r103 改了 X，r105 又改了 X，两个版本分开显示）
+- **根因**：`analyze_source_url` 对每个版本分别调用 `_analyze_revision_data`，单独对比 `rev-1 → rev`，不感知其他版本的变更
+- **解决方案**：当选中版本数 > 1 时，改用 squash 模式：base = 最早修订号 - 1，latest = 最晚修订号，直接下载 base 和 latest 两个版本的完整文件做一次 YAML 树对比，输出净变化。中间版本的同属性多次修改被自动合并，只保留最终值
+- **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
 - Texts.xlsm 的 header 列名是 ::ID:: 和 ::SC::（带 :: 前后缀），列名匹配必须包含 ::ID:: 和 ::SC:: 才能正确识别
 - **Windows文件名禁止冒号**：cache_key拼入 `::ID::` 等含冒号的列名后作为文件名，Windows拒绝创建（`OSError [Errno 22]`），必须用 `_safe_cache_key()` 替换非法字符。`except: pass` 吞掉此类异常会导致缓存永远为空且无报错。
 - **多进程IPC开销**：worker返回parsed dict（18MB/个），32个pair需传1.15GB数据到主进程，严重影响性能。应让worker直接写磁盘缓存，只返回轻量结果（diff_rows + 元数据）。

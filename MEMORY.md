@@ -276,6 +276,17 @@
   10. `api_merge_run` 改用映射解析 + `resolve_target_path` 双保险
 - **涉及文件**：[toolbox_config.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_config.py)、[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### _log_queues 内存泄漏修复——worker 线程队列只增不减
+- **场景**：2026-05-25 用户反馈页面非常卡，关掉应用就不卡了。每跑一次语义分析/合并/上传/workflow，`_log_queues` 就永久存一个 Queue，逐渐累积到几十个，几十 MB 日志字符串 + 几十个 idle SSE 线程撑爆内存
+- **根因**：只有 `_run_svn_task` 一个 worker 正确调用了 `_log_queues.pop()`（L326），其余 5 个 worker（`_run_upload_copy`、`_run_wf_task`、`_merge_query_worker`、`_merge_worker`、`_merge_analyze_worker`）在 `finally` 中只调了 `q.put(None)`，没有 `_log_queues.pop(task_id, None)`。此外 `api_log_stream` 的 SSE 生成器在客户端断开时也不清理队列。前端 4 处 `new EventSource` 在多次点击时旧连接可能未被关闭
+- **解决方案**：
+  1. 所有 5 个 worker 线程的 `finally` 加 `_log_queues.pop(task_id, None)`
+  2. `api_log_stream` 的 SSE 生成器外包 `try/finally`，客户端断开时自动 `_log_queues.pop()`
+  3. 前端 4 处 EventSource 创建前先 `window._esXxx?.close()` 关闭旧连接，完成后 `window._esXxx = null`
+  4. 注意：`_run_upload_copy` 原无 `task_id` 参数，需加参并从调用处传入
+- **关键教训**：SSE 日志队列是所有操作共用的全局 dict，每漏一个 worker 的 pop 就永久泄露一个 Queue。检查泄漏的穷举法：搜索每个 `queue.Queue()` 创建处，确认各自有对应的 `pop()`。前端 EventSource 用 `window._xxx` 全局变量管理，创建前先 close 旧实例，防止快速连续点击造成多个长连接
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ### GRAPH_REPORT.md 图谱报告修复——自定义可读摘要
 - **场景**：GRAPH_REPORT.md 始终为空（0 字节）。每次 graphify update 静默完成但无报告输出，无法用于辅助理解代码结构
 - **根因**：`graphify/report.py` 的 `generate()` 依赖社区聚类结果输出报告。旧图谱累积了 87,526 个节点（其中 96% 来自 `py_modules/` 等外部库），`cluster(G)` 对 87K 节点超时/内存不足，导致报告生成失败。且 `graphify_quick.py` 的 `to_json()` 未传 `force=True`，全量重建时被安全检查阻止覆盖

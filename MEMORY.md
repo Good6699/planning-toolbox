@@ -121,6 +121,12 @@
 - **解决方案**：① 新增 `_build_comp_label` 函数，对 type 114（MonoBehaviour）从 `m_Script.guid` 通过 `guid_map` 反查 `.cs` 文件路径，显示纯文件名；② 在 `_compare_prefab_trees_structured` 中一次性构建 `fileid_label_map`，将所有块 fileID → 组件名/脚本名；③ `_format_list_diff` 新增 `_resolve_list_item_label`，遍历列表项提取 fileID 查映射表，显示为组件名而非原始 dict；④ 新版本第一次迭代时构建 `fileid_label_map` 避免循环内重复构建
 - **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
 
+### 输出可读性：m_Component 列表增删 flatten 到单行 + 内置 uGUI 组件名识别
+- **场景**：GameObject 节点上 m_Component 列表变更显示层级过多（3 行：节点标签 → 修改了 m_Component → 增删详情）；Unity 内置组件（Text、Button 等）没有 .meta 文件，只显示 MonoBehaviour/脚本
+- **根因**：m_Component 变更被拆成 label + 子行，行数过多；内置 uGUI 组件没有 .meta 文件，guid_map 查不到
+- **解决方案**：① `_format_structured_diffs` 改用 `_build_diff_label` 生成标签，对 GameObject/节点 的 m_Component 跳过"修改了 m_Component"子行，直接用增删描述做标签（如 "移除 1 项: - ContentSizeFitter"）；② `_build_diff_label` 对 GameObject/节点 去掉尾部 `→ GameObject/节点`，直接显示路径；③ 新增 `_UGUI_BUILTIN_FILEIDS`（26 个 uGUI 内置组件 fileID→名称），在 guid_map 查不到时作为 fallback；④ 不改变原有按需扫描逻辑，不引入全量扫描
+- **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
+
 ### 多版本语义分析 squash 汇总模式（最终方案）
 - **场景**：选中多个版本做语义分析时，需要汇总输出所有修改，但相同文件相同属性只保留最新版本的值
 - **根因**：最初直接用 base=最早版本-1 vs latest=最晚版本 做一次对比（中间版本回滚被吞掉）；后来改为逐版本分析结构化 diff 按 (fileID, prop_key) 去重，过于复杂且易出错

@@ -45,6 +45,36 @@ _COMPONENT_NAMES = {
 
 _SCRIPT_GUID_RE = re.compile(r"guid:\s*([a-f0-9]+)")
 
+# Unity 内置 uGUI 组件 fileID 映射（guid: f70555f144d8491a825f0804e09c671c = UnityEngine.UI.dll）
+_UGUI_BUILTIN_FILEIDS = {
+    1392445389: "Button",
+    1980459831: "CanvasScaler",
+    1741964061: "ContentSizeFitter",
+    853051423: "Dropdown",
+    -619905303: "EventSystem",
+    383007879: "Graphic",
+    1301386320: "GraphicRaycaster",
+    -405508275: "HorizontalLayoutGroup",
+    812294440: "HorizontalOrVerticalLayoutGroup",
+    -765806418: "Image",
+    575553740: "InputField",
+    1679637790: "LayoutElement",
+    -555945567: "LayoutGroup",
+    -1200242548: "Mask",
+    -1493381411: "MaskableGraphic",
+    -900027084: "Outline",
+    1849938685: "PositionAsUV1",
+    -98529514: "RawImage",
+    -146154839: "RectMask2D",
+    -2061169968: "Scrollbar",
+    -2041669170: "ScrollRect",
+    -2095666955: "GridLayoutGroup",
+    -1596909063: "Slider",
+    708705254: "Text",
+    -1640532299: "Toggle",
+    -194418981: "VerticalLayoutGroup",
+}
+
 
 def _build_comp_label(comp_type, comp_name, old_block, new_block, guid_map):
     """构建组件显示标签，MonoBehaviour 尝试显示脚本名称"""
@@ -63,6 +93,13 @@ def _build_comp_label(comp_type, comp_name, old_block, new_block, guid_map):
         guid_str = guid_match.group(1) if guid_match else ""
     if not guid_str:
         return default
+    # Unity 内置 uGUI 组件：用 fileID 查映射表
+    if guid_str == "f70555f144d8491a825f0804e09c671c":
+        file_id = m_script.get("fileID")
+        if isinstance(file_id, int) and file_id in _UGUI_BUILTIN_FILEIDS:
+            return _UGUI_BUILTIN_FILEIDS[file_id]
+        return default
+    # 自定义脚本：查 guid_map
     resolved = guid_map.get(guid_str, "")
     if not resolved:
         return default
@@ -441,7 +478,7 @@ def _compare_prefab_trees_structured(old_blocks, new_blocks, guid_map):
                 "comp_label": comp_label,
                 "fileID": fid,
                 "prop_key": "__node__",
-                "sub_lines": ["移除节点" if old_type == "1" else "移除了组件"],
+                "sub_lines": ["移除节点" if old_type == "1" else f"移除了 {comp_label}"],
             })
             continue
 
@@ -451,7 +488,7 @@ def _compare_prefab_trees_structured(old_blocks, new_blocks, guid_map):
                 "comp_label": comp_label,
                 "fileID": fid,
                 "prop_key": "__node__",
-                "sub_lines": ["新增节点" if new["type"] == "1" else "新增了组件"],
+                "sub_lines": ["新增节点" if new["type"] == "1" else f"新增了 {comp_label}"],
             })
             continue
 
@@ -471,7 +508,7 @@ def _format_structured_diffs(structured_list):
     """将结构化 diff 列表格式化为人类可读字符串列表"""
     groups = {}
     for item in structured_list:
-        label = f"{item['hierarchy_path']} → {item['comp_label']}"
+        label = _build_diff_label(item)
         groups.setdefault(label, []).append(item)
 
     result = []
@@ -479,9 +516,34 @@ def _format_structured_diffs(structured_list):
         result.append("")
         result.append(f"{_GRP}{label}")
         for item in items:
-            for sub in item["sub_lines"]:
+            sub_lines = item.get("sub_lines", [])
+            if not sub_lines:
+                continue
+            # 对 flatten 到 label 的 m_Component 跳过子行
+            if item["comp_label"] == "GameObject/节点" and item["prop_key"] == "m_Component":
+                continue
+            for sub in sub_lines:
                 result.append(f"{_DTA}{sub}")
     return result
+
+
+def _build_diff_label(item):
+    """构建 diff 条目的一行标签，对 m_Component 做 flatten 处理"""
+    hp = item["hierarchy_path"]
+    cl = item["comp_label"]
+    subs = item.get("sub_lines", [])
+
+    if cl == "GameObject/节点":
+        if item["prop_key"] == "m_Component" and subs:
+            start = 0
+            if subs[0].startswith("修改了"):
+                start = 1
+            rest = subs[start:]
+            if rest:
+                summary = " ".join(r.strip() for r in rest)
+                return f"{hp} → {summary}"
+        return hp
+    return f"{hp} → {cl}"
 
 
 def _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=None):

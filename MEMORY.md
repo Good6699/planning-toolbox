@@ -276,6 +276,17 @@
   10. `api_merge_run` 改用映射解析 + `resolve_target_path` 双保险
 - **涉及文件**：[toolbox_config.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_config.py)、[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### GRAPH_REPORT.md 图谱报告修复——自定义可读摘要
+- **场景**：GRAPH_REPORT.md 始终为空（0 字节）。每次 graphify update 静默完成但无报告输出，无法用于辅助理解代码结构
+- **根因**：`graphify/report.py` 的 `generate()` 依赖社区聚类结果输出报告。旧图谱累积了 87,526 个节点（其中 96% 来自 `py_modules/` 等外部库），`cluster(G)` 对 87K 节点超时/内存不足，导致报告生成失败。且 `graphify_quick.py` 的 `to_json()` 未传 `force=True`，全量重建时被安全检查阻止覆盖
+- **解决方案**：
+  1. **清理 `.graphifyignore`**：排除 `sessions/`、`语义分析/`、`输出文件夹/`、`自动学习/`、`splash/`、`assets/` 等非项目目录，减少干扰文件
+  2. **全量重建**：删除旧 `graph.json`，用 `graphify_quick.py --full --no-viz` 重新构建，节点数从 87,526 降至 1,348，保留下项目核心代码和配置
+  3. **自定义报告**：替换 `graphify/report.py` 的 `generate()` 为 `graphify_quick.py` 内联的自定义报告，只输出：概况（文件/节点/边数）、Top 15 核心模块（高连接度节点）、代码文件结构（按文件分组）、Top 25 社区、跨模块连接、孤立节点
+  4. **--force 支持**：在 `graphify_quick.py` 中添加 `--force` 参数，全量重建时自动启用，绕过 `to_json` 的安全检查
+- **关键教训**：图谱节点膨胀会阻塞社区聚类，导致整个报告生成链路静默失败。必须用 `--full` 定期重建清理过时节点。自定义报告比通用 `generate()` 更实用——聚焦代码结构而非大量社区数值
+- **涉及文件**：[.graphifyignore](file:///c:/Users/admin/.qclaw/workspace/.graphifyignore)、[graphify_quick.py](file:///c:/Users/admin/.qclaw/workspace/graphify_quick.py)
+
 ### SVN 语义分析模块——结构化变更分析引擎（v2: YAML 树对比）
 - **场景**：2026-05-24 新增语义分析按钮，对勾选的 SVN 版本做结构化分析，输出人类可读的变更摘要。支持 .prefab/.unity 的 YAML 语义解析、.cs 的代码变更分析、GUID→资源名按需查询
 - **关键设计（v2 重构）**：

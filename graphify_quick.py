@@ -26,10 +26,15 @@ def main():
     ap = argparse.ArgumentParser(description='策划工具箱 知识图谱一键构建')
     ap.add_argument('--full', action='store_true', help='全量重建（默认增量）')
     ap.add_argument('--no-viz', action='store_true', help='跳过 HTML 生成')
+    ap.add_argument('--force', action='store_true', help='强制覆盖旧图谱（全量重建时自动启用）')
     args = ap.parse_args()
 
     t0 = time.time()
     existing_graph = (OUT / 'graph.json').exists()
+
+    # 全量重建时自动启用 force
+    if args.full:
+        args.force = True
 
     # ─── Step 1: 检测文件 ───
     if not args.full and existing_graph:
@@ -144,10 +149,90 @@ def main():
     labels = {cid: f'Community {cid}' for cid in communities}
     questions = suggest_questions(G, communities, labels)
 
-    report = generate(G, communities, cohesion, labels, gods, surprises, detection, tokens, '.',
-                      suggested_questions=questions)
-    (OUT / 'GRAPH_REPORT.md').write_text(report, encoding='utf-8')
-    to_json(G, communities, str(OUT / 'graph.json'))
+    # ── 生成自定义可读报告 ──
+    today = time.strftime('%Y-%m-%d %H:%M')
+    report_lines = [
+        f'# 策划工具箱知识图谱报告',
+        f'生成时间：{today}',
+        f'',
+        f'## 概况',
+        f'- 项目文件：{detection["total_files"]} 个',
+        f'- 图谱节点：{G.number_of_nodes()} 个（代码 {len([n for n in G.nodes() if G.nodes[n].get("file_type")=="code"])}，文档 {len([n for n in G.nodes() if G.nodes[n].get("file_type")=="document"])}）',
+        f'- 关系边数：{G.number_of_edges()} 条',
+        f'- 社区数：{len(communities)} 个',
+        f'',
+        f'## 核心模块（高连接度节点）',
+    ]
+    for i, g in enumerate(gods[:15], 1):
+        report_lines.append(f'{i}. **{g["label"]}** — {g["degree"]} 条连接')
+    report_lines.append('')
+
+    # 按模块/分组展示文件
+    file_nodes = {}
+    for n in G.nodes():
+        nd = G.nodes[n]
+        if nd.get('file_type') != 'code':
+            continue
+        src = nd.get('source_file', '')
+        if not src:
+            continue
+        base = nd.get('label', n)
+        file_nodes.setdefault(src, []).append(base)
+    report_lines.append(f'## 代码文件结构（{len(file_nodes)} 个文件）')
+    for fname in sorted(file_nodes.keys()):
+        funcs = file_nodes[fname]
+        report_lines.append(f'- **{fname}** — {len(funcs)} 节点')
+    report_lines.append('')
+
+    # Top 25 社区摘要
+    sorted_comms = sorted(communities.items(), key=lambda x: cohesion.get(x[0], 0), reverse=True)
+    report_lines.append(f'## 社区分组（Top 25 / {len(communities)} 个）')
+    shown = 0
+    for cid, nodes in sorted_comms:
+        if shown >= 25:
+            break
+        real = [n for n in nodes if G.nodes[n].get('file_type') != 'document']
+        if len(real) < 3:
+            continue
+        score = cohesion.get(cid, 0)
+        samples = [G.nodes[n].get('label', n) for n in real[:5]]
+        files_in = {}
+        for n in real:
+            sf = G.nodes[n].get('source_file', '')
+            if sf:
+                files_in[sf] = files_in.get(sf, 0) + 1
+        top_files = sorted(files_in, key=files_in.get, reverse=True)[:3]
+        shown += 1
+        report_lines.extend([
+            f'### {labels.get(cid, f"Community {cid}")}',
+            f'- 凝聚度：{score}',
+            f'- 节点：{", ".join(samples)}{"..." if len(real) > 5 else ""}',
+            f'- 文件：{", ".join(top_files)}' if top_files else '',
+            '',
+        ])
+
+    # 跨模块连接
+    if surprises:
+        report_lines.append('## 跨模块连接（你可能不知道的关联）')
+        for s in surprises[:10]:
+            conf = s.get('confidence', '')
+            relation = s.get('relation', 'related_to')
+            report_lines.append(f'- `{s["source"]}` → `{s["target"]}` [{conf}]')
+        report_lines.append('')
+
+    # 凌散节点（知识缺口）
+    isolated = [n for n in G.nodes() if G.degree(n) <= 1 and G.nodes[n].get('file_type') == 'code']
+    if isolated:
+        report_lines.append(f'## 孤立节点（{len(isolated)} 个代码节点仅 0-1 条连接）')
+        for n in sorted(isolated, key=lambda x: G.nodes[x].get('source_file', ''))[:20]:
+            nd = G.nodes[n]
+            report_lines.append(f'- {nd.get("label", n)} ({nd.get("source_file", "?")})')
+        if len(isolated) > 20:
+            report_lines.append(f'- ... 还有 {len(isolated)-20} 个')
+        report_lines.append('')
+
+    (OUT / 'GRAPH_REPORT.md').write_text('\n'.join(report_lines), encoding='utf-8')
+    to_json(G, communities, str(OUT / 'graph.json'), force=args.force)
     save_manifest(detection['files'])
 
     if not args.no_viz and G.number_of_nodes() <= 5000:

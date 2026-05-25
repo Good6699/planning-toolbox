@@ -869,7 +869,8 @@ def _format_prop_change(prop, old_val, new_val, guid_map, deleted=False, added=F
     def _fileid_to_name(val):
         if isinstance(val, dict) and "fileID" in val and fileid_label_map:
             fid = str(val["fileID"])
-            return fileid_label_map.get(fid) or val
+            name = fileid_label_map.get(fid)
+            return f"{name} (#{fid})" if name else val
         return val
 
     if prop in _GUID_FIELDS:

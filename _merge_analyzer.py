@@ -638,13 +638,13 @@ def _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=N
         raw = None
 
         if key not in new_props:
-            raw = _format_prop_change(key, old_val, "", guid_map, deleted=True)
+            raw = _format_prop_change(key, old_val, "", guid_map, deleted=True, fileid_label_map=fileid_label_map)
             if raw:
                 changes.append({"prop_key": key, "sub_lines": raw.split("\n")})
             continue
 
         if key not in old_props:
-            raw = _format_prop_change(key, "", new_val, guid_map, added=True)
+            raw = _format_prop_change(key, "", new_val, guid_map, added=True, fileid_label_map=fileid_label_map)
             if raw:
                 changes.append({"prop_key": key, "sub_lines": raw.split("\n")})
             continue
@@ -653,13 +653,17 @@ def _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=N
             continue
 
         if isinstance(old_val, dict) and isinstance(new_val, dict):
-            raw = _format_prop_change(key, str(old_val), str(new_val), guid_map) if old_val != new_val else None
+            # 如果是 fileID 引用（如 m_Father），保留 dict 结构让 _format_prop_change 解析
+            if "fileID" in old_val or "fileID" in new_val:
+                raw = _format_prop_change(key, old_val, new_val, guid_map, fileid_label_map=fileid_label_map) if old_val != new_val else None
+            else:
+                raw = _format_prop_change(key, str(old_val), str(new_val), guid_map, fileid_label_map=fileid_label_map) if old_val != new_val else None
         elif isinstance(old_val, list) and isinstance(new_val, list):
             raw = _format_list_diff(key, old_val, new_val, guid_map, fileid_label_map=fileid_label_map)
         else:
             ov = str(old_val) if old_val is not None else ""
             nv = str(new_val) if new_val is not None else ""
-            raw = _format_prop_change(key, ov, nv, guid_map)
+            raw = _format_prop_change(key, ov, nv, guid_map, fileid_label_map=fileid_label_map)
         if raw:
             changes.append({"prop_key": key, "sub_lines": raw.split("\n")})
 
@@ -800,9 +804,16 @@ def _format_list_diff(key, old_list, new_list, guid_map, fileid_label_map=None):
     return "\n".join(lines)
 
 
-def _format_prop_change(prop, old_val, new_val, guid_map, deleted=False, added=False):
+def _format_prop_change(prop, old_val, new_val, guid_map, deleted=False, added=False, fileid_label_map=None):
     """格式化单个属性变更为中文描述"""
     prop_cn = _PROPERTY_NAMES.get(prop, prop)
+
+    # 解析 fileID 引用（如 m_Father 的 {'fileID': xxx}）
+    def _fileid_to_name(val):
+        if isinstance(val, dict) and "fileID" in val and fileid_label_map:
+            fid = str(val["fileID"])
+            return fileid_label_map.get(fid) or val
+        return val
 
     if prop in _GUID_FIELDS:
         field_cn = _GUID_FIELDS[prop]
@@ -834,17 +845,21 @@ def _format_prop_change(prop, old_val, new_val, guid_map, deleted=False, added=F
         return f"修改了 {prop_cn}\n      旧值: {old_v}\n      新值: {new_v}"
 
     if deleted:
-        if old_val and old_val != "{}":
-            return f"移除了 {prop_cn}\n      旧值: {old_val}"
+        ov = _fileid_to_name(old_val)
+        if ov and ov != "{}":
+            return f"移除了 {prop_cn}\n      旧值: {ov}"
         return f"移除了 {prop_cn}"
     if added:
-        if new_val and new_val != "{}":
-            return f"新增了 {prop_cn}\n      新值: {new_val}"
+        nv = _fileid_to_name(new_val)
+        if nv and nv != "{}":
+            return f"新增了 {prop_cn}\n      新值: {nv}"
         return f"新增了 {prop_cn}"
 
     if old_val == new_val:
         return None
-    return f"修改了 {prop_cn}\n      旧值: {old_val}\n      新值: {new_val}"
+    ov = _fileid_to_name(old_val)
+    nv = _fileid_to_name(new_val)
+    return f"修改了 {prop_cn}\n      旧值: {ov}\n      新值: {nv}"
 
 
 def _format_vec3(raw):

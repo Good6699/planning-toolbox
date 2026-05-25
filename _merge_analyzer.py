@@ -587,10 +587,14 @@ def _format_structured_diffs(structured_list):
             if item.get("prop_key") == "m_Component":
                 continue
             cl = item.get("comp_label", "")
-            sub = (item.get("sub_lines") or [""])[0]
+            subs = item.get("sub_lines") or []
+            if not subs:
+                continue
             if have_m_comp and cl in m_comp_added | m_comp_removed:
                 continue
-            other_lines.append(sub)
+            # sub_lines[0] 是摘要行（如"修改了 锚点最大值"），后续行是旧值/新值
+            for s in subs:
+                other_lines.append(s)
 
         node_lines = m_comp_lines + other_lines
         if not node_lines:

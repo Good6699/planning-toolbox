@@ -530,25 +530,77 @@ def _compare_prefab_trees_structured(old_blocks, new_blocks, guid_map):
 
 
 def _format_structured_diffs(structured_list):
-    """将结构化 diff 列表格式化为人类可读字符串列表"""
+    """将结构化 diff 列表按 Unity 节点路径分组，合并同类项"""
     groups = {}
+    group_order = []
     for item in structured_list:
-        label = _build_diff_label(item)
-        groups.setdefault(label, []).append(item)
+        hp = item["hierarchy_path"]
+        if hp not in groups:
+            groups[hp] = []
+            group_order.append(hp)
+        groups[hp].append(item)
+
+    def _extract_m_comp_info(sub_lines):
+        """从 m_Component sub_lines 提取新增/删除组件名和数量字符串"""
+        added = set()
+        removed = set()
+        count = ""
+        for s in sub_lines:
+            st = s.strip()
+            if st.startswith("+ ") and not st.startswith("+ ("):
+                added.add(st[2:])
+            elif st.startswith("- ") and not st.startswith("- ("):
+                removed.add(st[2:])
+            elif st.startswith("(共"):
+                count = st
+        return added, removed, count
 
     result = []
-    for label, items in groups.items():
-        result.append("")
-        result.append(f"{_GRP}{label}")
+    for hp in group_order:
+        items = groups[hp]
+        m_comp_added, m_comp_removed, m_comp_count = set(), set(), ""
+        have_m_comp = False
         for item in items:
-            sub_lines = item.get("sub_lines", [])
-            if not sub_lines:
+            if item.get("prop_key") == "m_Component":
+                have_m_comp = True
+                a, r, c = _extract_m_comp_info(item.get("sub_lines", []))
+                m_comp_added |= a
+                m_comp_removed |= r
+                if c:
+                    m_comp_count = c
+
+        # 从 m_Component 生成摘要行
+        m_comp_lines = []
+        if have_m_comp:
+            for name in sorted(m_comp_added):
+                line = f"+ 新增插件: {name}"
+                if m_comp_count:
+                    line += f" {m_comp_count}"
+                m_comp_lines.append(line)
+            for name in sorted(m_comp_removed):
+                line = f"- 移除插件: {name}"
+                m_comp_lines.append(line)
+
+        # 收集其他变更行，过滤被 m_Component 覆盖的 __node__
+        other_lines = []
+        for item in items:
+            if item.get("prop_key") == "m_Component":
                 continue
-            # 对 flatten 到 label 的 m_Component 跳过子行
-            if item["comp_label"] == "GameObject/节点" and item["prop_key"] == "m_Component":
+            cl = item.get("comp_label", "")
+            sub = (item.get("sub_lines") or [""])[0]
+            if have_m_comp and cl in m_comp_added | m_comp_removed:
                 continue
-            for sub in sub_lines:
-                result.append(f"{_DTA}{sub}")
+            other_lines.append(sub)
+
+        node_lines = m_comp_lines + other_lines
+        if not node_lines:
+            continue
+
+        result.append("")
+        result.append(f"{_GRP}{hp}:")
+        for s in node_lines:
+            result.append(f"{_DTA}  {s}")
+
     return result
 
 

@@ -151,6 +151,7 @@ _PROPERTY_NAMES = {
     "m_HorizontalOverflow": "水平溢出",
     "m_VerticalOverflow": "垂直溢出",
     "m_Father": "父级关联",
+    "m_Children": "子节点",
 }
 
 # ── 输出分组标记 ──
@@ -681,7 +682,7 @@ def _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=N
             else:
                 raw = _format_prop_change(key, str(old_val), str(new_val), guid_map, fileid_label_map=fileid_label_map, transform_path_map=transform_path_map) if old_val != new_val else None
         elif isinstance(old_val, list) and isinstance(new_val, list):
-            raw = _format_list_diff(key, old_val, new_val, guid_map, fileid_label_map=fileid_label_map)
+            raw = _format_list_diff(key, old_val, new_val, guid_map, fileid_label_map=fileid_label_map, transform_path_map=transform_path_map)
         else:
             ov = str(old_val) if old_val is not None else ""
             nv = str(new_val) if new_val is not None else ""
@@ -774,12 +775,16 @@ def _dict_diff_summary(old_item, new_item, max_fields=5):
     return changes if changes else ["(值已变更)"]
 
 
-def _format_list_diff(key, old_list, new_list, guid_map, fileid_label_map=None):
+def _format_list_diff(key, old_list, new_list, guid_map, fileid_label_map=None, transform_path_map=None):
     """对比两个列表，只输出差异部分（新增/删除/修改项），跳过相同的项"""
     prop_cn = _PROPERTY_NAMES.get(key, key)
 
     def _item_str(item):
         """将列表项转为可读字符串，尝试解析 fileID"""
+        if isinstance(item, dict) and "fileID" in item:
+            fid = str(item["fileID"])
+            if transform_path_map and fid in transform_path_map:
+                return transform_path_map[fid]
         label = _resolve_list_item_label(item, fileid_label_map) if fileid_label_map else None
         return label or str(item)
 

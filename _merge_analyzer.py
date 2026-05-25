@@ -746,6 +746,9 @@ def _dict_diff_summary(old_item, new_item, max_fields=5):
         # 简洁格式化
         def _short(v):
             if isinstance(v, dict):
+                keys = list(v.keys())
+                if keys == ["x", "y", "z"] or keys == ["x", "y"]:
+                    return "(" + ", ".join(_short(v[k]) for k in keys) + ")"
                 parts = []
                 for sk, sv in v.items():
                     svs = _short(sv)
@@ -826,11 +829,9 @@ def _format_list_diff(key, old_list, new_list, guid_map, fileid_label_map=None):
         if changed_items:
             lines.append(f"      修改了 {len(changed_items)} 项:")
             for c, diffs in changed_items:
-                for i, d in enumerate(diffs):
-                    if i == 0:
-                        lines.append(f"        ~ {c}: {d}")
-                    else:
-                        lines.append(f"          {d}")
+                lines.append(f"        ~ {c}:")
+                for d in diffs:
+                    lines.append(f"            {d}")
         return "\n".join(lines)
 
     # 无身份键可匹配，回退到旧逻辑（全量字符串比较）

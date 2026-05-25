@@ -150,6 +150,7 @@ _PROPERTY_NAMES = {
     "m_Alignment": "对齐方式",
     "m_HorizontalOverflow": "水平溢出",
     "m_VerticalOverflow": "垂直溢出",
+    "m_Father": "父级关联",
 }
 
 # ── 输出分组标记 ──
@@ -488,6 +489,13 @@ def _compare_prefab_trees_structured(old_blocks, new_blocks, guid_map):
     for bfid, b in merged_blocks.items():
         fileid_label_map[bfid] = _build_comp_label(b.get("type", ""), b.get("component", ""), b, b, guid_map)
 
+    # 构建 Transform fileID → GameObject 路径映射（用于 m_Father 显示父节点名）
+    transform_path_map = {}
+    for bfid, b in merged_blocks.items():
+        bt = b.get("type", "")
+        if bt in ("4", "224", "100001", "100000"):
+            transform_path_map[bfid] = _build_node_path(bfid, merged_blocks)
+
     for fid in all_ids:
         old = old_blocks.get(fid)
         new = new_blocks.get(fid)
@@ -519,7 +527,7 @@ def _compare_prefab_trees_structured(old_blocks, new_blocks, guid_map):
 
         old_props = old["props"]
         new_props = new["props"]
-        prop_diffs = _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=fileid_label_map)
+        prop_diffs = _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=fileid_label_map, transform_path_map=transform_path_map)
         for pd in prop_diffs:
             pd["hierarchy_path"] = hierarchy_path
             pd["comp_label"] = comp_label
@@ -641,7 +649,7 @@ def _build_diff_label(item):
     return f"{hp} → {cl}"
 
 
-def _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=None):
+def _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=None, transform_path_map=None):
     """对比两个 props dict，返回结构化变更列表"""
     changes = []
     all_keys = set(old_props.keys()) | set(new_props.keys())
@@ -652,13 +660,13 @@ def _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=N
         raw = None
 
         if key not in new_props:
-            raw = _format_prop_change(key, old_val, "", guid_map, deleted=True, fileid_label_map=fileid_label_map)
+            raw = _format_prop_change(key, old_val, "", guid_map, deleted=True, fileid_label_map=fileid_label_map, transform_path_map=transform_path_map)
             if raw:
                 changes.append({"prop_key": key, "sub_lines": raw.split("\n")})
             continue
 
         if key not in old_props:
-            raw = _format_prop_change(key, "", new_val, guid_map, added=True, fileid_label_map=fileid_label_map)
+            raw = _format_prop_change(key, "", new_val, guid_map, added=True, fileid_label_map=fileid_label_map, transform_path_map=transform_path_map)
             if raw:
                 changes.append({"prop_key": key, "sub_lines": raw.split("\n")})
             continue
@@ -669,15 +677,15 @@ def _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=N
         if isinstance(old_val, dict) and isinstance(new_val, dict):
             # 如果是 fileID 引用（如 m_Father），保留 dict 结构让 _format_prop_change 解析
             if "fileID" in old_val or "fileID" in new_val:
-                raw = _format_prop_change(key, old_val, new_val, guid_map, fileid_label_map=fileid_label_map) if old_val != new_val else None
+                raw = _format_prop_change(key, old_val, new_val, guid_map, fileid_label_map=fileid_label_map, transform_path_map=transform_path_map) if old_val != new_val else None
             else:
-                raw = _format_prop_change(key, str(old_val), str(new_val), guid_map, fileid_label_map=fileid_label_map) if old_val != new_val else None
+                raw = _format_prop_change(key, str(old_val), str(new_val), guid_map, fileid_label_map=fileid_label_map, transform_path_map=transform_path_map) if old_val != new_val else None
         elif isinstance(old_val, list) and isinstance(new_val, list):
             raw = _format_list_diff(key, old_val, new_val, guid_map, fileid_label_map=fileid_label_map)
         else:
             ov = str(old_val) if old_val is not None else ""
             nv = str(new_val) if new_val is not None else ""
-            raw = _format_prop_change(key, ov, nv, guid_map, fileid_label_map=fileid_label_map)
+            raw = _format_prop_change(key, ov, nv, guid_map, fileid_label_map=fileid_label_map, transform_path_map=transform_path_map)
         if raw:
             changes.append({"prop_key": key, "sub_lines": raw.split("\n")})
 
@@ -862,16 +870,22 @@ def _format_list_diff(key, old_list, new_list, guid_map, fileid_label_map=None):
     return "\n".join(lines)
 
 
-def _format_prop_change(prop, old_val, new_val, guid_map, deleted=False, added=False, fileid_label_map=None):
+def _format_prop_change(prop, old_val, new_val, guid_map, deleted=False, added=False, fileid_label_map=None, transform_path_map=None):
     """格式化单个属性变更为中文描述"""
     prop_cn = _PROPERTY_NAMES.get(prop, prop)
 
     # 解析 fileID 引用（如 m_Father 的 {'fileID': xxx}）
     def _fileid_to_name(val):
-        if isinstance(val, dict) and "fileID" in val and fileid_label_map:
+        if isinstance(val, dict) and "fileID" in val:
             fid = str(val["fileID"])
-            name = fileid_label_map.get(fid)
-            return f"{name} (#{fid})" if name else val
+            # m_Father 优先用 transform_path_map 解析父节点路径
+            if prop == "m_Father" and transform_path_map:
+                path = transform_path_map.get(fid)
+                if path:
+                    return path
+            if fileid_label_map:
+                name = fileid_label_map.get(fid)
+                return f"{name} (#{fid})" if name else val
         return val
 
     if prop in _GUID_FIELDS:

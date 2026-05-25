@@ -623,10 +623,9 @@ def _format_structured_diffs(structured_list):
         if not node_lines:
             continue
 
-        result.append("")
         result.append(f"{_GRP}{hp}:")
         for s in node_lines:
-            result.append(f"{_DTA}  {s}")
+            result.append(f"{_DTA}{s}")
 
     return result
 
@@ -676,11 +675,7 @@ def _compare_props_structured(old_props, new_props, guid_map, fileid_label_map=N
             continue
 
         if isinstance(old_val, dict) and isinstance(new_val, dict):
-            # 如果是 fileID 引用（如 m_Father），保留 dict 结构让 _format_prop_change 解析
-            if "fileID" in old_val or "fileID" in new_val:
-                raw = _format_prop_change(key, old_val, new_val, guid_map, fileid_label_map=fileid_label_map, transform_path_map=transform_path_map) if old_val != new_val else None
-            else:
-                raw = _format_prop_change(key, str(old_val), str(new_val), guid_map, fileid_label_map=fileid_label_map, transform_path_map=transform_path_map) if old_val != new_val else None
+            raw = _format_prop_change(key, old_val, new_val, guid_map, fileid_label_map=fileid_label_map, transform_path_map=transform_path_map) if old_val != new_val else None
         elif isinstance(old_val, list) and isinstance(new_val, list):
             raw = _format_list_diff(key, old_val, new_val, guid_map, fileid_label_map=fileid_label_map, transform_path_map=transform_path_map)
         else:
@@ -875,6 +870,16 @@ def _format_list_diff(key, old_list, new_list, guid_map, fileid_label_map=None, 
     return "\n".join(lines)
 
 
+def _format_generic_val(val):
+    """格式化通用值为可读字符串，dict 转 (x,y) 或 {k=v} 格式"""
+    if isinstance(val, dict):
+        keys = list(val.keys())
+        if keys == ["x", "y", "z"] or keys == ["x", "y"]:
+            return "(" + ", ".join(str(val[k]) for k in keys) + ")"
+        return "{" + ", ".join(f"{k}={v}" for k, v in val.items()) + "}"
+    return val
+
+
 def _format_prop_change(prop, old_val, new_val, guid_map, deleted=False, added=False, fileid_label_map=None, transform_path_map=None):
     """格式化单个属性变更为中文描述"""
     prop_cn = _PROPERTY_NAMES.get(prop, prop)
@@ -924,11 +929,13 @@ def _format_prop_change(prop, old_val, new_val, guid_map, deleted=False, added=F
 
     if deleted:
         ov = _fileid_to_name(old_val)
+        ov = _format_generic_val(ov)
         if ov and ov != "{}":
             return f"移除了 {prop_cn}\n      旧值: {ov}"
         return f"移除了 {prop_cn}"
     if added:
         nv = _fileid_to_name(new_val)
+        nv = _format_generic_val(nv)
         if nv and nv != "{}":
             return f"新增了 {prop_cn}\n      新值: {nv}"
         return f"新增了 {prop_cn}"
@@ -937,7 +944,9 @@ def _format_prop_change(prop, old_val, new_val, guid_map, deleted=False, added=F
         return None
     ov = _fileid_to_name(old_val)
     nv = _fileid_to_name(new_val)
-    return f"修改了 {prop_cn}\n      旧值: {ov}\n      新值: {nv}"
+    ov = _format_generic_val(ov)
+    nv = _format_generic_val(nv)
+    return f"修改了 {prop_cn}\n      {ov}\n      → {nv}"
 
 
 def _format_vec3(raw):
@@ -1455,18 +1464,18 @@ def _write_revision_to_file(f, idx, rev_data, source_url):
         f.write(f"\n  [{action_cn.get(fe['action'], fe['action'])}] {display}\n")
         for line_txt in fe["parsed_lines"]:
             if not line_txt:
-                f.write("\n")
+                continue
             elif line_txt.startswith(_GRP):
-                f.write(f"    - {line_txt[len(_GRP):]}\n")
+                f.write(f"    ─ {line_txt[len(_GRP):]}\n")
             elif line_txt.startswith(_DTA):
                 lines = line_txt[len(_DTA):].split("\n")
                 for j, sub in enumerate(lines):
                     if j == 0:
                         f.write(f"      {sub}\n")
                     else:
-                        f.write(f"        {sub.lstrip()}\n")
+                        f.write(f"      {sub.lstrip()}\n")
             else:
-                f.write(f"    - {line_txt}\n")
+                f.write(f"    · {line_txt}\n")
     f.write("\n")
 
 

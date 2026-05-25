@@ -555,6 +555,16 @@ def _format_structured_diffs(structured_list):
                 count = st
         return added, removed, count
 
+    # 收集哪些父节点下有新增/删除 GameObject（用于判断 m_RootOrder 是否为关联影响）
+    parent_with_sibling_changes = set()
+    for hp, items in groups.items():
+        for item in items:
+            subs = item.get("sub_lines") or []
+            if item.get("prop_key") == "__node__" and subs and subs[0] in ("新增节点", "移除节点"):
+                parent = hp.rfind("/")
+                if parent >= 0:
+                    parent_with_sibling_changes.add(hp[:parent])
+
     result = []
     for hp in group_order:
         items = groups[hp]
@@ -581,7 +591,9 @@ def _format_structured_diffs(structured_list):
                 line = f"- 移除插件: {name}"
                 m_comp_lines.append(line)
 
-        # 收集其他变更行，过滤被 m_Component 覆盖的 __node__
+        # 收集其他变更行，过滤被 m_Component 覆盖的 __node__ 和关联影响的 m_RootOrder
+        parent_of_hp = hp[:hp.rfind("/")] if "/" in hp else ""
+        is_rootorder_side_effect = parent_of_hp in parent_with_sibling_changes
         other_lines = []
         for item in items:
             if item.get("prop_key") == "m_Component":
@@ -592,7 +604,9 @@ def _format_structured_diffs(structured_list):
                 continue
             if have_m_comp and cl in m_comp_added | m_comp_removed:
                 continue
-            # sub_lines[0] 是摘要行（如"修改了 锚点最大值"），后续行是旧值/新值
+            # m_RootOrder 单独变化且兄弟节点增删导致 → 关联影响，过滤
+            if is_rootorder_side_effect and item.get("prop_key") == "m_RootOrder" and "m_Father" not in {it["prop_key"] for it in items}:
+                continue
             for s in subs:
                 other_lines.append(s)
 

@@ -725,6 +725,44 @@ def _get_dict_item_key(item):
     return None
 
 
+def _dict_diff_summary(old_item, new_item, max_fields=5):
+    """比较两个 dict，返回变更字段的摘要列表"""
+    if not isinstance(old_item, dict) or not isinstance(new_item, dict):
+        return ["(值已变更)"]
+    changes = []
+    all_keys = set(old_item.keys()) | set(new_item.keys())
+    for k in sorted(all_keys):
+        if k == "m_key":
+            continue
+        ov = old_item.get(k)
+        nv = new_item.get(k)
+        if ov == nv:
+            continue
+        # 跳过空值/默认值
+        if ov is None and nv == {}:
+            continue
+        if nv is None and ov == {}:
+            continue
+        # 简洁格式化
+        def _short(v):
+            if isinstance(v, dict):
+                parts = []
+                for sk, sv in v.items():
+                    svs = _short(sv)
+                    parts.append(f"{sk}={svs}")
+                return "{" + ", ".join(parts) + "}"
+            if isinstance(v, float):
+                return f"{v:.4g}"
+            return str(v)
+        ov_s = _short(ov)
+        nv_s = _short(nv)
+        changes.append(f"{k}: {ov_s} → {nv_s}")
+        if len(changes) >= max_fields:
+            changes.append("...")
+            break
+    return changes if changes else ["(值已变更)"]
+
+
 def _format_list_diff(key, old_list, new_list, guid_map, fileid_label_map=None):
     """对比两个列表，只输出差异部分（新增/删除/修改项），跳过相同的项"""
     prop_cn = _PROPERTY_NAMES.get(key, key)
@@ -764,7 +802,8 @@ def _format_list_diff(key, old_list, new_list, guid_map, fileid_label_map=None):
                 old_s = _item_str(old_list[old_idx])
                 new_s = _item_str(new_list[new_keys[old_key]])
                 if old_s != new_s:
-                    changed_items.append(old_key)
+                    diff_lines = _dict_diff_summary(old_list[old_idx], new_list[new_keys[old_key]])
+                    changed_items.append((old_key, diff_lines))
             else:
                 truly_removed.append(_item_str(old_list[old_idx]))
 
@@ -786,8 +825,12 @@ def _format_list_diff(key, old_list, new_list, guid_map, fileid_label_map=None):
                 lines.append(f"        + {a}")
         if changed_items:
             lines.append(f"      修改了 {len(changed_items)} 项:")
-            for c in changed_items:
-                lines.append(f"        ~ {c}")
+            for c, diffs in changed_items:
+                for i, d in enumerate(diffs):
+                    if i == 0:
+                        lines.append(f"        ~ {c}: {d}")
+                    else:
+                        lines.append(f"          {d}")
         return "\n".join(lines)
 
     # 无身份键可匹配，回退到旧逻辑（全量字符串比较）

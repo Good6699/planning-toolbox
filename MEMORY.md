@@ -315,6 +315,16 @@
   - 版本列表输出排序：UI 和输出文件都按从新到旧（rev 降序）
 - **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)、[_merge_analyze_worker.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyze_worker.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### 语义分析输出优化——按 Unity 节点路径分组 + 合并去重 + 属性值显示
+- **场景**：2026-05-25 连续 5 轮优化语义分析的 prefab YAML diff 输出格式，使其更接近 Unity Inspector 的查看方式
+- **问题链及修复**：
+  1. **m_Component 新增组件行重复**：`m_Component` 列表新增和 `__node__` 新增块各行其道，显示两行重复信息 → 按 `hierarchy_path` 分组，m_Component 的组件名与 `__node__` 匹配则抑制后者
+  2. **属性变更新旧值缺失**：新代码只取了 `sub_lines[0]`（摘要行），丢掉了旧值/新值行 → 展开所有 sub_lines 输出
+  3. **列表项全量比较误报"移除+新增"**：`m_vfxList` 等 dict 列表项按 `str()` 全量比较，同键不同值显示为"移除旧+新增新" → 新增 `_get_dict_item_key` 按 `m_key` 匹配，匹配的显示字段级差异
+  4. **节点分组可读性差**：向量 `{x=1, y=2, z=3}` 用 dict 格式太啰嗦，修改字段缩进混乱 → 向量改用 `(1, 2, 3)` 括号格式，变更字段分行缩进
+  5. **文件 ID 引用显示原始数字**：`m_Father`、`m_Children` 显示 `{'fileID': 224123452444830080}` → 构建 `transform_path_map`，通过 `_build_node_path` 解析为 GameObject 路径名
+- **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
+
 ### 语义合并页签—筛选条件拆为独立卡片并适配宽窄屏
 - **场景**：2026-05-23 语义合并页签的 SVN 地址和筛选条件在同一张卡片里，需要拆成两张卡片：宽屏时左右并排等高，窄屏时上下铺满全宽排列
 - **解决方案**：

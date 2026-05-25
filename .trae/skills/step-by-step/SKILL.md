@@ -9,6 +9,16 @@ description: "Breaks implementation tasks into ordered phases with exact file pa
 
 ## 使用流程
 
+### ⚠️ Phase 0 前必须执行：查阅图谱报告
+
+在开始任何问题分析或变更定位之前，**必须先读 graphify 图谱报告**：
+
+1. 使用 `Read` 工具打开 `graphify-out/GRAPH_REPORT.md`
+2. 查阅 **核心模块、代码文件结构、社区分组** 三个章节，了解代码全局结构
+3. 在**代码文件结构**中确认待修改文件的存在性和关联节点数
+4. 在**社区分组**中找到待修改功能所属的社区，确认涉及的上下游文件
+5. **不得跳过此步骤**，图谱能揭示 SearchCodebase 搜不到的跨文件关联关系
+
 ### Phase 0: 问题分析
 
 回答三个问题：

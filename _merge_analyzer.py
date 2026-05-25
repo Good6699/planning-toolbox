@@ -694,8 +694,21 @@ def _resolve_list_item_label(item, fileid_label_map):
     return None
 
 
+def _get_dict_item_key(item):
+    """从 dict 类型的列表项中提取标识键（m_key、fileID、guid 等），用于按身份匹配"""
+    if not isinstance(item, dict):
+        return None
+    for k in ("m_key",):
+        if k in item:
+            return str(item[k])
+    for v in item.values():
+        if isinstance(v, dict) and "fileID" in v:
+            return f"fid:{v['fileID']}"
+    return None
+
+
 def _format_list_diff(key, old_list, new_list, guid_map, fileid_label_map=None):
-    """对比两个列表，只输出差异部分（新增/删除项），跳过相同的项"""
+    """对比两个列表，只输出差异部分（新增/删除/修改项），跳过相同的项"""
     prop_cn = _PROPERTY_NAMES.get(key, key)
 
     def _item_str(item):
@@ -703,6 +716,63 @@ def _format_list_diff(key, old_list, new_list, guid_map, fileid_label_map=None):
         label = _resolve_list_item_label(item, fileid_label_map) if fileid_label_map else None
         return label or str(item)
 
+    # 尝试按身份键匹配（对 dict 类型列表项，如 m_vfxList 有 m_key）
+    old_keys = {}
+    new_keys = {}
+    is_dict_list = bool(old_list and isinstance(old_list[0], dict))
+
+    if is_dict_list:
+        for idx, item in enumerate(old_list):
+            k = _get_dict_item_key(item)
+            if k:
+                old_keys[k] = idx
+        for idx, item in enumerate(new_list):
+            k = _get_dict_item_key(item)
+            if k:
+                new_keys[k] = idx
+
+    if old_keys and new_keys:
+        # 按键匹配：存在双方 → 比较是否真变化
+        changed_items = []
+        truly_removed = []
+        truly_added = []
+        matched_new = set()
+        matched_old = set()
+
+        for old_key, old_idx in old_keys.items():
+            if old_key in new_keys:
+                matched_old.add(old_idx)
+                matched_new.add(new_keys[old_key])
+                old_s = _item_str(old_list[old_idx])
+                new_s = _item_str(new_list[new_keys[old_key]])
+                if old_s != new_s:
+                    changed_items.append(old_key)
+            else:
+                truly_removed.append(_item_str(old_list[old_idx]))
+
+        for new_idx in range(len(new_list)):
+            if new_idx not in matched_new:
+                truly_added.append(_item_str(new_list[new_idx]))
+
+        if not truly_removed and not truly_added and not changed_items:
+            return None
+
+        lines = [f"修改了 {prop_cn}"]
+        if truly_removed:
+            lines.append(f"      移除了 {len(truly_removed)} 项:")
+            for r in truly_removed:
+                lines.append(f"        - {r}")
+        if truly_added:
+            lines.append(f"      新增了 {len(truly_added)} 项:")
+            for a in truly_added:
+                lines.append(f"        + {a}")
+        if changed_items:
+            lines.append(f"      修改了 {len(changed_items)} 项:")
+            for c in changed_items:
+                lines.append(f"        ~ {c}")
+        return "\n".join(lines)
+
+    # 无身份键可匹配，回退到旧逻辑（全量字符串比较）
     old_strs = [_item_str(item) for item in old_list]
     new_strs = [_item_str(item) for item in new_list]
     old_set = set(old_strs)

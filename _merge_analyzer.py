@@ -957,9 +957,14 @@ def _pipe_stderr_to_log(proc, _log):
     """线程函数：逐行读取子进程 stderr 并实时输出"""
     if not _log or not proc.stderr:
         return
+    # Windows 中文环境下子进程 stderr 可能为 GBK，先试 UTF-8 再回退
+    _sys_enc = "gbk" if os.name == "nt" else "utf-8"
     try:
         for line in iter(proc.stderr.readline, b""):
-            text = line.decode("utf-8", errors="replace").rstrip()
+            try:
+                text = line.decode("utf-8").rstrip()
+            except UnicodeDecodeError:
+                text = line.decode(_sys_enc, errors="replace").rstrip()
             if text:
                 _log(text)
         proc.stderr.close()
@@ -974,19 +979,32 @@ def _analyze_single_rev_prefabs(rev, file_list, source_url, auth_args, target_pa
     for cf in [cf for cf in file_list if os.path.splitext(cf["path"])[1].lower() in (".prefab", ".unity")]:
         rel_path = _strip_repo_prefix(source_url, cf["path"])
         file_url = source_url.rstrip("/") + "/" + rel_path
+        fname = os.path.basename(cf["path"])
+        _t0 = time.time()
         try:
             old_text = _run_svn(["cat", "-r", str(prv_rev), file_url] + auth_args, timeout=120)
         except RuntimeError:
             old_text = ""
+        if _log:
+            _log(f"  r{rev} {fname}: 旧版 svn cat 耗时 {time.time()-_t0:.1f}s")
+        _t0 = time.time()
         try:
             new_text = _run_svn(["cat", "-r", str(rev), file_url] + auth_args, timeout=120)
         except RuntimeError:
             new_text = ""
+        if _log:
+            _log(f"  r{rev} {fname}: 新版 svn cat 耗时 {time.time()-_t0:.1f}s")
+        _t0 = time.time()
         all_guids = _extract_guids_from_diff(old_text + new_text)
         lazy_map = {}
         if all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
             lazy_map = _find_meta_for_guids(all_guids, target_path)
+        if _log:
+            _log(f"  r{rev} {fname}: GUID 映射耗时 {time.time()-_t0:.1f}s (guid={len(all_guids)}, found={len(lazy_map)})")
+        _t0 = time.time()
         parsed = _compare_prefab_texts_fast(old_text, new_text, lazy_map, _log=_log)
+        if _log:
+            _log(f"  r{rev} {fname}: YAML 对比耗时 {time.time()-_t0:.1f}s ({len(parsed)} 条变更)")
         if parsed:
             entries.append({"path": cf["path"], "action": "M", "parsed_lines": parsed})
     return entries
@@ -1068,29 +1086,37 @@ def _analyze_prefab_file(cf, source_url, rev, auth_args, guid_map, target_path, 
     file_url = source_url.rstrip("/") + "/" + rel_path
     fname = os.path.basename(cf["path"])
 
-    if _log:
-        _log(f"  r{rev} {fname}: 下载旧版...")
     prv_rev = max(1, rev - 1)
+    _t0 = time.time()
     try:
         old_text = _run_svn(["cat", "-r", str(prv_rev), file_url] + auth_args, timeout=120)
     except RuntimeError:
         old_text = ""
-
     if _log:
-        _log(f"  r{rev} {fname}: 下载新版...")
+        _log(f"  r{rev} {fname}: 旧版 svn cat 耗时 {time.time()-_t0:.1f}s ({'成功' if old_text else '失败'})")
+
+    _t0 = time.time()
     try:
         new_text = _run_svn(["cat", "-r", str(rev), file_url] + auth_args, timeout=120)
     except RuntimeError:
         new_text = ""
-
     if _log:
-        _log(f"  r{rev} {fname}: 快速对比中...")
+        _log(f"  r{rev} {fname}: 新版 svn cat 耗时 {time.time()-_t0:.1f}s ({'成功' if new_text else '失败'})")
+
+    _t0 = time.time()
     all_guids = _extract_guids_from_diff(old_text + new_text)
     lazy_map = {}
     if all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
         lazy_map = _find_meta_for_guids(all_guids, target_path)
     lazy_map.update(guid_map)
-    return _compare_prefab_texts_fast(old_text, new_text, lazy_map, _log=_log)
+    if _log:
+        _log(f"  r{rev} {fname}: GUID 映射耗时 {time.time()-_t0:.1f}s (guid={len(all_guids)}, found={len(lazy_map)})")
+
+    _t0 = time.time()
+    result = _compare_prefab_texts_fast(old_text, new_text, lazy_map, _log=_log)
+    if _log:
+        _log(f"  r{rev} {fname}: YAML 对比耗时 {time.time()-_t0:.1f}s ({len(result)} 条变更)")
+    return result
 
 
 def _analyze_revision_data(rev, source_url, guid_map, auth_args, file_list=None, target_path=None, _log=None):

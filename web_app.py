@@ -27,7 +27,7 @@ from toolbox_config import (  # noqa: E402
 )
 from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock  # noqa: E402
 from xlsm_zipper import apply_via_excel  # noqa: E402
-from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path  # noqa: E402
+from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path, resolve_svn_url_to_local, migrate_old_svn_mappings  # noqa: E402
 
 if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
     if len(sys.argv) < 3:
@@ -57,6 +57,14 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
+
+# 启动时自动从旧配置迁移 SVN URL↔路径映射
+try:
+    cfg = load_config()
+    if not cfg.get("svn_url_mappings"):
+        migrate_old_svn_mappings(cfg)
+except Exception:
+    pass
 
 
 @app.after_request
@@ -1875,8 +1883,26 @@ def api_svn_detect():
 
 
 def _find_svn_wc(url):
-    """根据 SVN URL 查找对应的本地工作副本路径（不打开资源管理器）"""
+    """根据 SVN URL 查找对应的本地工作副本路径（不打开资源管理器）
+    
+    先查 svn_url_mappings 映射表，再走候选路径逐级匹配。
+    """
     cfg = load_config()
+    # 先查映射表
+    clean_url = url.rstrip("/")
+    mappings = cfg.get("svn_url_mappings", {})
+    if clean_url in mappings:
+        p = mappings[clean_url]
+        if os.path.isdir(p):
+            return p
+    # 前缀匹配
+    for map_url, local_path in mappings.items():
+        if clean_url.startswith(map_url.rstrip("/") + "/"):
+            rel = clean_url[len(map_url.rstrip("/")) + 1:]
+            full = os.path.join(local_path, rel.replace("/", os.sep))
+            if os.path.isdir(full):
+                return os.path.normpath(full)
+    # 候选路径逐级匹配
     candidates = set()
     for d in cfg.get("output_dir_history", []):
         if d:
@@ -1945,6 +1971,72 @@ def api_svn_find_wc():
     if found and os.path.isdir(found):
         return jsonify({"ok": True, "path": os.path.normpath(found)})
     return jsonify({"ok": False, "error": "未找到对应的本地工作副本"}), 200
+
+
+@app.route("/api/svn/resolve-url", methods=["POST"])
+def api_svn_resolve_url():
+    """解析 SVN URL 到本地路径，找到后自动保存映射"""
+    data = request.get_json(force=True)
+    url = data.get("url", "").strip()
+    if not url:
+        return jsonify({"ok": False, "error": "URL 为空"}), 400
+    cfg = load_config()
+    local_path = resolve_svn_url_to_local(url, cfg=cfg)
+    if local_path and os.path.isdir(local_path):
+        mappings = cfg.get("svn_url_mappings", {})
+        if not mappings:
+            mappings = {}
+        mappings[url.rstrip("/")] = os.path.normpath(local_path)
+        save_config({"svn_url_mappings": mappings})
+        return jsonify({"ok": True, "path": os.path.normpath(local_path)})
+    return jsonify({"ok": False, "error": "未找到对应的本地工作副本路径（可尝试先填写目标路径建立映射）"}), 200
+
+
+@app.route("/api/svn/save-mapping", methods=["POST"])
+def api_svn_save_mapping():
+    """验证并保存 URL↔本地路径映射"""
+    data = request.get_json(force=True)
+    url = data.get("url", "").strip()
+    path = data.get("path", "").strip()
+    if not url or not path:
+        return jsonify({"ok": False, "error": "URL 和路径不能为空"}), 400
+    if not os.path.isdir(path):
+        return jsonify({"ok": False, "error": f"路径不存在: {path}"}), 200
+    # 验证路径是有效的 SVN 工作副本且匹配该 URL
+    try:
+        svn_exe = _get_svn_path()
+        r = subprocess.run(
+            [svn_exe, "info", "--show-item", "url", path],
+            capture_output=True, text=True, timeout=5,
+            **_get_subprocess_kwargs()
+        )
+        wc_url = r.stdout.strip() if r.returncode == 0 else ""
+        clean_url = url.rstrip("/")
+        if not wc_url or (clean_url != wc_url and not clean_url.startswith(wc_url + "/")):
+            return jsonify({"ok": False, "error": f"路径 [{path}] 的 SVN URL 与输入不匹配"}), 200
+        # 找到工作副本根目录
+        r2 = subprocess.run(
+            [svn_exe, "info", "--show-item", "wc-root", path],
+            capture_output=True, text=True, timeout=5,
+            **_get_subprocess_kwargs()
+        )
+        wc_root = r2.stdout.strip() if r2.returncode == 0 else path
+        cfg = load_config()
+        mappings = cfg.get("svn_url_mappings", {})
+        if not mappings:
+            mappings = {}
+        new_key = clean_url
+        new_val = os.path.normpath(wc_root)
+        if mappings.get(new_key) != new_val:
+            mappings[new_key] = new_val
+            save_config({"svn_url_mappings": mappings})
+        return jsonify({"ok": True, "path": new_val, "url": new_key})
+    except FileNotFoundError:
+        return jsonify({"ok": False, "error": "SVN 命令不可用"}), 200
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "error": "SVN 命令超时"}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 200
 
 
 @app.route("/api/svn/open-wc", methods=["POST"])
@@ -2171,8 +2263,14 @@ def api_merge_run():
     if not files:
         return jsonify({"ok": False, "error": "请选择至少一个文件"}), 400
     target_path = resolve_target_path(target_url_or_path)
-    if not target_path:
-        return jsonify({"ok": False, "error": "无法确定目标本地工作副本路径，请确保路径有效或已执行过SVN检出"}), 400
+    # 优先从映射表解析 URL 对应的路径
+    resolved = resolve_svn_url_to_local(source_url)
+    if resolved and os.path.isdir(resolved):
+        target_path = resolved
+    elif not target_path:
+        target_path = resolved
+    if not target_path or not os.path.isdir(target_path):
+        return jsonify({"ok": False, "error": f"无法找到 SVN 地址 [{source_url}] 对应的本地工作副本路径，请在目标路径输入正确的本地路径或先建立映射"}), 400
     cfg = load_config()
     svn_user = data.get("svn_user") or cfg.get("svn_user", "")
     svn_pass = data.get("svn_pass") or cfg.get("svn_pass", "")
@@ -2206,6 +2304,12 @@ def api_merge_analyze():
         return jsonify({"error": "源SVN地址不能为空"}), 400
     if not revisions:
         return jsonify({"error": "请至少勾选一个版本"}), 400
+    # 优先从映射解析路径
+    resolved = resolve_svn_url_to_local(source_url)
+    if resolved and os.path.isdir(resolved):
+        target_path = resolved
+    if not target_path or not os.path.isdir(os.path.join(target_path, "Assets")):
+        return jsonify({"error": f"无法找到 SVN 地址 [{source_url}] 对应的本地工作副本路径（用于 GUID 映射查询），请先在目标路径输入正确的本地路径并保存映射"}), 400
     cfg = load_config()
     svn_user = cfg.get("svn_user", "")
     svn_pass = cfg.get("svn_pass", "")

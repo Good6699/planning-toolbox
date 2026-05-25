@@ -4,6 +4,7 @@
 import sys
 import os
 import pickle
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -55,23 +56,32 @@ def main():
         for cf in prefab_files:
             rel_path = _strip_repo_prefix(source_url, cf["path"])
             file_url = source_url.rstrip("/") + "/" + rel_path
+            fname = os.path.basename(cf["path"])
 
+            _t0 = time.time()
             try:
                 old_text = _run_svn(["cat", "-r", str(prv_rev), file_url] + auth_args, timeout=svn_timeout)
             except RuntimeError:
                 old_text = ""
+            sys.stderr.write(f"    r{rev} {fname}: 旧版 svn cat 耗时 {time.time()-_t0:.1f}s ({'成功' if old_text else '失败'})\n")
 
+            _t0 = time.time()
             try:
                 new_text = _run_svn(["cat", "-r", str(rev), file_url] + auth_args, timeout=svn_timeout)
             except RuntimeError:
                 new_text = ""
+            sys.stderr.write(f"    r{rev} {fname}: 新版 svn cat 耗时 {time.time()-_t0:.1f}s ({'成功' if new_text else '失败'})\n")
 
+            _t0 = time.time()
             all_guids = _extract_guids_from_diff(old_text + new_text)
             lazy_map = {}
             if all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
                 lazy_map = _find_meta_for_guids(all_guids, target_path)
+            sys.stderr.write(f"    r{rev} {fname}: GUID 映射耗时 {time.time()-_t0:.1f}s (guid={len(all_guids)}, found={len(lazy_map)})\n")
 
+            _t0 = time.time()
             parsed_lines = _compare_prefab_texts_fast(old_text, new_text, lazy_map, _log=None)
+            sys.stderr.write(f"    r{rev} {fname}: YAML 对比耗时 {time.time()-_t0:.1f}s ({len(parsed_lines)} 条变更)\n")
             if parsed_lines:
                 entries.append({"path": cf["path"], "action": "M", "parsed_lines": parsed_lines})
 

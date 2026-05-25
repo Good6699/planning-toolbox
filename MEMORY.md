@@ -247,6 +247,35 @@
 - **解决方案**：在 CSS（绿色标签 `.unlock_svn`）、web 版（`_exec_unlock_svn`）、tkinter 版（`_wf_execute_unlock_svn` / `_wf_show_unlock_svn_config`）以及前端 typeCn/typeIcon/设置表单/自动命名中，同步新增 `unlock_svn` 类型。解锁不加 `--force`，别人锁住的无法强制解锁
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
+## 2026-05-25 语义分析性能打点 + 子进程编码修复 + SVN URL映射系统
+
+### 语义分析性能瓶颈—打点日志发现根因在 GUID 映射
+- **场景**：语义分析耗时 ~60s，之前错误猜测瓶颈在 `svn cat` 网络 I/O，实际打点数据显示 3 个 worker 各花 22.8s 在 GUID 映射、svn cat 仅 0.1s
+- **根因**：之前的分析猜错了——`svn cat` 在内网只有 0.1s，真正的瓶颈是 `_find_meta_for_guids` 函数。虽然逻辑上"只找需要的 GUID"，但物理上每个 worker 都独立执行一次完整的 `os.walk(Assets/)` 遍历整个目录，3 个 worker 同时遍历网络盘（G:\）导致 I/O 争抢
+- **关键教训**：性能分析不能靠猜，必须加打点日志用数据说话。误判方向可能导致完全错误的优化方案
+- **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)、[_squash_worker.py](file:///c:/Users/admin/.qclaw/workspace/_squash_worker.py)
+
+### 子进程 stderr 中文乱码修复
+- **场景**：`_squash_worker.py` 通过 `sys.stderr.write()` 输出的中文打点日志在父进程显示为乱码（`GUID 映射耗时 79.8s` 显示为 `GUID ӳ���ʱ 79.8s`）
+- **根因**：Windows 中文环境下子进程 `sys.stderr` 默认为 GBK 编码，父进程 `_pipe_stderr_to_log` 固定用 `utf-8` 解码导致 UnicodeDecodeError，退到 `errors="replace"` 后产生 � 乱码
+- **解决方案**：先试 UTF-8 解码，抛出 `UnicodeDecodeError` 时回退到系统编码（Windows = `gbk`，其他 = `utf-8`）
+- **涉及文件**：[_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
+
+### SVN URL↔本地路径统一映射系统
+- **问题**：语义分析端点直接把 UI 输入的 `target_path` 原样传给 `_find_meta_for_guids`，没有从 `source_url` 自动解析本地路径；各端点（合并、分析、查找）各有自己的一套路径解析逻辑，不统一
+- **解决方案**：
+  1. 新增配置项 `svn_url_mappings: {}`，持久化 URL→本地路径映射
+  2. 新增 `resolve_svn_url_to_local(url)` 统一解析函数：查映射表 → 候选路径逐级 `svn info` → 遍历各盘（C盘最后）前 3 级目录
+  3. 新增 `_scan_drives_for_svn_wc()` 遍历磁盘查找 SVN 工作副本
+  4. 新增 `migrate_old_svn_mappings(cfg)` 从旧的 `merge_target_history`/`output_dir_history`/`svn_urls` 迁移历史映射
+  5. 启动时自动迁移旧映射到 `svn_url_mappings`
+  6. 新增两个后端 API：`/api/svn/resolve-url`（解析+自动存映射）、`/api/svn/save-mapping`（用户输入路径时验证并保存）
+  7. 前端 `merge_source` blur 时自动解析 URL 并填入 `merge_target`
+  8. 前端 `merge_target` blur 时自动验证路径并保存映射
+  9. `api_merge_analyze` 改用映射解析，找不到则阻断并提示
+  10. `api_merge_run` 改用映射解析 + `resolve_target_path` 双保险
+- **涉及文件**：[toolbox_config.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_config.py)、[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ### SVN 语义分析模块——结构化变更分析引擎（v2: YAML 树对比）
 - **场景**：2026-05-24 新增语义分析按钮，对勾选的 SVN 版本做结构化分析，输出人类可读的变更摘要。支持 .prefab/.unity 的 YAML 语义解析、.cs 的代码变更分析、GUID→资源名按需查询
 - **关键设计（v2 重构）**：

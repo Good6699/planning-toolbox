@@ -3237,19 +3237,53 @@ function buildMergeTab(panel) {
       popup.remove();
     }
   });
-  document.getElementById("merge_source").addEventListener("blur", ()=>{
+  document.getElementById("merge_source").addEventListener("blur", async ()=>{
     const val = document.getElementById("merge_source").value.trim();
     if (val && val.startsWith("http") && !(config.svn_urls||[]).includes(val)) {
       saveConfig({svn_urls:[val, ...(config.svn_urls||[])].slice(0,20)});
       config.svn_urls = [val, ...(config.svn_urls||[])].slice(0,20);
       initSuggest("merge_source", config.svn_urls);
     }
+    // 自动解析 SVN URL 到本地路径并填入目标路径
+    if (val && val.startsWith("http") && !document.getElementById("merge_target").value.trim()) {
+      try {
+        const r = await fetch("/api/svn/resolve-url", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({url: val})
+        });
+        const d = await r.json();
+        if (d.ok && d.path) {
+          document.getElementById("merge_target").value = d.path;
+          const paths = config.merge_target_history || [];
+          if (!paths.includes(d.path)) {
+            saveConfig({merge_target_history:[d.path, ...paths].slice(0,20)});
+            config.merge_target_history = [d.path, ...paths].slice(0,20);
+            initSuggest("merge_target", config.merge_target_history);
+          }
+        }
+      } catch(_) {}
+    }
   });
-  document.getElementById("merge_target").addEventListener("blur", ()=>{
+  document.getElementById("merge_target").addEventListener("blur", async ()=>{
     const val = document.getElementById("merge_target").value.trim();
     if (val && !(config.merge_target_history||[]).includes(val)) {
       saveConfig({merge_target_history:[val, ...(config.merge_target_history||[])].slice(0,20)});
+      config.merge_target_history = [val, ...(config.merge_target_history||[])].slice(0,20);
       initSuggest("merge_target", config.merge_target_history);
+    }
+    // 如果有 source_url，验证路径并保存映射
+    const source = document.getElementById("merge_source").value.trim();
+    if (val && source && source.startsWith("http")) {
+      try {
+        const r = await fetch("/api/svn/save-mapping", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({url: source, path: val})
+        });
+        const d = await r.json();
+        if (!d.ok) {
+          _showToast(d.error || "路径与 SVN URL 不匹配，请检查");
+        }
+      } catch(_) {}
     }
   });
   document.getElementById("merge_author").addEventListener("blur", ()=>{

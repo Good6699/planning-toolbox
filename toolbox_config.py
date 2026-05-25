@@ -55,6 +55,7 @@ def load_config():
         "svn_urls": [
             "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm"
         ],
+        "svn_url_mappings": {},
         "cmp_file_presets": []
     }
     if os.path.exists(CONFIG_FILE):

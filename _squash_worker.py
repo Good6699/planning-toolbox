@@ -28,6 +28,7 @@ def main():
     auth = args.get("auth", {})
     target_path = args.get("target_path")
     revisions = args.get("revisions", [])
+    guid_map = args.get("guid_map", {})
     svn_user = auth.get("svn_user")
     svn_pass = auth.get("svn_pass")
 
@@ -75,7 +76,11 @@ def main():
             _t0 = time.time()
             all_guids = _extract_guids_from_diff(old_text + new_text)
             lazy_map = {}
-            if all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
+            if guid_map:
+                for g in all_guids:
+                    if g in guid_map:
+                        lazy_map[g] = guid_map[g]
+            elif all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
                 lazy_map = _find_meta_for_guids(all_guids, target_path)
             sys.stderr.write(f"    r{rev} {fname}: GUID 映射耗时 {time.time()-_t0:.1f}s (guid={len(all_guids)}, found={len(lazy_map)})\n")
 

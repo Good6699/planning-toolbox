@@ -226,6 +226,31 @@ def _find_meta_for_guids(guid_set, target_path):
     return result
 
 
+def _build_full_guid_map(target_path):
+    """一次性遍历 Assets/ 构建完整 {guid: asset_relative_path} 映射"""
+    assets_dir = os.path.join(target_path, "Assets")
+    if not os.path.isdir(assets_dir):
+        return {}
+    result = {}
+    for root, dirs, files in os.walk(assets_dir):
+        dirs[:] = [d for d in dirs if d not in ("Library", "Temp", "obj", "Obj", "Plugin", "Plugins")]
+        for fname in files:
+            if not fname.endswith(".meta"):
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath, "r", encoding="utf-8", errors="replace") as fh:
+                    head = fh.read(200)
+                m = re.search(r'guid:\s*([a-f0-9]+)', head)
+                if m:
+                    guid = m.group(1)
+                    asset_rel = os.path.relpath(fpath[:-5], target_path).replace("\\", "/")
+                    result[guid] = asset_rel
+            except Exception:
+                pass
+    return result
+
+
 def _extract_guids_from_diff(diff_text):
     """从 diff 文本中提取所有引用的 guid"""
     return set(_GUID_IN_TEXT_RE.findall(diff_text))
@@ -870,7 +895,7 @@ def _build_rev_file_map(sorted_revs, rev_file_map, source_url, auth_args):
     return result
 
 
-def _run_parallel_squash_revs(rev_chunks, source_url, rev_file_map, svn_user, svn_pass, target_path, _log):
+def _run_parallel_squash_revs(rev_chunks, source_url, rev_file_map, svn_user, svn_pass, target_path, _log, guid_map=None):
     """启动子进程并行分析，返回所有 entries
 
     结构对齐 _run_parallel_analysis 的成熟模式
@@ -880,6 +905,11 @@ def _run_parallel_squash_revs(rev_chunks, source_url, rev_file_map, svn_user, sv
     running = {}
     stderr_threads = {}
     all_entries = []
+
+    # 使用父进程预构建的 GUID 映射（如有），否则自建一次（所有 worker 共享）
+    full_guid_map = guid_map if guid_map else (_build_full_guid_map(target_path) if target_path else {})
+    if _log and full_guid_map:
+        _log(f"  预构建 GUID 映射完成: {len(full_guid_map)} 项")
 
     for chunk in rev_chunks:
         arg_fd, arg_path = tempfile.mkstemp(suffix=".pkl", prefix="sq_arg_")
@@ -896,6 +926,7 @@ def _run_parallel_squash_revs(rev_chunks, source_url, rev_file_map, svn_user, sv
             "rev_file_map": chunk_rfm,
             "auth": auth_dict,
             "target_path": target_path,
+            "guid_map": full_guid_map,
         }
         try:
             with open(arg_path, "wb") as f:
@@ -1048,7 +1079,7 @@ def _analyze_squash_revisions(sorted_revs, source_url, guid_map, auth_args, rev_
         rev_chunks = _split_revisions(sorted_revs, max_workers)
         if _log:
             _log(f"  按 {len(rev_chunks)} 个分片并行分析 {n_revs} 个版本...")
-        all_entries = _run_parallel_squash_revs(rev_chunks, source_url, rev_file_map_filtered, svn_user, svn_pass, target_path, _log)
+        all_entries = _run_parallel_squash_revs(rev_chunks, source_url, rev_file_map_filtered, svn_user, svn_pass, target_path, _log, guid_map=guid_map)
 
     # 按文件路径合并（后写入 = 新版本 覆盖旧版本）
     path_map = {}
@@ -1106,7 +1137,11 @@ def _analyze_prefab_file(cf, source_url, rev, auth_args, guid_map, target_path, 
     _t0 = time.time()
     all_guids = _extract_guids_from_diff(old_text + new_text)
     lazy_map = {}
-    if all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
+    if guid_map:
+        for g in all_guids:
+            if g in guid_map:
+                lazy_map[g] = guid_map[g]
+    elif all_guids and target_path and os.path.isdir(os.path.join(target_path, "Assets")):
         lazy_map = _find_meta_for_guids(all_guids, target_path)
     lazy_map.update(guid_map)
     if _log:
@@ -1259,6 +1294,14 @@ def analyze_source_url(source_url, revisions, target_path,
     else:
         _log("未找到 Assets 目录，跳过 GUID 映射", "warn")
 
+    # 主进程预构建完整 GUID 映射，所有 worker/子进程共享（避免各自 os.walk）
+    full_guid_map = {}
+    if has_assets:
+        _log("正在预构建 GUID 资源映射表（仅需一次遍历）...")
+        full_guid_map = _build_full_guid_map(target_path)
+        if full_guid_map:
+            _log(f"  GUID 映射完成: {len(full_guid_map)} 项")
+
     output_dir = os.path.join(_script_dir, "语义分析")
     os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1269,7 +1312,7 @@ def analyze_source_url(source_url, revisions, target_path,
     if len(sorted_revs) > 1:
         _log(f"多版本模式（{len(sorted_revs)} 个版本），采用汇总分析（基准 r{max(1, min(sorted_revs)-1)} → 最新 r{max(sorted_revs)}）")
         all_results = [_analyze_squash_revisions(
-            sorted_revs, source_url, {}, auth_args,
+            sorted_revs, source_url, full_guid_map, auth_args,
             rev_file_map=rev_file_map or {},
             target_path=target_path, _log=_log,
             svn_user=svn_user, svn_pass=svn_pass,
@@ -1284,12 +1327,12 @@ def analyze_source_url(source_url, revisions, target_path,
             for idx, rev in enumerate(sorted_revs):
                 _log(f"正在分析 r{rev} ({idx+1}/{len(sorted_revs)})...")
                 file_list = (rev_file_map or {}).get(str(rev))
-                rd = _analyze_revision_data(rev, source_url, {}, auth_args, file_list=file_list, target_path=target_path, _log=_log)
+                rd = _analyze_revision_data(rev, source_url, full_guid_map, auth_args, file_list=file_list, target_path=target_path, _log=_log)
                 all_results.append(rd)
         else:
             _log(f"启动 {len(chunks)} 个子进程并行分析...")
             all_results = _run_parallel_analysis(
-                chunks, source_url, {}, svn_user, svn_pass, sorted_revs, _log,
+                chunks, source_url, full_guid_map, svn_user, svn_pass, sorted_revs, _log,
                 rev_file_map=rev_file_map or {},
                 target_path=target_path
             )

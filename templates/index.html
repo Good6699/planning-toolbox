@@ -2718,11 +2718,14 @@ async function runTask(url, body, btn, logId, label, onDone) {
     _done();
     return;
   }
+  if (window._esSvn) window._esSvn.close();
   const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
+  window._esSvn = evtSrc;
   let _outputPath = "";
   evtSrc.onmessage = (e) => {
     if (e.data === "[DONE]") {
       evtSrc.close();
+      window._esSvn = null;
       _done();
       if (_outputPath) {
         const _hint = document.createElement("div");
@@ -3330,7 +3333,9 @@ async function runMergeQuery() {
     const r = await fetch("/api/merge/query", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await r.json();
     if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent=orig; return; }
+    if (window._esMergeQ) window._esMergeQ.close();
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
+    window._esMergeQ = evtSrc;
     let resultData = null;
     evtSrc.onmessage = (e) => {
       if (e.data === "[DONE]") {
@@ -3558,10 +3563,13 @@ async function runMergeRun() {
       logEl.innerHTML = '<span class="error">❌ '+escapeHtml(d.error)+'</span>';
       return;
     }
+    if (window._esMergeRun) window._esMergeRun.close();
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
+    window._esMergeRun = evtSrc;
     evtSrc.onmessage = (e) => {
       if (e.data === "[DONE]") {
         evtSrc.close();
+        window._esMergeRun = null;
         btn.disabled = false;
         btn.textContent = "开始精准合并";
         const sb = document.getElementById("status_bar");
@@ -3617,10 +3625,13 @@ async function runMergeAnalysis() {
     const r = await fetch("/api/merge/analyze", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await r.json();
     if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent="语义分析"; return; }
+    if (window._esMergeAna) window._esMergeAna.close();
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
+    window._esMergeAna = evtSrc;
     evtSrc.onmessage = (e) => {
       if (e.data === "[DONE]") {
         evtSrc.close();
+        window._esMergeAna = null;
         btn.disabled = false;
         btn.textContent = "语义分析";
         const sb = document.getElementById("status_bar");

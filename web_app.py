@@ -626,7 +626,7 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
         q.put("⚠️ 未找到 TortoiseSVN\n")
 
 
-def _run_upload_copy(src, tgt, files, q):
+def _run_upload_copy(src, tgt, files, q, task_id):
     q.put(f"{'='*50}\n")
     q.put("开始上传\n")
     q.put(f"源: {src}\n")
@@ -686,6 +686,7 @@ def _run_upload_copy(src, tgt, files, q):
         _run_svn_after_upload(q, tgt, copied_files)
 
     q.put(None)
+    _log_queues.pop(task_id, None)
 
 
 def _copy_file_upload(src_p, dst_p):
@@ -721,7 +722,7 @@ def api_upload_run():
     task_id = _get_next_task_id()
     q = queue.Queue()
     _log_queues[task_id] = q
-    threading.Thread(target=_run_upload_copy, args=(src, tgt, files, q), daemon=True).start()
+    threading.Thread(target=_run_upload_copy, args=(src, tgt, files, q, task_id), daemon=True).start()
     return jsonify({"task_id": task_id})
 
 # ═══════════════════════════════════════════════════════════
@@ -798,6 +799,7 @@ def _run_wf_task(q, wf, steps, task_id):
     _put("工作流执行完成\n" if not blocked else "工作流执行完成（有失败步骤）\n")
     _cancelled_tasks.discard(task_id)
     _put(None)
+    _log_queues.pop(task_id, None)
 
 
 @app.route("/api/workflow/run", methods=["POST"])
@@ -2171,6 +2173,7 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
         q.put(f"[RESULT]{err}\n")
     finally:
         q.put(None)
+        _log_queues.pop(task_id, None)
 
 
 def _merge_worker(task_id, source_url, target_path, revisions, files,
@@ -2244,6 +2247,7 @@ def _merge_worker(task_id, source_url, target_path, revisions, files,
         q.put(f"\n❌ 合并任务异常终止: {e}\n")
     finally:
         q.put(None)
+        _log_queues.pop(task_id, None)
 
 
 @app.route("/api/merge/run", methods=["POST"])
@@ -2350,6 +2354,7 @@ def _merge_analyze_worker(task_id, source_url, target_path, revisions,
         _log(traceback.format_exc(), "error")
     finally:
         q.put(None)
+        _log_queues.pop(task_id, None)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -2362,15 +2367,18 @@ def api_log_stream(task_id):
         return Response("data: 任务不存在\n\n", mimetype="text/event-stream")
 
     def _stream():
-        while True:
-            try:
-                line = q.get(timeout=15)
-                if line is None:
-                    yield "data: [DONE]\n\n"
-                    break
-                yield f"data: {line}\n\n"
-            except queue.Empty:
-                yield "data: \n\n"
+        try:
+            while True:
+                try:
+                    line = q.get(timeout=15)
+                    if line is None:
+                        yield "data: [DONE]\n\n"
+                        break
+                    yield f"data: {line}\n\n"
+                except queue.Empty:
+                    yield "data: \n\n"
+        finally:
+            _log_queues.pop(task_id, None)
 
     response = Response(stream_with_context(_stream()),
                         mimetype="text/event-stream")

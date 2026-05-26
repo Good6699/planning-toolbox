@@ -587,8 +587,35 @@
 ### 工作流复制/删除按钮移到父工作流 header
 - **场景**：2026-05-21 用户觉得底部工具栏的复制和删除按钮操作路径太长，要求放到每个父工作流自己的 header 上
 - **解决方案**：底部工具栏只保留"新建"；每个父 header 的 ▶ 播放按钮右边加 📋 复制按钮（直接复制）、右上角加 ✕ 删除按钮（弹窗确认）
-- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
-- **全对判断**：`!q.answered || answerSelectedIndex===undefined` 任一未答即不算全对
+- **涉及文件**：[toolbox_tab_workflow.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_tab_workflow.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### 上传SVN：桌面版走 web_app.py 而非 toolbox_tab_upload.py
+- **场景**：2026-05-25 调试上传SVN PermissionError 时，一直在改 `toolbox_tab_upload.py` 但问题依旧，用户指出后才意识到改错文件。
+- **根因**：桌面版（`desktop_main.py` 启动）的上传功能通过内嵌网页调 `web_app.py` 的 Flask API，不走旧 GUI 版的 `toolbox_tab_upload.py`。图谱显示 `UploadTabMixin`（38条连接）仅被 `svn_compare_gui.py` 导入，而 `web_app.py`（111条连接）有独立的上传函数 `_run_upload_copy` / `_run_svn_after_upload`。
+- **教训**：改代码前必须读 graphify 图谱报告的"社区分组"章节，确认实际执行路径。图谱能揭示 SearchCodebase 搜不到的跨文件关联关系。不能凭"先搜到哪个文件就改哪个"瞎猜。
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[toolbox_tab_upload.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_tab_upload.py)
+
+### shutil.copytree 报错打包为 shutil.Error 而非单个 PermissionError
+- **场景**：2026-05-25 上传SVN复制文件时，`.meta` 文件被 SVN 工作副本的只读属性挡住，`shutil.copytree` 的异常格式是 `shutil.Error`（三元组列表 `[(src, dst, errmsg)]`）而非单个 `PermissionError`。
+- **解决方案**：`except Exception as e` 捕获后 `str(e)` 打印会巨长，需单独处理 `shutil.Error` 取 `e.args[0]`（三元组列表）只展示失败文件数。
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### svn --targets 绕过命令行长度限制
+- **场景**：2026-05-25 上传SVN后有 1372 个文件需要 `svn add` + `svn changelist`，逐文件 subprocess（1372次）极慢，一次性传参又受 cmd.exe 8191 字符限制（实际 CreateProcess 32767 字符也不够）。
+- **解决方案**：用 `svn --targets <文件>` 把所有文件路径写进临时文件，SVN 一次性读入批量处理。一次 subprocess 搞定，无命令行长度问题。`tempfile.mkdtemp()` 创建临时目录 + `finally` 块清理。
+- **关键经验**：Windows 上批量传参的三种方式——①命令行拼接（有 8191/32767 上限，不可靠），②按目录分组 reduce 子进程数（仍需若干次），③`--targets` 临时文件（1次搞定，最推荐）。
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### svn changelist 只标记有变化的文件，过滤 normal
+- **场景**：2026-05-25 TortoiseSVN 提交对话框显示几十万个文件（整个 Unity 工作副本），因为 `svn changelist --depth infinity` 把所有文件都打上了标签。
+- **解决方案**：先 `svn changelist --remove --changelist "本次修改" <wc_root> --depth infinity` 清空旧标签，再用 `svn status --targets <targets_file>` 过滤出实际有变化的文件（A/M/D/R/?），只标记这些文件到 changelist。normal（空格=未修改）文件不会出现在提交对话框中。
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### SVN update 不加 --accept theirs-full 避免自动还原
+- **场景**：2026-05-25 上传SVN时 `svn update --accept theirs-full` 会自动还原了本地有修改的 `.meta` 文件，因为上次复制失败留下的"本地已修改"状态被当作冲突处理。
+- **解决方案**：纯 `svn update` 不加 `--accept`，本地改过+服务器没更新的文件不动它，本地改过+服务器有更新的标记为冲突（`C`）不自动覆盖。
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
 - **脚本位置**：`自动学习/auto_exam.js`
 
 ### 学习脚本 (`自动学习/auto_learn_pip_loop.js`)

@@ -13,6 +13,16 @@ Structured root cause analysis before any fix. 强制先找根因，再讨论修
 
 ## Process
 
+### ⚠️ 读图谱报告：定位问题涉及的模块和文件
+
+在开始任何问题分析之前，**必须先读 graphify 图谱报告**：
+
+1. 使用 `Read` 工具打开 `graphify-out/GRAPH_REPORT.md`
+2. 查阅 **核心模块、社区分组** 两个章节，了解代码全局结构
+3. 在**社区分组**中找到问题相关功能所属的社区，确认涉及的上下游文件和模块
+4. 在**代码文件结构**中找到相关文件，确认关联节点数
+5. **不得跳过此步骤**，图谱能揭示 SearchCodebase 搜不到的跨文件关联关系
+
 ### Phase 1: Define the Problem
 
 回答四个问题：

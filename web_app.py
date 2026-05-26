@@ -10,7 +10,7 @@ import threading
 import queue
 import time
 import shutil
-import stat
+import tempfile
 import concurrent.futures
 from datetime import datetime
 
@@ -442,7 +442,7 @@ def _svn_update_first(q, target_dir):
     q.put("正在更新 SVN 工作副本...\n")
     try:
         r = subprocess.run(
-            [svn_exe, "update", "--accept", "theirs-full", target_dir],
+            [svn_exe, "update", target_dir],
             capture_output=True, text=False,
             timeout=120, **_get_subprocess_kwargs()
         )
@@ -476,11 +476,6 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
         q.put("⚠️ 目标目录没有找到SVN链接，跳过\n")
         return
 
-    svn_url = ""
-    for line in result.stdout.splitlines():
-        if line.startswith("URL: "):
-            svn_url = line[5:]
-            break
     wc_r = subprocess.run(
         [svn_exe, "info", "--show-item", "wc-root", target_dir],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -488,12 +483,6 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
     )
     wc_root = wc_r.stdout.strip() if wc_r.returncode == 0 else ""
     q.put(f"   ✅ SVN 链接验证通过，即将提交 {len(copied_files)} 个文件\n")
-
-    if svn_url and wc_root:
-        q.put("   📄 上传文件 SVN 路径:\n")
-        for f in copied_files:
-            rel = os.path.relpath(f, wc_root).replace("\\", "/")
-            q.put(f"       {svn_url}/{rel}\n")
 
     try:
         r_status = subprocess.run(
@@ -522,104 +511,61 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
     except Exception:
         pass
 
-    add_ok = 0
-    for f in copied_files:
-        try:
-            r = subprocess.run(
-                [svn_exe, "add", "--parents", "--force", "--quiet", os.path.abspath(f)],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=30, **_get_subprocess_kwargs()
-            )
-            if r.returncode == 0:
-                add_ok += 1
-        except Exception:
-            pass
-    q.put(f"   ✅ {add_ok}/{len(copied_files)} 个文件已添加到SVN版本控制\n")
-
-    to_add = []
-    to_commit = []
-    changed_flags = {'M', 'A', 'R', '!', '?'}
+    # 用 --targets 批量 svn add + changelist
+    targets = os.path.join(tempfile.mkdtemp(), "svn_targets.txt")
+    changed = os.path.join(tempfile.mkdtemp(), "svn_changed.txt")
+    changed_files = []
     try:
-        r_st = subprocess.run(
-            [svn_exe, "status", wc_root],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=30, **_get_subprocess_kwargs()
+        with open(targets, "w", encoding="utf-8") as f:
+            for fp in copied_files:
+                f.write(os.path.abspath(fp) + "\n")
+        subprocess.run(
+            [svn_exe, "add", "--parents", "--force", "--quiet", "--targets", targets],
+            capture_output=True, text=True, timeout=60, **_get_subprocess_kwargs()
         )
-        if r_st.returncode == 0:
-            copied_abs = {os.path.abspath(f) for f in copied_files}
-            for line in r_st.stdout.splitlines():
-                if not line or len(line) < 2:
-                    continue
-                flag = line[0]
-                if flag not in changed_flags:
-                    continue
-                status_path = line[7:].strip() if len(line) > 7 else ""
-                if not status_path:
-                    continue
-                if not os.path.isabs(status_path):
-                    status_path = os.path.join(wc_root, status_path)
-                status_path = os.path.abspath(status_path)
-                if status_path in copied_abs:
-                    if flag in ('A', '?', '!'):
-                        to_add.append(status_path)
-                    else:
-                        to_commit.append(status_path)
+        # 查询实际有变化的文件（A/M/D），过滤掉 normal（未修改）的文件
+        r = subprocess.run(
+            [svn_exe, "status", "--targets", targets],
+            capture_output=True, text=True, timeout=60, **_get_subprocess_kwargs()
+        )
+        changed_files = []
+        for line in r.stdout.splitlines():
+            if len(line) < 2:
+                continue
+            flag = line[0]
+            if flag in ('A', 'M', 'D', 'R', '?'):
+                path = line[7:].strip() if len(line) > 7 else ""
+                if path:
+                    if not os.path.isabs(path):
+                        path = os.path.join(wc_root, path)
+                    changed_files.append(os.path.abspath(path))
+        q.put(f"   ✅ 已添加 {len(copied_files)} 个文件，其中 {len(changed_files)} 个有实际变化\n")
+        # 先清空旧的 changelist 标签，再只标记有变化的文件
+        subprocess.run(
+            [svn_exe, "changelist", "--remove", "--changelist", "本次修改", wc_root, "--depth", "infinity"],
+            capture_output=True, text=True, timeout=60, **_get_subprocess_kwargs()
+        )
+        with open(changed, "w", encoding="utf-8") as f:
+            for fp in changed_files:
+                f.write(fp + "\n")
+        subprocess.run(
+            [svn_exe, "changelist", "本次修改", "--targets", changed],
+            capture_output=True, text=True, timeout=60, **_get_subprocess_kwargs()
+        )
+        q.put(f"   🏷️ 已标记 {len(changed_files)} 个文件 changelist 分组\n")
     except Exception:
         pass
-
-    modified_files = to_add + to_commit
-    try:
-        r_cl = subprocess.run(
-            [svn_exe, "status", "--changelist", "本次修改", wc_root],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=30, **_get_subprocess_kwargs()
-        )
-        if r_cl.returncode == 0:
-            modified_now = set(modified_files)
-            cl_clean = []
-            for line in r_cl.stdout.splitlines():
-                if not line or len(line) < 2:
-                    continue
-                flag = line[0]
-                status_path = line[7:].strip() if len(line) > 7 else ""
-                if not status_path:
-                    continue
-                if not os.path.isabs(status_path):
-                    status_path = os.path.join(wc_root, status_path)
-                status_path = os.path.abspath(status_path)
-                if flag not in changed_flags or status_path not in modified_now:
-                    cl_clean.append(status_path)
-            if cl_clean:
-                for cf in cl_clean:
-                    subprocess.run(
-                        [svn_exe, "changelist", "--remove", cf],
-                        capture_output=True, text=True, timeout=10, **_get_subprocess_kwargs()
-                    )
-                q.put(f"   🧹 已从changelist清理 {len(cl_clean)} 个文件\n")
-    except Exception:
-        pass
-
-    if not modified_files:
-        q.put("⚠️ 没有文件实际发生变化，跳过SVN上传\n")
-        return
-
-    cl_ok = 0
-    for f in modified_files:
-        try:
-            r = subprocess.run(
-                [svn_exe, "changelist", "本次修改", os.path.abspath(f)],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=30, **_get_subprocess_kwargs()
-            )
-            if r.returncode == 0:
-                cl_ok += 1
-        except Exception:
-            pass
-    q.put(f"   🏷️ {cl_ok}/{len(modified_files)} 个文件已标记 changelist\n")
+    finally:
+        for f in [targets, changed]:
+            try:
+                os.unlink(f)
+                os.rmdir(os.path.dirname(f))
+            except Exception:
+                pass
 
     tortoise = _get_tortoise_proc_path()
     if tortoise:
-        q.put(f"🖥️ 正在打开 TortoiseSVN 提交对话框 ({len(modified_files)} 个文件)...\n")
+        q.put(f"🖥️ 正在打开 TortoiseSVN 提交对话框 ({len(changed_files)} 个文件)...\n")
         subprocess.Popen([tortoise, "/command:commit", f"/path:{wc_root}"])
         q.put("✅ TortoiseSVN 提交对话框已打开\n")
     else:
@@ -660,20 +606,15 @@ def _run_upload_copy(src, tgt, files, q, task_id):
                 target_dir = os.path.join(tgt, name)
                 if os.path.isdir(target_dir):
                     q.put(f"📂 {name}/ 已存在，合并文件...\n")
-                else:
-                    os.makedirs(target_dir, exist_ok=True)
-                for root, dirs, fnames in os.walk(sp):
-                    rel = os.path.relpath(root, sp)
-                    dst_dir = os.path.join(target_dir, rel)
-                    os.makedirs(dst_dir, exist_ok=True)
-                    for fn in fnames:
-                        dst = os.path.join(dst_dir, fn)
-                        _copy_file_upload(os.path.join(root, fn), dst)
-                        copied_files.append(dst)
+                shutil.copytree(sp, target_dir, dirs_exist_ok=True, copy_function=shutil.copy2)
+                for rp, _, fns in os.walk(sp):
+                    rel = os.path.relpath(rp, sp)
+                    for fn in fns:
+                        copied_files.append(os.path.join(target_dir, rel, fn))
                 q.put(f"✓ {name}/ 文件夹已复制\n")
             else:
                 dst = os.path.join(tgt, name)
-                _copy_file_upload(sp, dst)
+                shutil.copy2(sp, dst)
                 copied_files.append(dst)
                 q.put(f"✓ {name}\n")
             success += 1
@@ -687,13 +628,6 @@ def _run_upload_copy(src, tgt, files, q, task_id):
 
     q.put(None)
     _log_queues.pop(task_id, None)
-
-
-def _copy_file_upload(src_p, dst_p):
-    os.makedirs(os.path.dirname(dst_p), exist_ok=True)
-    if os.path.isfile(dst_p):
-        os.chmod(dst_p, stat.S_IWRITE)
-    shutil.copy2(src_p, dst_p)
 
 
 @app.route("/api/upload/run", methods=["POST"])

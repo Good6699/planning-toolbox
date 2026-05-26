@@ -2668,6 +2668,7 @@ function saveTrLangAdvSettings() {
   });
 }
 let _runningCount = 0;
+const _esMap = {};
 let _wfPlayState = {};
 function _incRunning() {
   if (_runningCount === 0) {
@@ -2715,14 +2716,14 @@ async function runTask(url, body, btn, logId, label, onDone) {
     _done();
     return;
   }
-  if (window._esSvn) window._esSvn.close();
+  if (_esMap[url]) _esMap[url].close();
   const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
-  window._esSvn = evtSrc;
+  _esMap[url] = evtSrc;
   let _outputPath = "";
   evtSrc.onmessage = (e) => {
     if (e.data === "[DONE]") {
       evtSrc.close();
-      window._esSvn = null;
+      _esMap[url] = null;
       _done();
       if (_outputPath) {
         const _hint = document.createElement("div");
@@ -2763,6 +2764,7 @@ async function runTask(url, body, btn, logId, label, onDone) {
   };
   evtSrc.onerror = () => {
     evtSrc.close();
+    _esMap[url] = null;
     _done();
     logEl.innerHTML += "\n⚠ 日志连接中断\n";
   };

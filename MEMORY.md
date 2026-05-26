@@ -106,6 +106,7 @@
 - svn info返回的URL是编码后的中文路径，需用urllib.parse.unquote解码
 - **`svn status --targets` 编码陷阱**：2026-05-26 Web 版 `_run_svn_after_upload` 用 `svn status --targets targets` 检测变更，缺少 `encoding="utf-8"` 参数导致路径包含非 ASCII 字符时解码失败，始终报告 0 个有变化文件。修复方案：改用 `svn status wc_root` 扫整个工作副本 + `copied_abs` 集合过滤，与 GUI 版已验证的 `_svn_build_modified_list` 方案一致。涉及文件：`web_app.py`
 - **全局运行计数器替换分散的状态栏逻辑**：2026-05-26 状态栏集中在 `_incRunning()`/`_decRunning()` 两个函数用 `_runningCount` 管理。之前 `runTask()` 用 `_wfRunningTasks` 仅覆盖工作流页签，3 个 merge 函数（`runMergeQuery`/`runMergeRun`/`runMergeAnalysis`）启动时完全不会设置"运行中"，且各 [DONE] 处理器无条件写"系统空闲"互相冲突。改后所有功能统一走计数器，错误路径也补上 `_decRunning()` 防止泄漏。涉及文件：`templates/index.html`
+- **EventSource 共享导致多任务运行时计数器泄漏**：2026-05-26 `runTask()` 内部所有功能（SVN记录/上传/翻译/工作流）共用同一个 `window._esSvn` 变量。多任务并行时先启动的 EventSource 被后启动的任务 `close()` 掉，导致 [DONE] 消息遗失 → `_done()` 不执行 → `_decRunning()` 不执行 → `_runningCount` 泄漏。修复：改用 `_esMap[url]` 按 URL 独立管理 EventSource 生命周期。涉及文件：`templates/index.html`
 
 ### Unity YAML type 解析索引错位修复
 - **场景**：`_merge_analyzer.py` 的 `_parse_unity_yaml` 中 type 字段全部解析为空字符串，导致无法识别 GameObject 类型块，节点路径退化为 `节点(1229026825479412)`

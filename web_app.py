@@ -512,7 +512,7 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
     except Exception:
         pass
 
-    # 用 --targets 批量 svn add + changelist
+    # 用 --targets 批量 svn add，再用 svn status wc_root + 集合过滤检测变更
     targets = os.path.join(tempfile.mkdtemp(), "svn_targets.txt")
     changed = os.path.join(tempfile.mkdtemp(), "svn_changed.txt")
     changed_files = []
@@ -524,36 +524,45 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
             [svn_exe, "add", "--parents", "--force", "--quiet", "--targets", targets],
             capture_output=True, text=True, timeout=60, **_get_subprocess_kwargs()
         )
-        # 查询实际有变化的文件（A/M/D），过滤掉 normal（未修改）的文件
+        # 扫描整个工作副本，按 copied_files 集合过滤出有变化的文件
         r = subprocess.run(
-            [svn_exe, "status", "--targets", targets],
-            capture_output=True, text=True, timeout=60, **_get_subprocess_kwargs()
+            [svn_exe, "status", wc_root],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=60, **_get_subprocess_kwargs()
         )
-        changed_files = []
+        copied_abs = {os.path.abspath(f) for f in copied_files}
+        changed_flags = {'M', 'A', 'R', '!', '?'}
         for line in r.stdout.splitlines():
             if len(line) < 2:
                 continue
             flag = line[0]
-            if flag in ('A', 'M', 'D', 'R', '?'):
-                path = line[7:].strip() if len(line) > 7 else ""
-                if path:
-                    if not os.path.isabs(path):
-                        path = os.path.join(wc_root, path)
-                    changed_files.append(os.path.abspath(path))
+            if flag not in changed_flags:
+                continue
+            p = line[7:].strip() if len(line) > 7 else ""
+            if not p:
+                continue
+            if not os.path.isabs(p):
+                p = os.path.join(wc_root, p)
+            p = os.path.abspath(p)
+            if p in copied_abs:
+                changed_files.append(p)
         q.put(f"   ✅ 已添加 {len(copied_files)} 个文件，其中 {len(changed_files)} 个有实际变化\n")
         # 先清空旧的 changelist 标签，再只标记有变化的文件
         subprocess.run(
             [svn_exe, "changelist", "--remove", "--changelist", "本次修改", wc_root, "--depth", "infinity"],
             capture_output=True, text=True, timeout=60, **_get_subprocess_kwargs()
         )
-        with open(changed, "w", encoding="utf-8") as f:
-            for fp in changed_files:
-                f.write(fp + "\n")
-        subprocess.run(
-            [svn_exe, "changelist", "本次修改", "--targets", changed],
-            capture_output=True, text=True, timeout=60, **_get_subprocess_kwargs()
-        )
-        q.put(f"   🏷️ 已标记 {len(changed_files)} 个文件 changelist 分组\n")
+        if changed_files:
+            with open(changed, "w", encoding="utf-8") as f:
+                for fp in changed_files:
+                    f.write(fp + "\n")
+            subprocess.run(
+                [svn_exe, "changelist", "本次修改", "--targets", changed],
+                capture_output=True, text=True, timeout=60, **_get_subprocess_kwargs()
+            )
+            q.put(f"   🏷️ 已标记 {len(changed_files)} 个文件 changelist 分组\n")
+        else:
+            q.put("   🏷️ 无变化的文件，跳过 changelist 标记\n")
     except Exception:
         pass
     finally:

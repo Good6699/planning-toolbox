@@ -87,7 +87,7 @@ upload > L > 文件.3     → 复制合并左列第4个文件
 | `merge > F > 开始合并` | `@merge-run` | [开始合并] |
 | `merge > F > 版本总数` | `#merge_version_count` | 显示 "共N个版本" |
 | `merge > F > 已选版本数` | `#merge_version_count_bottom` | 底部显示 "已选 N 个" |
-| `merge > F > 版本列表` | `#merge_version_list` | 版本列表容器 |
+| `merge > F > 版本列表` | `#merge_version_list` | 版本列表容器，在 `.merge-side-cards` 内 |
 | `merge > F > 版本列表 > 筛选` | `@merge-file-filter-toggle` | ⚙ 路径筛选（点击弹出包含/排除设置窗） |
 | `merge > F > 版本.N` | `.merge-version-item:nth(N)` | 第N个版本项(0起) |
 | `merge > F > 版本.N > 复选框` | `.merge-version-item input[checkbox]` | 版本复选框 |
@@ -98,9 +98,10 @@ upload > L > 文件.3     → 复制合并左列第4个文件
 | `merge > F > 版本.全选` | `@merge-ver-select-all` | 版本全选 |
 | `merge > F > 版本.反选` | `@merge-ver-select-invert` | 版本反选 |
 | `merge > F > 版本.清空` | `@merge-ver-select-clear` | 版本清空 |
+| `merge > F > 并排卡片` | `.merge-side-cards` | 版本列表+变更文件并排容器，宽屏左右等高，窄屏上下堆叠 |
 | `merge > F > 文件提示` | `#merge_file_hint` | 提示文字（如"请先选择版本"） |
 | `merge > F > 已选文件数` | `#merge_file_count_bottom` | 显示 "已选 N 个文件" |
-| `merge > F > 文件列表` | `#merge_file_list` | 变更文件列表容器 |
+| `merge > F > 文件列表` | `#merge_file_list` | 变更文件列表容器，在 `.merge-side-cards` 内 |
 | `merge > F > 文件.N` | `.merge-file-item:nth(N)` | 第N个文件项(0起) |
 | `merge > F > 文件.N > 复选框` | `.merge-file-item input[checkbox]` | 文件复选框 |
 | `merge > F > 文件.N > 操作` | `.merge-file-item .action-tag` | [A/M/D] 操作标记 |

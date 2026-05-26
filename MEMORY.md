@@ -109,6 +109,7 @@
 - **EventSource 共享导致多任务运行时计数器泄漏**：2026-05-26 `runTask()` 内部所有功能（SVN记录/上传/翻译/工作流）共用同一个 `window._esSvn` 变量。多任务并行时先启动的 EventSource 被后启动的任务 `close()` 掉，导致 [DONE] 消息遗失 → `_done()` 不执行 → `_decRunning()` 不执行 → `_runningCount` 泄漏。修复：改用 `_esMap[url]` 按 URL 独立管理 EventSource 生命周期。涉及文件：`templates/index.html`
 - **每个页签加独立运行状态黄点**：2026-05-26 5 个导航按钮各加 `nav-dot` 黄点，通过 `_tabCount` 各 tab 独立计数器 + `_incTabRunning(tabKey)`/`_decTabRunning(tabKey)` 管理。runTask() 内通过 `_URL_TAB` 映射 URL → tabKey 自动绑定，merge 三个函数单独补 `_incTabRunning("merge")`。黄点只和对应页签的功能运行绑定，全局状态栏汇总逻辑不变。涉及文件：`templates/index.html`
 - **nav-dot 黄点修复位置与可见性问题**：2026-05-26 三个问题：① `position:relative` 只加在 `.nav-btn.active` 上，导致未被激活页签的 dot 逃逸到左上角（策划工具箱 logo 旁多了一个黄点）；② `position:absolute;top:6px;right:6px` 强制右上角定位，不选中看不到；③ `<span class="nav-dot">` 在文本前面。修复：`position:relative` 移到 `.nav-btn` base 样式使所有按钮成为定位容器，CSS 改用 `margin-left:6px;flex-shrink:0` 行内排列在文本后侧，DOM 顺序改为 `${label}<span class="nav-dot">`。涉及文件：`templates/index.html`、`策划工具箱_UI路径参考.md`
+- **merge 版本列表+变更文件卡片改为宽屏并排等高**：2026-05-26 语义合并页签的版本列表和变更文件两个卡片从全宽上下排列改为 `.merge-side-cards` flex wrapper 包装，`flex:1 1 360px` 自动响应：宽屏时左右并排等高，窄屏时自动换行堆叠（与翻译页签 API 设置+输出设置卡片同一模式）。去掉原先的 `style="margin-bottom:0"` 内联样式。涉及文件：`templates/index.html`、`策划工具箱_UI路径参考.md`
 
 ### Unity YAML type 解析索引错位修复
 - **场景**：`_merge_analyzer.py` 的 `_parse_unity_yaml` 中 type 字段全部解析为空字符串，导致无法识别 GameObject 类型块，节点路径退化为 `节点(1229026825479412)`

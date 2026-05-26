@@ -1283,6 +1283,17 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .merge-full{
   grid-column:1/-1;
 }
+.merge-side-cards{
+  grid-column:1/-1;
+  display:flex;
+  flex-direction:row;
+  flex-wrap:wrap;
+  gap:16px;
+}
+.merge-side-cards>.card{
+  flex:1 1 360px;
+  min-height:0;
+}
 .merge-version-list{
   max-height:360px;
   overflow-y:auto;
@@ -3127,8 +3138,8 @@ function buildMergeTab(panel) {
         <button class="btn btn-primary" data-action="merge-analyze" id="merge_analysis_btn" style="min-width:180px" disabled>语义分析</button>
         <button class="btn btn-primary" data-action="merge-run" id="merge_run_btn" style="min-width:180px" disabled>开始合并</button>
       </div>
-      <div class="merge-full">
-        <div class="card" style="margin-bottom:0">
+      <div class="merge-side-cards">
+        <div class="card">
           <div class="card-header compact">
             <span style="font-weight:600;display:flex;align-items:center;gap:2px">版本列表<button data-action="merge-file-filter-toggle" title="只包含路径筛选" style="background:none;border:none;cursor:pointer;font-size:15px;color:var(--dim);padding:0;line-height:1;flex-shrink:0">⚙</button></span>
             <div style="display:flex;gap:6px;align-items:center">
@@ -3145,9 +3156,7 @@ function buildMergeTab(panel) {
             <span class="count merge-ops-hidden" id="merge_version_count_bottom">已选 0 个</span>
           </div>
         </div>
-      </div>
-      <div class="merge-full">
-        <div class="card" style="margin-bottom:0">
+        <div class="card">
           <div class="card-header compact">
             <span style="font-weight:600">变更文件</span>
             <div style="display:flex;gap:6px;align-items:center">

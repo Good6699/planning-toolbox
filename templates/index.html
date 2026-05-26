@@ -2667,26 +2667,31 @@ function saveTrLangAdvSettings() {
     btn.disabled = false;
   });
 }
-let _wfRunningTasks = 0;
+let _runningCount = 0;
 let _wfPlayState = {};
+function _incRunning() {
+  if (_runningCount === 0) {
+    const sb = document.getElementById("status_bar");
+    if (sb) { sb.classList.add("running"); sb.querySelector("span").textContent = "运行中"; }
+  }
+  _runningCount++;
+}
+function _decRunning() {
+  _runningCount = Math.max(0, _runningCount - 1);
+  if (_runningCount === 0) {
+    const sb = document.getElementById("status_bar");
+    if (sb) { sb.classList.remove("running"); const sp = sb.querySelector("span"); if (sp) sp.textContent = "系统空闲"; }
+  }
+}
 async function runTask(url, body, btn, logId, label, onDone) {
   const logEl = document.getElementById(logId);
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
-  if (label) {
-    if (_wfRunningTasks === 0) {
-      const statusBar = document.getElementById("status_bar");
-      statusBar.classList.add("running");
-      statusBar.querySelector("span").textContent = "运行中";
-    }
-    _wfRunningTasks++;
-  } else {
+  _incRunning();
+  if (!label) {
     if (!btn.dataset.orig) btn.dataset.orig = btn.textContent;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>执行中...';
     logEl.innerHTML = "";
-    const statusBar = document.getElementById("status_bar");
-    statusBar.classList.add("running");
-    statusBar.querySelector("span").textContent = "运行中";
   }
   const r = await fetch(url, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const d = await r.json();
@@ -2696,20 +2701,12 @@ async function runTask(url, body, btn, logId, label, onDone) {
   }
 
   function _done() {
+    _decRunning();
     if (label) {
-      _wfRunningTasks--;
-      if (_wfRunningTasks <= 0) {
-        const sb = document.getElementById("status_bar");
-        sb.classList.remove("running");
-        sb.querySelector("span").textContent = "系统空闲";
-      }
       if (onDone) onDone();
     } else {
       btn.disabled = false;
       btn.textContent = btn.dataset.orig;
-      const sb = document.getElementById("status_bar");
-      sb.classList.remove("running");
-      sb.querySelector("span").textContent = "系统空闲";
     }
   }
 
@@ -3319,6 +3316,7 @@ async function runMergeQuery() {
   btn.innerHTML = '<span class="spinner"></span>查询中...';
   const logEl = document.getElementById("merge_log");
   logEl.innerHTML = "";
+  _incRunning();
   try {
     const body = {
       source_url: sourceUrl,
@@ -3332,7 +3330,7 @@ async function runMergeQuery() {
     initSuggest("merge_source", config.svn_urls);
     const r = await fetch("/api/merge/query", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await r.json();
-    if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent=orig; return; }
+    if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent=orig; _decRunning(); return; }
     if (window._esMergeQ) window._esMergeQ.close();
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
     window._esMergeQ = evtSrc;
@@ -3342,8 +3340,7 @@ async function runMergeQuery() {
         evtSrc.close();
         btn.disabled = false;
         btn.textContent = orig;
-        const sb = document.getElementById("status_bar");
-        if (sb) { sb.classList.remove("running"); const sp = sb.querySelector("span"); if (sp) sp.textContent = "系统空闲"; }
+        _decRunning();
         if (resultData) {
           if (resultData.ok) {
             _mergeData.versions = resultData.versions || [];
@@ -3382,6 +3379,7 @@ async function runMergeQuery() {
   } catch (err) {
     btn.disabled = false;
     btn.textContent = orig;
+    _decRunning();
     _showToast("请求失败: " + err.message);
   }
 }
@@ -3547,6 +3545,7 @@ async function runMergeRun() {
   const logEl = document.getElementById("merge_log");
   logEl.innerHTML = "";
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
+  _incRunning();
   const body = {
     source_url: sourceUrl,
     target_path: targetPath,
@@ -3561,6 +3560,7 @@ async function runMergeRun() {
     const d = await r.json();
     if (d.error) {
       logEl.innerHTML = '<span class="error">❌ '+escapeHtml(d.error)+'</span>';
+      _decRunning();
       return;
     }
     if (window._esMergeRun) window._esMergeRun.close();
@@ -3572,12 +3572,7 @@ async function runMergeRun() {
         window._esMergeRun = null;
         btn.disabled = false;
         btn.textContent = "开始精准合并";
-        const sb = document.getElementById("status_bar");
-        if (sb) {
-          sb.classList.remove("running");
-          const span = sb.querySelector("span");
-          if (span) span.textContent = "系统空闲";
-        }
+        _decRunning();
         return;
       }
       const lines = e.data.split("\n");
@@ -3594,6 +3589,7 @@ async function runMergeRun() {
     logEl.innerHTML = '<span class="error">❌ 请求失败: '+escapeHtml(err.message)+'</span>';
     btn.disabled = false;
     btn.textContent = "开始精准合并";
+    _decRunning();
   }
 }
 async function runMergeAnalysis() {
@@ -3620,11 +3616,12 @@ async function runMergeAnalysis() {
   const logEl = document.getElementById("merge_log");
   logEl.innerHTML = "";
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
+  _incRunning();
   const body = { source_url: sourceUrl, target_path: targetPath, revisions: checkedRevs, version_files: versionFiles, rev_file_map: revFileMap };
   try {
     const r = await fetch("/api/merge/analyze", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await r.json();
-    if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent="语义分析"; return; }
+    if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent="语义分析"; _decRunning(); return; }
     if (window._esMergeAna) window._esMergeAna.close();
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
     window._esMergeAna = evtSrc;
@@ -3634,8 +3631,7 @@ async function runMergeAnalysis() {
         window._esMergeAna = null;
         btn.disabled = false;
         btn.textContent = "语义分析";
-        const sb = document.getElementById("status_bar");
-        if (sb) { sb.classList.remove("running"); const sp = sb.querySelector("span"); if (sp) sp.textContent = "系统空闲"; }
+        _decRunning();
         return;
       }
       if (e.data.startsWith("[RESULT]")) {
@@ -3654,6 +3650,7 @@ async function runMergeAnalysis() {
   } catch (err) {
     btn.disabled = false;
     btn.textContent = "语义分析";
+    _decRunning();
     _showToast("请求失败: " + err.message);
   }
 }

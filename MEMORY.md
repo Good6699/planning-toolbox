@@ -111,6 +111,7 @@
 - **nav-dot 黄点修复位置与可见性问题**：2026-05-26 三个问题：① `position:relative` 只加在 `.nav-btn.active` 上，导致未被激活页签的 dot 逃逸到左上角（策划工具箱 logo 旁多了一个黄点）；② `position:absolute;top:6px;right:6px` 强制右上角定位，不选中看不到；③ `<span class="nav-dot">` 在文本前面。修复：`position:relative` 移到 `.nav-btn` base 样式使所有按钮成为定位容器，CSS 改用 `margin-left:6px;flex-shrink:0` 行内排列在文本后侧，DOM 顺序改为 `${label}<span class="nav-dot">`。涉及文件：`templates/index.html`、`策划工具箱_UI路径参考.md`
 - **merge 版本列表+变更文件卡片改为宽屏并排等高**：2026-05-26 语义合并页签的版本列表和变更文件两个卡片从全宽上下排列改为 `.merge-side-cards` flex wrapper 包装，`flex:1 1 360px` 自动响应：宽屏时左右并排等高，窄屏时自动换行堆叠（与翻译页签 API 设置+输出设置卡片同一模式）。去掉原先的 `style="margin-bottom:0"` 内联样式。涉及文件：`templates/index.html`、`策划工具箱_UI路径参考.md`
 - **`min_size` 误用保存尺寸导致窗口最小限制越来越大**：2026-05-26 `create_window(min_size=(win_w, win_h))` 中 `win_w`/`win_h` 来自 `config.get("window_w/h")` 上次保存的窗口尺寸，导致每次重启后最小缩放尺寸被更新为上次关闭时的尺寸，用户永远无法拖到比上次更小。修复：改为固定值 `min_size=(400, 300)`。涉及文件：`desktop_main.py`
+- **SVN 查询 end_date +1 天覆盖全天范围**：2026-05-26 `toolbox_merge.svn_log()` 和 `svn_query.py` 传给 SVN 的 `end_date` 没有 +1 天，导致选 26 号只查到 26 号 00:00 之前的提交。`svn_oneclick_compare._svn_log_range()` 已有此处理。修复：`toolbox_merge.svn_log()` 内 `end_dt + timedelta(days=1)` + `svn_query.format_svn_date(is_end=True)`。涉及文件：`toolbox_merge.py`、`svn_query.py`
 
 ### Unity YAML type 解析索引错位修复
 - **场景**：`_merge_analyzer.py` 的 `_parse_unity_yaml` 中 type 字段全部解析为空字符串，导致无法识别 GameObject 类型块，节点路径退化为 `节点(1229026825479412)`

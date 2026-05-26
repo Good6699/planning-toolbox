@@ -11,7 +11,7 @@ import sys
 import argparse
 import os
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ─── 编码配置（必须在第一次 print 之前执行）──────────────────────────
 if not sys.stdout.isatty():
@@ -105,12 +105,16 @@ def parse_args():
     return parser.parse_args()
 
 
-def format_svn_date(date_str):
-    """将用户输入的日期格式化为 SVN 接受的格式 {YYYY-MM-DD}"""
+def format_svn_date(date_str, is_end=False):
+    """将用户输入的日期格式化为 SVN 接受的格式 {YYYY-MM-DD}
+    is_end=True 时追加一天，覆盖全天范围
+    """
     date_str = date_str.strip()
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
         try:
             dt = datetime.strptime(date_str, fmt)
+            if is_end and fmt == "%Y-%m-%d":
+                dt += timedelta(days=1)
             if fmt == "%Y-%m-%d":
                 return "{" + dt.strftime("%Y-%m-%d") + "}"
             else:
@@ -260,7 +264,7 @@ def main():
 
     # 格式化日期为 SVN revision 格式
     start_rev = format_svn_date(args.start)
-    end_rev = format_svn_date(args.end)
+    end_rev = format_svn_date(args.end, is_end=True)
 
     # 执行 svn log
     xml_content = run_svn_log(args.svn_path, args.url, start_rev, end_rev, args.limit)

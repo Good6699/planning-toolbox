@@ -8,6 +8,7 @@ import os
 import sys
 import subprocess
 import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _pm = os.path.join(_script_dir, "py_modules")
@@ -45,8 +46,9 @@ def _run_svn(cmd, timeout=120):
 def svn_log(source_url, start_date, end_date, author=None, keyword=None,
             svn_user=None, svn_pass=None, verbose=False):
     """查询SVN提交日志，返回版本列表。verbose=True 时返回文件列表"""
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
     cmd = ["log", source_url, "--xml", "-r",
-           f"{{{start_date}}}:{{{end_date}}}"]
+           f"{{{start_date}}}:{{{end_dt.strftime('%Y-%m-%d')}}}"]
     if author:
         cmd += ["--search", author]
     keywords_list = [k.strip() for k in keyword.split(",")] if keyword else []

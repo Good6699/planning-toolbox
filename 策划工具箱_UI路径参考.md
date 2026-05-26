@@ -28,11 +28,11 @@ upload > L > 文件.3     → 复制合并左列第4个文件
 | `app > T > 关闭` | `#close_btn` | ✕ 关闭到托盘按钮 |
 | `app > T > 缩放警告` | `#zoom_warning` | 浏览器缩放异常提示 |
 | `app > S > logo` | `.logo` | 左侧Logo区域 |
-| `app > S > nav.svn` | `.nav-btn[data-key="svn"]` | 导航-SVN记录 |
-| `app > S > nav.merge` | `.nav-btn[data-key="merge"]` | 导航-语义合并 |
-| `app > S > nav.upload` | `.nav-btn[data-key="upload"]` | 导航-复制合并 |
-| `app > S > nav.wf` | `.nav-btn[data-key="workflow"]` | 导航-工作流 |
-| `app > S > nav.tr` | `.nav-btn[data-key="translate"]` | 导航-翻译 |
+| `app > S > nav.svn` | `.nav-btn[data-key="svn"]` | 导航-SVN记录，黄点 `#nav_dot_svn` 在文本右侧 |
+| `app > S > nav.merge` | `.nav-btn[data-key="merge"]` | 导航-语义合并，黄点 `#nav_dot_merge` 在文本右侧 |
+| `app > S > nav.upload` | `.nav-btn[data-key="upload"]` | 导航-复制合并，黄点 `#nav_dot_upload` 在文本右侧 |
+| `app > S > nav.wf` | `.nav-btn[data-key="workflow"]` | 导航-工作流，黄点 `#nav_dot_workflow` 在文本右侧 |
+| `app > S > nav.tr` | `.nav-btn[data-key="translate"]` | 导航-翻译，黄点 `#nav_dot_translate` 在文本右侧 |
 
 ---
 
@@ -88,6 +88,7 @@ upload > L > 文件.3     → 复制合并左列第4个文件
 | `merge > F > 版本总数` | `#merge_version_count` | 显示 "共N个版本" |
 | `merge > F > 已选版本数` | `#merge_version_count_bottom` | 底部显示 "已选 N 个" |
 | `merge > F > 版本列表` | `#merge_version_list` | 版本列表容器 |
+| `merge > F > 版本列表 > 筛选` | `@merge-file-filter-toggle` | ⚙ 路径筛选（点击弹出包含/排除设置窗） |
 | `merge > F > 版本.N` | `.merge-version-item:nth(N)` | 第N个版本项(0起) |
 | `merge > F > 版本.N > 复选框` | `.merge-version-item input[checkbox]` | 版本复选框 |
 | `merge > F > 版本.N > 版本号` | `.merge-version-item .rev` | 显示 r12345 |
@@ -108,8 +109,8 @@ upload > L > 文件.3     → 复制合并左列第4个文件
 | `merge > F > 文件.全选` | `@merge-select-all` | 文件全选 |
 | `merge > F > 文件.反选` | `@merge-select-invert` | 文件反选 |
 | `merge > F > 文件.清空` | `@merge-select-clear` | 文件清空 |
-| `merge > F > 排除设置` | `@merge-file-settings` | ⚙ 排除路径设置 |
 | `merge > F > 筛选按钮` | `#merge_query_btn` | [筛选查询] 按钮 |
+| `merge > F > 语义分析` | `@merge-analyze` | [语义分析] 按钮 |
 | `merge > F > 合并按钮` | `#merge_run_btn` | [开始合并] 按钮 |
 | `merge > F > 日志` | `#merge_log` | 执行日志 |
 

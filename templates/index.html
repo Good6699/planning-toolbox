@@ -131,6 +131,7 @@ button,input,textarea,select{
   cursor:pointer;
   transition:.18s;
   text-align:left;
+  position:relative;
 }
 .nav-btn:hover{
   background:rgba(255,255,255,.03);
@@ -141,19 +142,17 @@ button,input,textarea,select{
   background:linear-gradient(135deg,rgba(94,162,255,.22),rgba(94,162,255,.06));
   box-shadow:0 0 0 1px rgba(94,162,255,.18),0 8px 20px rgba(94,162,255,.1);
   font-weight:600;
-  position:relative;
 }
 .nav-dot{
   width:8px;height:8px;
   border-radius:50%;
   background:#ffc107;
   display:none;
-  position:absolute;
-  top:6px;right:6px;
-  pointer-events:none;
+  margin-left:6px;
+  flex-shrink:0;
 }
 .nav-dot.active{
-  display:block;
+  display:inline-block;
 }
 .main{
   min-width:0;
@@ -1521,7 +1520,7 @@ const content = document.getElementById("content");
 nav.forEach(n=>{
   const btn = document.createElement("button");
   btn.className = "nav-btn";
-  btn.innerHTML = `<span class="nav-dot" id="nav_dot_${n.key}"></span>${n.label}`;
+  btn.innerHTML = `${n.label}<span class="nav-dot" id="nav_dot_${n.key}"></span>`;
   btn.dataset.key = n.key;
   sidebarNav.appendChild(btn);
   S[n.key].navBtn = btn;

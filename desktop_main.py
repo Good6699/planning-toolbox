@@ -876,7 +876,7 @@ def main():
         easy_drag=False,
         shadow=True,
         background_color="#0f1115",
-        min_size=(win_w, win_h),
+        min_size=(400, 300),
         text_select=True,
         zoomable=False,
         resizable=True,
@@ -940,7 +940,7 @@ def main():
         _set_progress(window, 90, "准备就绪")
         time.sleep(0.4)
         _set_progress(window, 100, "启动中")
-        time.sleep(0.1)
+        time.sleep(0.2)
 
         try:
             window.load_url("http://127.0.0.1:18123")

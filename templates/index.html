@@ -141,6 +141,19 @@ button,input,textarea,select{
   background:linear-gradient(135deg,rgba(94,162,255,.22),rgba(94,162,255,.06));
   box-shadow:0 0 0 1px rgba(94,162,255,.18),0 8px 20px rgba(94,162,255,.1);
   font-weight:600;
+  position:relative;
+}
+.nav-dot{
+  width:8px;height:8px;
+  border-radius:50%;
+  background:#ffc107;
+  display:none;
+  position:absolute;
+  top:6px;right:6px;
+  pointer-events:none;
+}
+.nav-dot.active{
+  display:block;
 }
 .main{
   min-width:0;
@@ -1508,7 +1521,7 @@ const content = document.getElementById("content");
 nav.forEach(n=>{
   const btn = document.createElement("button");
   btn.className = "nav-btn";
-  btn.textContent = n.label;
+  btn.innerHTML = `<span class="nav-dot" id="nav_dot_${n.key}"></span>${n.label}`;
   btn.dataset.key = n.key;
   sidebarNav.appendChild(btn);
   S[n.key].navBtn = btn;
@@ -2669,6 +2682,7 @@ function saveTrLangAdvSettings() {
 }
 let _runningCount = 0;
 const _esMap = {};
+let _tabCount = {svn:0, merge:0, upload:0, workflow:0, translate:0};
 let _wfPlayState = {};
 function _incRunning() {
   if (_runningCount === 0) {
@@ -2684,10 +2698,28 @@ function _decRunning() {
     if (sb) { sb.classList.remove("running"); const sp = sb.querySelector("span"); if (sp) sp.textContent = "系统空闲"; }
   }
 }
+const _URL_TAB = {
+  "/api/svn/run":"svn", "/api/upload/run":"upload",
+  "/api/translate/run":"translate", "/api/workflow/run":"workflow",
+};
+function _setTabDot(tabKey, on) {
+  const dot = document.getElementById("nav_dot_" + tabKey);
+  if (dot) dot.classList.toggle("active", on);
+}
+function _incTabRunning(tabKey) {
+  if (_tabCount[tabKey] === 0) _setTabDot(tabKey, true);
+  _tabCount[tabKey]++;
+}
+function _decTabRunning(tabKey) {
+  _tabCount[tabKey] = Math.max(0, _tabCount[tabKey] - 1);
+  if (_tabCount[tabKey] === 0) _setTabDot(tabKey, false);
+}
 async function runTask(url, body, btn, logId, label, onDone) {
   const logEl = document.getElementById(logId);
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
+  const tabKey = _URL_TAB[url];
   _incRunning();
+  if (tabKey) _incTabRunning(tabKey);
   if (!label) {
     if (!btn.dataset.orig) btn.dataset.orig = btn.textContent;
     btn.disabled = true;
@@ -2703,6 +2735,7 @@ async function runTask(url, body, btn, logId, label, onDone) {
 
   function _done() {
     _decRunning();
+    if (tabKey) _decTabRunning(tabKey);
     if (label) {
       if (onDone) onDone();
     } else {
@@ -3319,6 +3352,7 @@ async function runMergeQuery() {
   const logEl = document.getElementById("merge_log");
   logEl.innerHTML = "";
   _incRunning();
+  _incTabRunning("merge");
   try {
     const body = {
       source_url: sourceUrl,
@@ -3332,7 +3366,7 @@ async function runMergeQuery() {
     initSuggest("merge_source", config.svn_urls);
     const r = await fetch("/api/merge/query", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await r.json();
-    if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent=orig; _decRunning(); return; }
+    if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent=orig; _decRunning(); _decTabRunning("merge"); return; }
     if (window._esMergeQ) window._esMergeQ.close();
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
     window._esMergeQ = evtSrc;
@@ -3343,6 +3377,7 @@ async function runMergeQuery() {
         btn.disabled = false;
         btn.textContent = orig;
         _decRunning();
+        _decTabRunning("merge");
         if (resultData) {
           if (resultData.ok) {
             _mergeData.versions = resultData.versions || [];
@@ -3382,6 +3417,7 @@ async function runMergeQuery() {
     btn.disabled = false;
     btn.textContent = orig;
     _decRunning();
+    _decTabRunning("merge");
     _showToast("请求失败: " + err.message);
   }
 }
@@ -3548,6 +3584,7 @@ async function runMergeRun() {
   logEl.innerHTML = "";
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
   _incRunning();
+  _incTabRunning("merge");
   const body = {
     source_url: sourceUrl,
     target_path: targetPath,
@@ -3563,6 +3600,7 @@ async function runMergeRun() {
     if (d.error) {
       logEl.innerHTML = '<span class="error">❌ '+escapeHtml(d.error)+'</span>';
       _decRunning();
+      _decTabRunning("merge");
       return;
     }
     if (window._esMergeRun) window._esMergeRun.close();
@@ -3575,6 +3613,7 @@ async function runMergeRun() {
         btn.disabled = false;
         btn.textContent = "开始精准合并";
         _decRunning();
+        _decTabRunning("merge");
         return;
       }
       const lines = e.data.split("\n");
@@ -3592,6 +3631,7 @@ async function runMergeRun() {
     btn.disabled = false;
     btn.textContent = "开始精准合并";
     _decRunning();
+    _decTabRunning("merge");
   }
 }
 async function runMergeAnalysis() {
@@ -3619,11 +3659,12 @@ async function runMergeAnalysis() {
   logEl.innerHTML = "";
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
   _incRunning();
+  _incTabRunning("merge");
   const body = { source_url: sourceUrl, target_path: targetPath, revisions: checkedRevs, version_files: versionFiles, rev_file_map: revFileMap };
   try {
     const r = await fetch("/api/merge/analyze", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await r.json();
-    if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent="语义分析"; _decRunning(); return; }
+    if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent="语义分析"; _decRunning(); _decTabRunning("merge"); return; }
     if (window._esMergeAna) window._esMergeAna.close();
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
     window._esMergeAna = evtSrc;
@@ -3634,6 +3675,7 @@ async function runMergeAnalysis() {
         btn.disabled = false;
         btn.textContent = "语义分析";
         _decRunning();
+        _decTabRunning("merge");
         return;
       }
       if (e.data.startsWith("[RESULT]")) {
@@ -3653,6 +3695,7 @@ async function runMergeAnalysis() {
     btn.disabled = false;
     btn.textContent = "语义分析";
     _decRunning();
+    _decTabRunning("merge");
     _showToast("请求失败: " + err.message);
   }
 }

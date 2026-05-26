@@ -2107,6 +2107,13 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
                            svn_user=svn_user, svn_pass=svn_pass,
                            verbose=True)
 
+        # SVN 的 {date} 解析会向前回溯到最近有提交的日期，导致日期范围外的版本混入
+        # 在 Python 端再做一次日期过滤
+        before = len(versions)
+        versions = [v for v in versions if v.get("date", "")[:10] >= start_date]
+        if before != len(versions):
+            _log(f"日期过滤: 剔除 {before - len(versions)} 个超出范围的版本")
+
         if filter_str_verbose:
             for v in versions:
                 if is_file_url:

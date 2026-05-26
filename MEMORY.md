@@ -95,6 +95,12 @@
   - JS 侧调用方式：`const path = await window.pywebview.api.browseFile()`，path 为完整绝对路径
   - 路由对应：`create_file_dialog` 是 `Window` 实例方法，必须通过 `webview.windows[0]` 获取窗口实例调用
   - `webview.OPEN_DIALOG` 和 `webview.FOLDER_DIALOG` 是模块级常量，均存在
+
+### SVN {date} 语法日期回溯，需 Python 端二次过滤
+- **场景**：设置起始日期 5/25、结束日期 5/26，版本列表中却出现了 5/22 的记录
+- **根因**：`svn log -r {start_date}:{end_date}` 的 `{date}` 语法解析为"该日期之前最近有提交的版本"。如果 5/22 后到 5/25 之间无人提交，{5/25} 会被解析为 r(5/22)，导致起始范围自动扩大到 5/22
+- **解决方案**：在 `svn_log` 返回后，用 `v["date"][:10] >= start_date` 在 Python 端再做一次日期过滤，剔除超出范围的版本
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 - **工作流模态框浏览按钮修复**：2026-05-20 工作流步骤设置弹窗的"浏览"按钮无法触发文件对话框。根因：① `_fb()` 模板中的 `file_types` 传了 `[('Excel Files', '*.*')]`（元组列表），pywebview 要求 `('Excel Files (*.xlsm)', ...)`（格式化字符串），导致 `parse_file_type` 抛出 ValueError 并被 `except Exception: pass` 吞掉；② `addEventListener` 在 WebView2 模态框 overlay 中不触发，改为 `onclick` IIFE 直接绑定。涉及文件：`desktop_main.py`（file_types 格式 + 异常打印）、`index.html`（按钮绑定改为 onclick 内联 IIFE）
 - **浏览对话框初始目录**：2026-05-20 点击"浏览"时，文件对话框默认打开输入框中已有路径的父目录，而不是系统"最近使用的目录"。`ResizeApi.browseFile(directory)` 和 `browseDir(directory)` 接受 `directory` 参数传给 `create_file_dialog`；前端 IIFE 从 input value 中提取路径（file 类型截取 `lastIndexOf('\')` 父目录），JS 端传给 `pywebview.api.browseFile(initialDir)`。涉及文件：`desktop_main.py`（directory 参数）、`index.html`（IIFE 传初始路径 + browseFile/browseDir 形参）
 - **全局函数不能调用闭包内函数**：2026-05-20 `browseFile()` 是全局函数，调用 `_wfModalAutoSave()` 时报 `is not defined`，因为它是工作流页签闭包内的局部变量。修复：`window._wfModalAutoSave = _wfModalAutoSave` 暴露到 window 对象；调用处 `window._wfModalAutoSave()` 并加 `typeof` 安全判断。经验：通过 `window.xxx` 将闭包内函数暴露为全局，是 pywebview JS 桥调用闭包变量的标准做法

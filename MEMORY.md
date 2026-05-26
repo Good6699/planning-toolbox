@@ -771,3 +771,9 @@ while (true):
   - 每个步骤的 ▶ 使用独立 stateKey `"step_wfIdx_stepIdx"`，与父工作流的 `wfIdx` 键不冲突，两者可并行运行
   - 所有工作流按钮图标从 Unicode（▶⏹⚙）替换为统一 14×14 SVG，解决不同字符视觉面积不一致的问题
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### Web 版复制合并 Permission denied——`shutil.copy2` 未解除只读属性
+- **场景**：2026-05-26 web_app.py 的 `_run_upload_copy` 复制 Assets 文件夹到目标 SVN 工作副本时，`.meta` 文件全部报 `[Errno 13] Permission denied`
+- **根因**：Unity SVN 工作副本中 `.meta` 文件默认为只读属性，`svn update` 执行后保持只读状态。web_app.py 使用 `shutil.copy2`（不处理权限）作为 `shutil.copytree` 的 `copy_function`，未在覆盖前通过 `os.chmod` 解除只读。而 desktop 版 `toolbox_tab_upload.py` 已有 `_copy2_force` 方法处理此情况
+- **解决方案**：在 `_run_upload_copy` 内定义局部函数 `_copy2_force`：先对已存在目标文件 `os.chmod(dst, S_IWRITE|S_IREAD)` 解除只读，`PermissionError` 时先 `os.remove` 再重试 `shutil.copy2`。将 copytree 的 `copy_function` 和单文件复制均替换为 `_copy2_force`
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)

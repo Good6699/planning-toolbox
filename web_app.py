@@ -10,6 +10,7 @@ import threading
 import queue
 import time
 import shutil
+import stat
 import tempfile
 import concurrent.futures
 from datetime import datetime
@@ -594,6 +595,21 @@ def _run_upload_copy(src, tgt, files, q, task_id):
         if wc_root:
             _svn_update_first(q, wc_root)
 
+    def _copy2_force(src, dst):
+        if os.path.exists(dst):
+            try:
+                os.chmod(dst, stat.S_IWRITE | stat.S_IREAD)
+            except Exception:
+                pass
+        try:
+            shutil.copy2(src, dst)
+        except PermissionError:
+            try:
+                os.remove(dst)
+            except Exception:
+                pass
+            shutil.copy2(src, dst)
+
     q.put("开始复制文件...\n")
     success = fail = 0
     copied_files = []
@@ -606,7 +622,7 @@ def _run_upload_copy(src, tgt, files, q, task_id):
                 target_dir = os.path.join(tgt, name)
                 if os.path.isdir(target_dir):
                     q.put(f"📂 {name}/ 已存在，合并文件...\n")
-                shutil.copytree(sp, target_dir, dirs_exist_ok=True, copy_function=shutil.copy2)
+                shutil.copytree(sp, target_dir, dirs_exist_ok=True, copy_function=_copy2_force)
                 for rp, _, fns in os.walk(sp):
                     rel = os.path.relpath(rp, sp)
                     for fn in fns:
@@ -614,7 +630,7 @@ def _run_upload_copy(src, tgt, files, q, task_id):
                 q.put(f"✓ {name}/ 文件夹已复制\n")
             else:
                 dst = os.path.join(tgt, name)
-                shutil.copy2(sp, dst)
+                _copy2_force(sp, dst)
                 copied_files.append(dst)
                 q.put(f"✓ {name}\n")
             success += 1

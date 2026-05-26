@@ -564,13 +564,16 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
             except Exception:
                 pass
 
-    tortoise = _get_tortoise_proc_path()
-    if tortoise:
-        q.put(f"🖥️ 正在打开 TortoiseSVN 提交对话框 ({len(changed_files)} 个文件)...\n")
-        subprocess.Popen([tortoise, "/command:commit", f"/path:{wc_root}"])
-        q.put("✅ TortoiseSVN 提交对话框已打开\n")
+    if not changed_files:
+        q.put("⚠️ 没有实际变化的文件，跳过 TortoiseSVN 提交对话框\n")
     else:
-        q.put("⚠️ 未找到 TortoiseSVN\n")
+        tortoise = _get_tortoise_proc_path()
+        if tortoise:
+            q.put(f"🖥️ 正在打开 TortoiseSVN 提交对话框 ({len(changed_files)} 个文件)...\n")
+            subprocess.Popen([tortoise, "/command:commit", f"/path:{wc_root}"])
+            q.put("✅ TortoiseSVN 提交对话框已打开\n")
+        else:
+            q.put("⚠️ 未找到 TortoiseSVN\n")
 
 
 def _run_upload_copy(src, tgt, files, q, task_id):

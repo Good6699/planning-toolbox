@@ -186,7 +186,7 @@
   1. 在 `web_app.py` 的 `safe` 字典中添加 `"merge_target_history": cfg.get("merge_target_history", [])`
   2. 在 `_selectSuggest()` 的 `_configMap` 和删除建议项的 `map` 中补充 `merge_target` / `merge_author` / `merge_keyword` 的配置键映射，确保从下拉列表选择/删除时也持久化排序
 - **教训**：新增配置键时，必须同时检查前端的 blur 保存逻辑 + 后端的 GET 白名单。POST 写入没问题不代表 GET 读回没问题。
-- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
 ### SVN 关键词支持逗号分隔多个筛选词
 - **场景**：`#svn_keyword` 和 `#merge_keyword` 只能输入单个关键词，需要支持逗号分隔的 OR 逻辑
@@ -776,4 +776,10 @@ while (true):
 - **场景**：2026-05-26 web_app.py 的 `_run_upload_copy` 复制 Assets 文件夹到目标 SVN 工作副本时，`.meta` 文件全部报 `[Errno 13] Permission denied`
 - **根因**：Unity SVN 工作副本中 `.meta` 文件默认为只读属性，`svn update` 执行后保持只读状态。web_app.py 使用 `shutil.copy2`（不处理权限）作为 `shutil.copytree` 的 `copy_function`，未在覆盖前通过 `os.chmod` 解除只读。而 desktop 版 `toolbox_tab_upload.py` 已有 `_copy2_force` 方法处理此情况
 - **解决方案**：在 `_run_upload_copy` 内定义局部函数 `_copy2_force`：先对已存在目标文件 `os.chmod(dst, S_IWRITE|S_IREAD)` 解除只读，`PermissionError` 时先 `os.remove` 再重试 `shutil.copy2`。将 copytree 的 `copy_function` 和单文件复制均替换为 `_copy2_force`
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### 复制合并无实际变化时不弹出空 TortoiseSVN 对话框
+- **场景**：2026-05-26 复制 326 个文件到 SVN 工作副本后，文件都在远程已存在无实际变化（`changed_files==0`），但 TortoiseSVN 提交对话框仍被弹出且显示"0 个文件"
+- **根因**：`_run_svn_after_upload` 只检查 `tortoise` 路径是否存在就弹对话框，没有先判断 `changed_files` 是否为空
+- **解决方案**：在启动 TortoiseSVN 前增加 `if not changed_files` 判断，无变化时跳过并输出提示日志
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)

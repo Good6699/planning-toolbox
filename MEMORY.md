@@ -79,6 +79,12 @@
 - svn cat 替代 svn export 可直接读入内存，提升SVN导出速度
 - svn diff --summarize 可先判断版本间文件差异，避免对无变化文件做完整export
 - **多进程解析Excel**：openpyxl read_only模式 + ProcessPoolExecutor 并行解析，比串行pandas快30倍
+
+### GUID 映射路径与合并目标路径分离
+- **场景**：语义分析 API 使用 `target_path` 变量同时承载 GUID 映射路径和用户输入的合并目标路径，合并 API 用源地址的本地路径覆盖了用户指定的目标路径，导致概念混淆
+- **根因**：`target_path` 一个变量扛两个角色——既用于语义分析的 GUID → 脚本名映射，又用于 SVN 合并的目标路径。`api_merge_run` 中 `resolve_svn_url_to_local(source_url)` 的返回值覆盖了用户指定的合并目标路径
+- **解决方案**：语义分析 API 引入独立 `guid_path` 变量，只从源SVN地址映射获取 GUID 映射路径；合并 API 移除 `resolve_svn_url_to_local(source_url)` 对 `target_path` 的覆盖逻辑，保持用户指定的合并目标路径不变
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 - **下载/解析流水线**：下载批次后立即提交解析任务，不等待全部下载完成，总时间=max(下载,解析)而非相加
 - **ID Map缓存**：对比阶段预构建ID→SC映射并缓存，避免每次对比都重建，对比提速约50%
 - **pywebview 文件浏览最佳实践**：

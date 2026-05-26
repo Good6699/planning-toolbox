@@ -2229,14 +2229,8 @@ def api_merge_run():
     if not files:
         return jsonify({"ok": False, "error": "请选择至少一个文件"}), 400
     target_path = resolve_target_path(target_url_or_path)
-    # 优先从映射表解析 URL 对应的路径
-    resolved = resolve_svn_url_to_local(source_url)
-    if resolved and os.path.isdir(resolved):
-        target_path = resolved
-    elif not target_path:
-        target_path = resolved
     if not target_path or not os.path.isdir(target_path):
-        return jsonify({"ok": False, "error": f"无法找到 SVN 地址 [{source_url}] 对应的本地工作副本路径，请在目标路径输入正确的本地路径或先建立映射"}), 400
+        return jsonify({"ok": False, "error": f"目标路径 [{target_url_or_path}] 不是有效的本地工作副本路径，请输入正确的本地路径"}), 400
     cfg = load_config()
     svn_user = data.get("svn_user") or cfg.get("svn_user", "")
     svn_pass = data.get("svn_pass") or cfg.get("svn_pass", "")
@@ -2262,7 +2256,6 @@ def api_merge_analyze():
     """语义分析：对勾选的版本做结构化解构，输出 txt 报告"""
     data = request.get_json(force=True)
     source_url = data.get("source_url", "").strip()
-    target_path = data.get("target_path", "").strip()
     revisions = data.get("revisions", [])
     version_files = data.get("version_files", [])
     rev_file_map = data.get("rev_file_map", {})
@@ -2270,12 +2263,10 @@ def api_merge_analyze():
         return jsonify({"error": "源SVN地址不能为空"}), 400
     if not revisions:
         return jsonify({"error": "请至少勾选一个版本"}), 400
-    # 优先从映射解析路径
-    resolved = resolve_svn_url_to_local(source_url)
-    if resolved and os.path.isdir(resolved):
-        target_path = resolved
-    if not target_path or not os.path.isdir(os.path.join(target_path, "Assets")):
-        return jsonify({"error": f"无法找到 SVN 地址 [{source_url}] 对应的本地工作副本路径（用于 GUID 映射查询），请先在目标路径输入正确的本地路径并保存映射"}), 400
+    # GUID 映射路径只从源SVN地址对应的本地工作副本获取
+    guid_path = resolve_svn_url_to_local(source_url)
+    if not guid_path or not os.path.isdir(os.path.join(guid_path, "Assets")):
+        return jsonify({"error": f"无法找到 SVN 地址 [{source_url}] 对应的本地工作副本路径（用于 GUID 映射查询），请先在设置中保存 SVN 地址映射"}), 400
     cfg = load_config()
     svn_user = cfg.get("svn_user", "")
     svn_pass = cfg.get("svn_pass", "")
@@ -2284,7 +2275,7 @@ def api_merge_analyze():
         svn_pass = decrypt_key(svn_pass)
     task_id = _get_next_task_id()
     t = threading.Thread(target=_merge_analyze_worker,
-                         args=(task_id, source_url, target_path, revisions,
+                         args=(task_id, source_url, guid_path, revisions,
                                version_files, rev_file_map,
                                svn_user or None, svn_pass or None),
                          daemon=True)

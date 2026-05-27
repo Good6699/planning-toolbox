@@ -19,6 +19,15 @@ sys.path.insert(0, _script_dir)
 from toolbox_platform import _get_svn_path, _get_subprocess_kwargs  # noqa: E402
 
 
+def _is_dir_path(path):
+    """检查路径是否表示一个目录（无文件扩展名）"""
+    path = path.rstrip("/")
+    if not path:
+        return False
+    basename = os.path.basename(path)
+    return "." not in basename
+
+
 def _build_svn_auth_args(svn_user, svn_pass):
     args = []
     if svn_user:
@@ -105,6 +114,9 @@ def svn_log_changed_files(source_url, revision, svn_user=None, svn_pass=None):
             continue
         action = line[0]
         path = line[2:].strip()
+        clean_url = source_url.rstrip("/") + "/"
+        if path.startswith(clean_url):
+            path = path[len(clean_url):]
         action_map = {"A": "add", "M": "mod", "D": "del"}
         files.append({
             "path": path,
@@ -134,6 +146,346 @@ def find_wc_root(target_path):
     return None
 
 
+def _svn_export_add(svn_exe, source_url, revision, file_path, local_file, auth_args, log_callback):
+    """用 svn export 下载新增文件 + svn add 纳入版本控制
+
+    失败时先 revert 清状态再重试一次，确保能直接用源版本覆盖本地。
+    """
+    file_url = source_url.rstrip("/") + "/" + file_path
+    parent_dir = os.path.dirname(local_file)
+    try:
+        os.makedirs(parent_dir, exist_ok=True)
+    except Exception:
+        pass
+    ok, msg = _svn_try_export(svn_exe, file_url, revision, local_file, auth_args)
+    if not ok:
+        log_callback(msg, "warn")
+        return False
+    add_cmd = [svn_exe, "add", "--force", "--quiet", local_file] + auth_args
+    try:
+        subprocess.run(add_cmd, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace",
+                       timeout=30, **_get_subprocess_kwargs())
+    except Exception:
+        log_callback(f"  ⚠ svn add 失败: {file_path}", "warn")
+    return True
+
+
+def _svn_try_export(svn_exe, file_url, revision, local_file, auth_args):
+    """执行 svn export --force，失败时 revert 重试一次
+
+    返回 (ok, msg)
+    """
+    for attempt in range(2):
+        export_cmd = [svn_exe, "export", "--force",
+                      "-r", str(revision), file_url, local_file] + auth_args
+        try:
+            proc = subprocess.Popen(
+                export_cmd,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                bufsize=1, **_get_subprocess_kwargs()
+            )
+            stdout_bytes, _ = proc.communicate(timeout=120)
+            try:
+                out_text = stdout_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                out_text = stdout_bytes.decode("gbk", errors="replace")
+            if proc.returncode == 0:
+                return True, ""
+            if attempt == 0:
+                subprocess.run(
+                    [svn_exe, "revert", local_file],
+                    capture_output=True, timeout=30,
+                    **_get_subprocess_kwargs()
+                )
+                continue
+            return False, f"  ⚠ 导出失败: {out_text.strip()}"
+        except subprocess.TimeoutExpired:
+            if attempt == 0:
+                subprocess.run(
+                    [svn_exe, "revert", local_file],
+                    capture_output=True, timeout=30,
+                    **_get_subprocess_kwargs()
+                )
+                continue
+            return False, "  ❌ 导出超时"
+        except Exception:
+            if attempt == 0 and os.path.exists(local_file):
+                try:
+                    subprocess.run(
+                        [svn_exe, "revert", local_file],
+                        capture_output=True, timeout=30,
+                        **_get_subprocess_kwargs()
+                    )
+                    continue
+                except Exception:
+                    pass
+            return False, "  ❌ 导出异常"
+    return False, "  ❌ 导出失败"
+
+
+def _svn_delete_file(svn_exe, local_file, auth_args):
+    """删除本地 SVN 工作副本中的文件
+
+    先尝试 svn delete --force，失败则 revert 后重试一次。
+    返回 (ok, msg)
+    """
+    for attempt in range(2):
+        try:
+            proc = subprocess.Popen(
+                [svn_exe, "delete", "--force", local_file] + auth_args,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                bufsize=1, **_get_subprocess_kwargs()
+            )
+            stdout_bytes, _ = proc.communicate(timeout=60)
+            try:
+                out_text = stdout_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                out_text = stdout_bytes.decode("gbk", errors="replace")
+            if proc.returncode == 0:
+                return True, ""
+            if attempt == 0:
+                # 第一次失败：先 revert 清掉本地状态，再试一次
+                subprocess.run(
+                    [svn_exe, "revert", local_file],
+                    capture_output=True, timeout=30,
+                    **_get_subprocess_kwargs()
+                )
+                continue
+            return False, out_text.strip()
+        except subprocess.TimeoutExpired:
+            if attempt == 0:
+                subprocess.run(
+                    [svn_exe, "revert", local_file],
+                    capture_output=True, timeout=30,
+                    **_get_subprocess_kwargs()
+                )
+                continue
+            return False, "超时"
+        except Exception as e:
+            if attempt == 0 and os.path.exists(local_file):
+                try:
+                    subprocess.run(
+                        [svn_exe, "revert", local_file],
+                        capture_output=True, timeout=30,
+                        **_get_subprocess_kwargs()
+                    )
+                    continue
+                except Exception:
+                    pass
+            return False, str(e)
+    return False, "删除失败"
+
+
+def _svn_revert_file(svn_exe, local_file):
+    """执行 svn revert，清掉冲突状态
+
+    返回 True/False
+    """
+    try:
+        r = subprocess.run(
+            [svn_exe, "revert", local_file],
+            capture_output=True, timeout=30,
+            **_get_subprocess_kwargs()
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args):
+    """清除 SVN 冲突状态，用源版本完整替换（最后手段）
+
+    当 revert + 重新 merge 都失败时使用。
+    先用 svn cat 下载源版本内容覆盖本地文件，
+    再用 svn resolve --accept working 清除冲突状态。
+    """
+    file_url = source_url.rstrip("/") + "/" + file_path
+    try:
+        proc = subprocess.Popen(
+            [svn_exe, "cat", "-r", str(revision), file_url] + auth_args,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            **_get_subprocess_kwargs()
+        )
+        stdout, stderr = proc.communicate(timeout=120)
+        if proc.returncode == 0:
+            parent = os.path.dirname(local_file)
+            if parent:
+                try:
+                    os.makedirs(parent, exist_ok=True)
+                except Exception:
+                    pass
+            with open(local_file, "wb") as f:
+                f.write(stdout)
+    except Exception:
+        return
+    try:
+        subprocess.run(
+            [svn_exe, "resolve", "--accept", "working", local_file] + auth_args,
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            timeout=30, **_get_subprocess_kwargs()
+        )
+    except Exception:
+        pass
+
+
+def _svn_merge_single_file(svn_exe, cmd, log_callback):
+    """执行单个文件的 svn merge，返回 (status, stdout)
+
+    status 取值:
+      "ok"       — 合并成功，无冲突
+      "conflict" — 合并成功但有冲突（已自动消解）
+      "e155010"  — 找不到节点（文件未跟踪）
+      "error"    — 其他错误
+      "timeout"  — 超时
+    """
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            bufsize=1,
+            **_get_subprocess_kwargs()
+        )
+        stdout_bytes, _ = proc.communicate(timeout=120)
+        try:
+            stdout = stdout_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            stdout = stdout_bytes.decode("gbk", errors="replace")
+        if proc.returncode != 0:
+            if "E155010" in stdout:
+                return "e155010", stdout
+            return "error", stdout
+        conflict_output = stdout.strip().lower()
+        if "conflict" in conflict_output or "合并冲突" in conflict_output:
+            return "conflict", stdout
+        return "ok", stdout
+    except subprocess.TimeoutExpired:
+        return "timeout", ""
+    except Exception as e:
+        return "error", str(e)
+
+
+def _svn_merge_with_retry(svn_exe, source_url, revision, file_path, local_file,
+                          auth_args, _log):
+    """执行 svn merge + 失败时 revert+retry + 最后手段 resolve
+
+    返回 (merged, conflict, skip, conflict_files_added)
+    """
+    _log(f"  → 合并: {file_path}", "info")
+    cmd = [
+        svn_exe, "merge", "--accept", "theirs-full",
+        "-c", str(revision), source_url, local_file
+    ] + auth_args
+    status, out_text = _svn_merge_single_file(svn_exe, cmd, _log)
+    if status == "ok":
+        _log(f"  ✅ 合并成功: {file_path}", "ok")
+        return 1, 0, 0, []
+    if status == "conflict":
+        _log(f"  ⚠ 已用源版本覆盖(冲突消解): {file_path}", "warn")
+        return 1, 1, 0, [file_path]
+    if status == "e155010":
+        _log(f"  → 文件未跟踪，转为新增: {file_path}", "info")
+        ok = _svn_export_add(svn_exe, source_url, revision,
+                             file_path, local_file, auth_args, _log)
+        if ok:
+            _log(f"  ✅ 新增文件: {file_path}", "ok")
+            return 1, 0, 0, []
+        return 0, 1, 0, [file_path]
+    if status == "timeout":
+        _log(f"  ❌ 超时: {file_path}", "error")
+        return 0, 0, 1, []
+    _log(f"  ⚠ 合并异常: {out_text.strip()}", "warn")
+    ok = _svn_revert_file(svn_exe, local_file)
+    if ok:
+        _log(f"  → 已 revert，重新合并: {file_path}", "info")
+        cmd2 = [
+            svn_exe, "merge", "--accept", "theirs-full",
+            "-c", str(revision), source_url, local_file
+        ] + auth_args
+        status2, out_text2 = _svn_merge_single_file(svn_exe, cmd2, _log)
+        if status2 == "ok":
+            _log(f"  ✅ 合并成功: {file_path}", "ok")
+            return 1, 0, 0, []
+        if status2 == "conflict":
+            _log(f"  ⚠ 已用源版本覆盖(冲突消解): {file_path}", "warn")
+            return 1, 1, 0, [file_path]
+        _log(f"  ⚠ 重新合并仍失败: {out_text2.strip()}", "warn")
+        _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args)
+        _log(f"  → 已用源版本强制覆盖（最后手段）: {file_path}", "warn")
+    else:
+        _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args)
+        _log(f"  → revert 失败，已用源版本强制覆盖: {file_path}", "warn")
+    return 0, 1, 0, [file_path]
+
+
+def _svn_merge_one_file(svn_exe, source_url, revision, file_path, local_file,
+                        action, auth_args, _log):
+    """处理单个文件的 add/del/mod merge
+
+    目录新增/删除也走 svn merge 让 SVN 递归处理整个目录树。
+    目录属性修改（mergeinfo 等）直接跳过。
+    返回 (merged, conflict, skip, conflict_files_added)
+    """
+    is_dir = _is_dir_path(file_path)
+
+    # 目录属性修改 → 跳过（mergeinfo 等噪声）
+    if is_dir and action == "mod":
+        _log(f"  ℹ 跳过目录属性变更: {file_path}", "info")
+        return 1, 0, 0, []
+
+    # 目录新增 → svn export 递归下载整个目录 + svn add 纳入跟踪
+    if is_dir and action == "add":
+        _log(f"  → 新增目录: {file_path}", "info")
+        file_url = source_url.rstrip("/") + "/" + file_path
+        ok, msg = _svn_try_export(svn_exe, file_url, revision, local_file, auth_args)
+        if not ok:
+            _log(msg, "warn")
+            return 0, 1, 0, [file_path]
+        try:
+            subprocess.run(
+                [svn_exe, "add", "--force", "--quiet", local_file] + auth_args,
+                capture_output=True, timeout=30,
+                **_get_subprocess_kwargs()
+            )
+        except Exception:
+            _log(f"  ⚠ svn add 失败: {file_path}", "warn")
+        _log(f"  ✅ 新增目录: {file_path}", "ok")
+        return 1, 0, 0, []
+
+    # 文件新增 → export + add
+    if action == "add" and not is_dir:
+        _log(f"  → 新增: {file_path}", "info")
+        ok = _svn_export_add(svn_exe, source_url, revision,
+                             file_path, local_file, auth_args, _log)
+        if ok:
+            _log(f"  ✅ 新增文件: {file_path}", "ok")
+            return 1, 0, 0, []
+        return 0, 1, 0, [file_path]
+
+    # 文件删除 → delete --force
+    if action == "del" and not is_dir:
+        if not os.path.exists(local_file):
+            _log(f"  ▶ 文件已被删除，跳过: {file_path}", "info")
+            return 1, 0, 0, []
+        _log(f"  → 删除: {file_path}", "info")
+        ok, msg = _svn_delete_file(svn_exe, local_file, auth_args)
+        if ok:
+            _log(f"  ✅ 已删除: {file_path}", "ok")
+            return 1, 0, 0, []
+        _log(f"  ⚠ 删除失败: {msg}", "warn")
+        return 0, 1, 0, [file_path]
+
+    # 目录删除 + 文件修改：统一走 svn merge
+    if action != "add" and not os.path.exists(local_file):
+        _log(f"⏭ 跳过(本地不存在): {file_path}", "warn")
+        return 0, 0, 1, []
+
+    return _svn_merge_with_retry(
+        svn_exe, source_url, revision, file_path, local_file,
+        auth_args, _log)
+
+
 def svn_merge(source_url, target_wc, revision, files,
               svn_user=None, svn_pass=None, log_callback=None):
     """对选中的文件执行svn merge，使用 --accept theirs-full"""
@@ -150,52 +502,18 @@ def svn_merge(source_url, target_wc, revision, files,
 
     for f in files:
         file_path = f.get("path", "")
+        action = f.get("action", "mod")
         if not file_path:
             skip_count += 1
             continue
         local_file = os.path.join(target_wc, file_path)
-        if not os.path.exists(local_file):
-            action = f.get("action", "")
-            if action == "del":
-                _log(f"  ▶ 文件已被删除，跳过: {file_path}", "info")
-                merged_count += 1
-                continue
-            _log(f"⏭ 跳过(本地不存在): {file_path}", "warn")
-            skip_count += 1
-            continue
-        _log(f"  → 合并: {file_path}", "info")
-        try:
-            cmd = [
-                svn_exe, "merge", "--accept", "theirs-full",
-                "-c", str(revision), source_url, local_file
-            ] + auth_args
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace",
-                bufsize=1,
-                **_get_subprocess_kwargs()
-            )
-            stdout, _ = proc.communicate(timeout=120)
-            if proc.returncode != 0:
-                _log(f"  ⚠ 合并异常: {stdout.strip()}", "warn")
-                conflict_count += 1
-                conflict_files.append(file_path)
-            else:
-                conflict_output = stdout.strip().lower()
-                if "conflict" in conflict_output or "合并冲突" in conflict_output:
-                    _log(f"  ⚠ 已用源版本覆盖(冲突消解): {file_path}", "warn")
-                    conflict_count += 1
-                    conflict_files.append(file_path)
-                else:
-                    _log(f"  ✅ 合并成功: {file_path}", "ok")
-                merged_count += 1
-        except subprocess.TimeoutExpired:
-            _log(f"  ❌ 超时: {file_path}", "error")
-            skip_count += 1
-        except Exception as e:
-            _log(f"  ❌ 错误: {file_path} → {e}", "error")
-            skip_count += 1
+        m, c, s, cf = _svn_merge_one_file(
+            svn_exe, source_url, revision, file_path, local_file,
+            action, auth_args, _log)
+        merged_count += m
+        conflict_count += c
+        skip_count += s
+        conflict_files.extend(cf)
 
     return {
         "merged": merged_count,

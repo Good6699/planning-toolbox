@@ -28,7 +28,7 @@ from toolbox_config import (  # noqa: E402
 )
 from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock  # noqa: E402
 from xlsm_zipper import apply_via_excel  # noqa: E402
-from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path, resolve_svn_url_to_local, migrate_old_svn_mappings  # noqa: E402
+from toolbox_merge import svn_log, svn_merge, svn_log_changed_files, open_commit_dialog, resolve_target_path, resolve_svn_url_to_local, migrate_old_svn_mappings, _is_dir_path  # noqa: E402
 
 if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
     if len(sys.argv) < 3:
@@ -1976,7 +1976,7 @@ def api_svn_save_mapping():
         )
         wc_url = r.stdout.strip() if r.returncode == 0 else ""
         clean_url = url.rstrip("/")
-        if not wc_url or (clean_url != wc_url and not clean_url.startswith(wc_url + "/")):
+        if not wc_url or (clean_url != wc_url and not wc_url.startswith(clean_url + "/") and not clean_url.startswith(wc_url + "/")):
             return jsonify({"ok": False, "error": f"路径 [{path}] 的 SVN URL 与输入不匹配"}), 200
         # 找到工作副本根目录
         r2 = subprocess.run(
@@ -2145,6 +2145,79 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
         _log_queues.pop(task_id, None)
 
 
+def _merge_one_revision(rev, source_url, target_path, selected_paths,
+                        svn_user, svn_pass, q, ts):
+    """处理单个版本的合并：先处理目录，再处理文件
+
+    返回 (merged, conflict, skipped, conflict_files)
+    """
+    def _log(msg, level="info"):
+        tag = f"[{ts}][{level}]" if level != "info" else f"[{ts}]"
+        q.put(f"{tag} {msg}\n")
+
+    q.put(f"\n── 处理版本 r{rev} ──\n")
+    try:
+        rev_files = svn_log_changed_files(
+            source_url, rev,
+            svn_user=svn_user, svn_pass=svn_pass
+        )
+    except Exception as e:
+        q.put(f"  ⚠ 查询版本 r{rev} 文件列表失败: {e}\n")
+        return 0, 0, 0, []
+
+    rev_selected = [
+        {"path": rf["path"], "action": rf["action"]}
+        for rf in rev_files if rf["path"] in selected_paths
+    ]
+    if not rev_selected:
+        q.put("  ℹ 无勾选文件在此版本中变更，跳过\n")
+        return 0, 0, 0, []
+
+    rev_dirs = [item for item in rev_selected if _is_dir_path(item["path"])]
+    rev_files_only = [item for item in rev_selected if not _is_dir_path(item["path"])]
+
+    total_merged = 0
+    total_conflict = 0
+    total_skipped = 0
+    all_conflict_files = []
+    covered_prefixes = []
+
+    for d in rev_dirs:
+        try:
+            result = svn_merge(
+                source_url, target_path, rev, [d],
+                svn_user=svn_user, svn_pass=svn_pass,
+                log_callback=_log
+            )
+            total_merged += result["merged"]
+            total_conflict += result["conflict"]
+            total_skipped += result["skipped"]
+            all_conflict_files.extend(result["conflict_files"])
+            covered_prefixes.append(d["path"].rstrip("/") + "/")
+        except Exception as e:
+            q.put(f"  ❌ 目录 r{rev} 合并失败: {d['path']} → {e}\n")
+
+    remaining = [f for f in rev_files_only
+                 if not any(f["path"].startswith(p) for p in covered_prefixes)]
+    if not remaining:
+        return total_merged, total_conflict, total_skipped, all_conflict_files
+
+    try:
+        result = svn_merge(
+            source_url, target_path, rev, remaining,
+            svn_user=svn_user, svn_pass=svn_pass,
+            log_callback=_log
+        )
+        total_merged += result["merged"]
+        total_conflict += result["conflict"]
+        total_skipped += result["skipped"]
+        all_conflict_files.extend(result["conflict_files"])
+    except Exception as e:
+        q.put(f"  ❌ 版本 r{rev} 文件合并失败: {e}\n")
+
+    return total_merged, total_conflict, total_skipped, all_conflict_files
+
+
 def _merge_worker(task_id, source_url, target_path, revisions, files,
                   svn_user, svn_pass):
     """后台合并任务线程"""
@@ -2179,20 +2252,16 @@ def _merge_worker(task_id, source_url, target_path, revisions, files,
         total_skipped = 0
         all_conflict_files = []
 
+        selected_paths = {f["path"] for f in files}
+
         for rev in revisions:
-            q.put(f"\n── 处理版本 r{rev} ──\n")
-            try:
-                result = svn_merge(
-                    source_url, target_path, rev, files,
-                    svn_user=svn_user, svn_pass=svn_pass,
-                    log_callback=_log
-                )
-                total_merged += result["merged"]
-                total_conflict += result["conflict"]
-                total_skipped += result["skipped"]
-                all_conflict_files.extend(result["conflict_files"])
-            except Exception as e:
-                q.put(f"  ❌ 版本 r{rev} 合并失败: {e}\n")
+            m, c, s, cf = _merge_one_revision(
+                rev, source_url, target_path, selected_paths,
+                svn_user, svn_pass, q, ts)
+            total_merged += m
+            total_conflict += c
+            total_skipped += s
+            all_conflict_files.extend(cf)
 
         q.put("\n" + "=" * 50 + "\n")
         q.put("📊 合并统计\n")

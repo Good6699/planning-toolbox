@@ -803,3 +803,21 @@ while (true):
 - **根因**：`_run_svn_after_upload` 只检查 `tortoise` 路径是否存在就弹对话框，没有先判断 `changed_files` 是否为空
 - **解决方案**：在启动 TortoiseSVN 前增加 `if not changed_files` 判断，无变化时跳过并输出提示日志
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### SVN 精准文件合并三大核心修复
+- **场景**：2026-05-26 合并 64 版本 61 个文件全部失败/跳过，修复后能正常逐文件 merge
+- **修复一（路径匹配）**：`svn_log_changed_files` 用 `svn diff --summarize` 获取的文件路径是完整 URL（如 `http://.../Client/Assets/foo.prefab`），而 `selected_paths` 存的是相对路径。新增 source_url 前缀剥离逻辑
+- **修复二（不混版本）**：原来将用户勾选的所有文件全部传给每个版本循环执行，导致文件在版本 A 合并成功后在版本 B 产生树冲突。改为每版本先用 `svn_log_changed_files` 查询该版本的真实文件列表，只取与用户选中文件的交集
+- **修复三（编码）**：中文 Windows 下 SVN 输出 GBK 编码，代码固定用 UTF-8 解码导致错误信息被 `�` 乱码吞噬。改为 bytes 模式 + try-UTF-8-fallback-to-GBK
+- **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### SVN 合并冲突处理三阶段策略
+- **场景**：2026-05-26 逐文件 merge 产生树冲突 E155035 后需要自动化处理
+- **策略**：① `svn merge --accept theirs-full` 直接消解文本冲突（diff 增量，GUID 安全）→ ② 失败则 `svn revert` 清冲突状态后重试 merge → ③ 仍失败则 `svn cat` 从源仓库下载真实内容覆盖 + `svn resolve --accept working` 清除冲突标记
+- **关键教训**：`svn resolve --accept theirs-full` 是从 `.svn/pristine/` 本地缓存复制（缓存的是 BASE 版本），不是从源仓库拉取真实内容。正确做法是 `svn cat` + 写文件 + `resolve --accept working`
+- **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)
+
+### SVN 合并目录处理规则
+- **场景**：2026-05-26 `svn diff --summarize` 返回的目录条目（如 `Assets`）被当成文件执行 `svn merge` 导致 E155035
+- **规则**：① 目录属性修改（mergeinfo 等）直接跳过 ② 目录新增用 `svn export --force` 递归下载整个目录树 + `svn add --force` ③ 目录删除用 `svn merge`（有 BASE 基线可用）④ 同一版本中目录优先处理，其子文件自动跳过（covered_prefixes 过滤）
+- **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)

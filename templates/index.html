@@ -3314,20 +3314,6 @@ function buildMergeTab(panel) {
       config.merge_target_history = [val, ...(config.merge_target_history||[])].slice(0,20);
       initSuggest("merge_target", config.merge_target_history);
     }
-    // 如果有 source_url，验证路径并保存映射
-    const source = document.getElementById("merge_source").value.trim();
-    if (val && source && source.startsWith("http")) {
-      try {
-        const r = await fetch("/api/svn/save-mapping", {
-          method:"POST", headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({url: source, path: val})
-        });
-        const d = await r.json();
-        if (!d.ok) {
-          _showToast(d.error || "路径与 SVN URL 不匹配，请检查");
-        }
-      } catch(_) {}
-    }
   });
   document.getElementById("merge_author").addEventListener("blur", ()=>{
     const val = document.getElementById("merge_author").value.trim();
@@ -3531,7 +3517,7 @@ function renderMergeFiles(files) {
     if (sp && path.startsWith(sp + "/")) displayPath = path.slice(sp.length + 1);
     const name = _basename(displayPath);
     const dir = _dirname(displayPath);
-    return `<div class="merge-file-item${checked}${isDel ? " wf-file-del" : ""}" data-path="${escapeHtml(path)}" data-idx="${i}">
+    return `<div class="merge-file-item${checked}${isDel ? " wf-file-del" : ""}" data-path="${escapeHtml(path)}" data-action="${action}" data-idx="${i}">
       <input type="checkbox"${checked}>
       <span class="action-tag ${action}">${actionCn[action]||action}</span>
       ${isDel ? '<span class="del-tag">已删除</span>' : ""}
@@ -3599,7 +3585,7 @@ async function runMergeRun() {
     revisions: checkedRevs,
     files: [...document.querySelectorAll("#merge_file_list .merge-file-item input:checked")].map(cb => {
       const item = cb.closest(".merge-file-item");
-      return {path: item.dataset.path, action: item.classList.contains("wf-file-del") ? "del" : "mod"};
+      return {path: item.dataset.path, action: item.dataset.action || "mod"};
     }),
   };
   try {
@@ -3619,7 +3605,7 @@ async function runMergeRun() {
         evtSrc.close();
         window._esMergeRun = null;
         btn.disabled = false;
-        btn.textContent = "开始精准合并";
+        btn.textContent = "开始合并";
         _decRunning();
         _decTabRunning("merge");
         return;
@@ -3637,7 +3623,7 @@ async function runMergeRun() {
   } catch (err) {
     logEl.innerHTML = '<span class="error">❌ 请求失败: '+escapeHtml(err.message)+'</span>';
     btn.disabled = false;
-    btn.textContent = "开始精准合并";
+    btn.textContent = "开始合并";
     _decRunning();
     _decTabRunning("merge");
   }

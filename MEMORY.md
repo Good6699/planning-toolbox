@@ -828,6 +828,14 @@ while (true):
 - **解决方案**：`svn add` 加上 `--parents` 参数自动跟踪父目录，并检查返回码，非零时返回失败计数
 - **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)
 
+### SVN update 遇到 E155004 锁时自动 cleanup 重试
+- **场景**：2026-05-27 工作流 `KR2导出文字表` 的 lock_svn 步骤执行 `svn update G:\D3_KR2\gameData` 时失败，错误为 E155004 工作副本已被锁，需要用户手动 `svn cleanup` 才能继续
+- **根因**：lock_svn/unlock_svn 步骤的 `svn update` 失败分支直接 return False，没有任何自动恢复机制。工作流被阻断后用户需手动运行 `svn cleanup`，体验差
+- **解决方案**：在 `svn update` 失败且错误包含 `E155004` 时，自动执行 `svn cleanup <dir>` 后重试一次 update。桌面版（`toolbox_tab_workflow.py`）和 Web 版（`web_app.py`）的 lock_svn 和 unlock_svn 共 4 处均做了相同修改
+  - Web 版提取了共用函数 `_svn_update_with_cleanup()`，减少重复代码
+  - 非 E155004 错误（如文件被占用、网络错误）仍直接 return False
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[toolbox_tab_workflow.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_tab_workflow.py)
+
 ### merge 后文件属性噪声（mergeinfo + mime-type）清除
 - **场景**：2026-05-27 merge 后 TortoiseSVN 提交弹窗中每个文件都显示 `svn:mergeinfo` 和 `svn:mime-type` 属性变更，手动 SVN merge 不会出现
 - **根因**：逐文件 `svn merge -c` 会在每个文件上写 mergeinfo（目录级 merge 只写在根目录），`svn add` 自动检测二进制文件设 mime-type。代码中 `_svn_strip_noise_props` 调用只覆盖了 mod 路径出口，漏掉了 add 路径（_svn_export_add + 目录新增）

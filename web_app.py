@@ -884,6 +884,71 @@ def _exec_upload_svn(step, put, task_id=None):
     return True
 
 
+def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
+    """执行 svn update，遇到 E155004 锁时自动 cleanup 重试一次"""
+    proc = None
+    try:
+        proc = subprocess.Popen([svn, "update", "--accept", "theirs-full", d],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, **_get_subprocess_kwargs())
+        _register_proc(proc, task_id)
+        try:
+            stdout, stderr = proc.communicate(timeout=120)
+            if proc.returncode == 0:
+                for line in stdout.strip().splitlines():
+                    line = line.strip()
+                    if line:
+                        put(f"  {line}\n")
+                put(f"更新完成: {d}\n")
+                return True
+            err = stderr.strip()
+            if "E155004" in err:
+                put("检测到 SVN 锁，正在执行 cleanup...\n")
+                cleanup_proc = subprocess.Popen(
+                    [svn, "cleanup", d],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    text=True, **_get_subprocess_kwargs())
+                _register_proc(cleanup_proc, task_id)
+                try:
+                    cleanup_proc.communicate(timeout=60)
+                finally:
+                    _unregister_proc(cleanup_proc, task_id)
+                put("cleanup 完成，重试更新...\n")
+                retry_proc = subprocess.Popen(
+                    [svn, "update", "--accept", "theirs-full", d],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    text=True, **_get_subprocess_kwargs())
+                _register_proc(retry_proc, task_id)
+                try:
+                    retry_stdout, retry_stderr = retry_proc.communicate(timeout=120)
+                    if retry_proc.returncode == 0:
+                        for line in retry_stdout.strip().splitlines():
+                            line = line.strip()
+                            if line:
+                                put(f"  {line}\n")
+                        put(f"更新完成: {d}\n")
+                        return True
+                    put(f"cleanup 后更新仍失败: {d} - {retry_stderr[-200:]}\n")
+                    return False
+                finally:
+                    _unregister_proc(retry_proc, task_id)
+            else:
+                put(f"更新失败: {d} - {err[-200:]}\n")
+                return False
+        finally:
+            _unregister_proc(proc, task_id)
+    except subprocess.TimeoutExpired:
+        if proc:
+            _unregister_proc(proc, task_id)
+        put(f"更新超时: {d}\n")
+        return False
+    except Exception as e:
+        if proc:
+            _unregister_proc(proc, task_id)
+        put(f"更新异常: {e}\n")
+        return False
+
+
 def _exec_lock_svn(step, put, task_id=None):
     target_path = step.get("target_path", "").strip()
     lock_msg = step.get("lock_msg", "锁定中，请勿修改")
@@ -901,29 +966,7 @@ def _exec_lock_svn(step, put, task_id=None):
                 put(f"更新目录无效: {d}\n")
                 return False
             put(f"正在更新目录: {d}\n")
-            proc = None
-            try:
-                proc = subprocess.Popen([svn, "update", "--accept", "theirs-full", d],
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                        text=True, **_get_subprocess_kwargs())
-                _register_proc(proc, task_id)
-                try:
-                    stdout, stderr = proc.communicate(timeout=120)
-                    if proc.returncode == 0:
-                        for line in stdout.strip().splitlines():
-                            line = line.strip()
-                            if line:
-                                put(f"  {line}\n")
-                        put(f"更新完成: {d}\n")
-                    else:
-                        put(f"更新失败: {d} - {stderr[-200:]}\n")
-                        return False
-                finally:
-                    _unregister_proc(proc, task_id)
-            except Exception as e:
-                if proc:
-                    _unregister_proc(proc, task_id)
-                put(f"更新异常: {e}\n")
+            if not _svn_update_with_cleanup(svn, d, put, task_id):
                 return False
 
     proc = None
@@ -964,29 +1007,7 @@ def _exec_unlock_svn(step, put, task_id=None):
                 put(f"更新目录无效: {d}\n")
                 return False
             put(f"正在更新目录: {d}\n")
-            proc = None
-            try:
-                proc = subprocess.Popen([svn, "update", "--accept", "theirs-full", d],
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                        text=True, **_get_subprocess_kwargs())
-                _register_proc(proc, task_id)
-                try:
-                    stdout, stderr = proc.communicate(timeout=120)
-                    if proc.returncode == 0:
-                        for line in stdout.strip().splitlines():
-                            line = line.strip()
-                            if line:
-                                put(f"  {line}\n")
-                        put(f"更新完成: {d}\n")
-                    else:
-                        put(f"更新失败: {d} - {stderr[-200:]}\n")
-                        return False
-                finally:
-                    _unregister_proc(proc, task_id)
-            except Exception as e:
-                if proc:
-                    _unregister_proc(proc, task_id)
-                put(f"更新异常: {e}\n")
+            if not _svn_update_with_cleanup(svn, d, put, task_id):
                 return False
 
     proc = None

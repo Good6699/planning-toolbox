@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """策划工具箱 - SVN工作流页签"""
 import tkinter as tk
@@ -1517,7 +1517,7 @@ class WorkflowTabMixin:
             self._wf_execute_open_tables(step)
         self._wlog("步骤执行完成", "ok")
 
-    def _wf_execute_lock_svn(self, step):
+    def _wf_execute_lock_svn(self, step):  # noqa: C901
         target = step.get("target_path", "").strip()
         lock_msg = step.get("lock_msg", "锁定中，请勿修改").strip()
 
@@ -1577,8 +1577,33 @@ class WorkflowTabMixin:
                                 self._wlog("  " + line, "info")
                     else:
                         err = update_result.stderr.strip()
-                        self._wlog("❌ 更新失败: " + d + " - " + err, "error")
-                        return False
+                        if "E155004" in err:
+                            self._wlog("检测到 SVN 锁，正在执行 cleanup...", "warn")
+                            subprocess.run(
+                                [svn_exe, "cleanup", d],
+                                capture_output=True, text=True,
+                                **(_get_subprocess_kwargs() if _sys.platform == "win32" else {})
+                            )
+                            self._wlog("cleanup 完成，重试更新...", "warn")
+                            update_result = subprocess.run(
+                                [svn_exe, "update", "--accept", "theirs-full", d],
+                                capture_output=True, text=True,
+                                **(_get_subprocess_kwargs() if _sys.platform == "win32" else {})
+                            )
+                            if update_result.returncode == 0:
+                                out = update_result.stdout.strip()
+                                self._wlog("✅ 更新完成: " + d, "ok")
+                                for line in out.splitlines():
+                                    line = line.strip()
+                                    if line:
+                                        self._wlog("  " + line, "info")
+                            else:
+                                err2 = update_result.stderr.strip()
+                                self._wlog("❌ cleanup 后更新仍失败: " + d + " - " + err2, "error")
+                                return False
+                        else:
+                            self._wlog("❌ 更新失败: " + d + " - " + err, "error")
+                            return False
 
             lock_result = subprocess.run(
                 [svn_exe, "lock", target, "-m", lock_msg],
@@ -1598,7 +1623,7 @@ class WorkflowTabMixin:
             return False
         return True
 
-    def _wf_execute_unlock_svn(self, step):
+    def _wf_execute_unlock_svn(self, step):  # noqa: C901
         target = step.get("target_path", "").strip()
         lock_msg = step.get("lock_msg", "").strip()
 
@@ -1639,8 +1664,33 @@ class WorkflowTabMixin:
                                 self._wlog("  " + line, "info")
                     else:
                         err = update_result.stderr.strip()
-                        self._wlog("❌ 更新失败: " + d + " - " + err, "error")
-                        return False
+                        if "E155004" in err:
+                            self._wlog("检测到 SVN 锁，正在执行 cleanup...", "warn")
+                            subprocess.run(
+                                [svn_exe, "cleanup", d],
+                                capture_output=True, text=True,
+                                **(_get_subprocess_kwargs() if _sys.platform == "win32" else {})
+                            )
+                            self._wlog("cleanup 完成，重试更新...", "warn")
+                            update_result = subprocess.run(
+                                [svn_exe, "update", "--accept", "theirs-full", d],
+                                capture_output=True, text=True,
+                                **(_get_subprocess_kwargs() if _sys.platform == "win32" else {})
+                            )
+                            if update_result.returncode == 0:
+                                out = update_result.stdout.strip()
+                                self._wlog("✅ 更新完成: " + d, "ok")
+                                for line in out.splitlines():
+                                    line = line.strip()
+                                    if line:
+                                        self._wlog("  " + line, "info")
+                            else:
+                                err2 = update_result.stderr.strip()
+                                self._wlog("❌ cleanup 后更新仍失败: " + d + " - " + err2, "error")
+                                return False
+                        else:
+                            self._wlog("❌ 更新失败: " + d + " - " + err, "error")
+                            return False
 
             unlock_args = [svn_exe, "unlock", target]
             if lock_msg:

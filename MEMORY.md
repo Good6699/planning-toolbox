@@ -848,6 +848,33 @@ while (true):
 - **解决方案**：采用 CSS-Tricks 推荐的哨兵元素方案——日志容器内放 `<div class="log-anchor">`（`overflow-anchor:auto`），日志行设 `overflow-anchor:none`，浏览器自动钉住哨兵位置。新增 `_logAppend()` 在哨兵前插入日志行，`_logClear()` 清空时重建哨兵，首次追加时强制滚底激活锚定
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### revert_svn 工作流步骤：SVN 回退 + svn --targets 批量 + 排除项兼容
+- **场景**：2026-05-27 需要新增工作流步骤类型"SVN回退"，一键回退指定路径下的所有本地修改，冲突自动使用 SVN 版本覆盖
+- **解决方案**：新增步骤类型 `revert_svn`，仅改 Web 版（`web_app.py` + `templates/index.html`）。弹窗只有回退路径和排除路径两个输入字段，排除路径历史记录下拉带 × 删除按钮。执行流程：`svn update --accept theirs-full` → `svn status` 扫描 → 过滤排除 → `svn revert --targets` 批量回退 → `svn cat + resolve` 覆盖冲突 → 可选删除未版本文件
+- **关键经验**：
+  - `svn status` 不支持 `-R`/`--recursive` 参数（不同于 revert/cleanup），默认就是递归
+  - `--targets` 临时文件是批量传参的最佳方案（1 次 subprocess 搞定，无命令行长度限制）
+  - `svn revert` 输出中文是 GBK 编码，需 bytes 模式 + try-UTF-8-fallback-to-GBK 解码
+  - 排除 `exclude_paths` 因旧配置为字符串而非数组，`for e in "字符串"` 逐字符迭代导致匹配失效，需 `isinstance` 兼容 + 重新保存
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### SSE 流式日志的 DOM 批量更新
+- **场景**：2026-05-27 revert 1405 个文件时 `svn revert` 流式输出每行日志，前端每条 SSE 事件执行一次 createElement + appendChild，浏览器主线程被卡死
+- **根因**：1405 次独立 DOM 操作 + 1405 次 querySelector + scrollTop 设置
+- **解决方案**：使用 buffer + 80ms setInterval 定时器 + DocumentFragment 一次性追加到 DOM。`_logPush()` 推入缓冲，`_logFlush()` 用 `createDocumentFragment()` 批量创建，一次 `appendChild` 提交。1405 次 DOM 操作 → ~18 次
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### svn update 产生大量本地修改导致后续步骤异常
+- **场景**：2026-05-27 `svn update --accept theirs-full` 后 `.meta` 文件被还原为服务器版本，导致本地出现大量修改（1400+），这些修改被后续 revert 步骤全部回退
+- **解决方案**：`revert_svn` 的执行顺序改为：先 update（保持本地与服务器同步）→ status 扫描 → 过滤排除 → revert，确保 update 产生的新差异也能被 revert 正确处理
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### 自定义复选框样式：自绘 + display:inline-flex 居中
+- **场景**：2026-05-27 `.wf-rv-check` 复选框使用原生 `accent-color:var(--accent)` 在深色背景下纯白不可见，改用 `-webkit-appearance:none` 自绘后勾号不对齐
+- **根因**：`::after` 伪元素用 `position:absolute` + `left/top` 手工估算无法精确居中
+- **解决方案**：checkbox 自身设 `display:inline-flex;align-items:center;justify-content:center`，`::after` 用 `position:static` + `transform:none`，勾号内容直接用 Unicode `✓` 而非 CSS border 绘制。同时加 `min-width/min-height` 防止 flex 布局拉伸变形
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ### 自定义日期选择器替代原生 input[type=date]
 - **场景**：2026-05-27 merge/SVN 页签的日期选择器，原生 `<input type="date">` 弹出菜单中点击"今天"自动关闭、hover 高亮不居中、弹窗被父卡片 overflow:hidden 裁剪
 - **根因**：原生 date picker 是 Shadow DOM，行为/样式不可控制；父 `.card` 有 `overflow:hidden` 裁剪了 `position:absolute` 的子元素

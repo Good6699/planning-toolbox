@@ -390,6 +390,10 @@ input::placeholder,textarea::placeholder{
   height:14px;
   accent-color:var(--accent);
 }
+.wf-rv-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--warn);cursor:pointer;margin-bottom:12px}
+.wf-rv-check input[type="checkbox"]{-webkit-appearance:none;appearance:none;width:25px;height:25px;min-width:25px;min-height:25px;background:var(--bg);border:1px solid rgba(255,255,255,.18);border-radius:4px;flex-shrink:0;cursor:pointer;position:relative;transition:.15s;display:inline-flex;align-items:center;justify-content:center}
+.wf-rv-check input[type="checkbox"]:checked{background:var(--accent);border-color:var(--accent)}
+.wf-rv-check input[type="checkbox"]:checked::after{content:"✓";color:#fff;font-size:18px;line-height:1;position:static;width:auto;height:auto;border:none;transform:none}
 .wf-layout{
   display:flex;
   flex-direction:column;
@@ -583,6 +587,7 @@ input::placeholder,textarea::placeholder{
 .wf-child-type.lock_svn{background:rgba(255,140,0,.15);color:#ff8c00;}
 .wf-child-type.unlock_svn{background:rgba(100,200,100,.15);color:#64c864;}
 .wf-child-type.open_tables{background:rgba(100,200,255,.15);color:#64c8ff;}
+.wf-child-type.revert_svn{background:rgba(255,60,60,.15);color:#ff3c3c;}
 .wf-add-step-item{
   display:flex;align-items:center;gap:8px;position:relative;
   padding:8px 12px;cursor:pointer;color:var(--accent);
@@ -1061,13 +1066,6 @@ input::placeholder,textarea::placeholder{
 .wf-history-drop.show{
   display:block;
 }
-.wf-history-item{
-  padding:6px 12px;cursor:pointer;font-size:13px;color:var(--text);
-  word-break:break-all;line-height:1.4;
-  border-bottom:1px solid rgba(255,255,255,.04);
-}
-.wf-history-item:last-child{border-bottom:none}
-.wf-history-item:hover{background:rgba(94,162,255,.1)}
 .suggest-drop .s-item{
   padding:6px 10px;
   cursor:pointer;
@@ -1651,7 +1649,6 @@ function buildSvnTab(panel) {
               <input type="text" id="svn_start" value="${yearStart}" placeholder="YYYY-MM-DD" style="flex:1;min-width:0">
               <span style="color:var(--dim)">—</span>
               <input type="text" id="svn_end" value="${today}" placeholder="YYYY-MM-DD" style="flex:1;min-width:0">
-              <button class="btn btn-normal" data-action="svn-today">今日</button>
             </div>
           </div>
         </div>
@@ -1871,8 +1868,8 @@ function runUpload() {
 }
 function buildWorkflowTab(panel) {
   const wfs = config.workflows || [];
-  const typeCn = {export_text:"导出文字表",upload_svn:"上传SVN",merge_table:"合并表格",merge_translation:"合并翻译",export_error_code:"导出错误码",lock_svn:"锁定SVN",unlock_svn:"解锁SVN",open_tables:"打开表格"};
-  const typeIcon = {export_text:"📄",upload_svn:"📤",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",lock_svn:"🔒",unlock_svn:"🔓",open_tables:"📂"};
+  const typeCn = {export_text:"导出文字表",upload_svn:"上传SVN",merge_table:"合并表格",merge_translation:"合并翻译",export_error_code:"导出错误码",lock_svn:"锁定SVN",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退"};
+  const typeIcon = {export_text:"📄",upload_svn:"📤",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",lock_svn:"🔒",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩"};
   const isEmpty = !wfs.length;
   panel.innerHTML = `
     <div class="wf-layout">
@@ -2138,12 +2135,15 @@ function buildWorkflowTab(panel) {
     modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
       const key = inp.dataset.key;
       if (!key) return;
-      const arrKeys = ["tools","dirs","input_paths","file_paths","update_dirs"];
+      const arrKeys = ["tools","dirs","input_paths","file_paths","update_dirs","exclude_paths"];
       if (arrKeys.includes(key)) {
         step[key] = inp.value.split(",").map(s => s.trim()).filter(Boolean);
       } else {
         step[key] = inp.value;
       }
+    });
+    modalBody.querySelectorAll("input[type=checkbox][data-key]").forEach(inp => {
+      step[inp.dataset.key] = inp.checked;
     });
     const autoName = _wfAutoName(step);
     if (autoName) step.name = autoName;
@@ -2198,6 +2198,12 @@ function buildWorkflowTab(panel) {
         <div class="form-group"><label>解锁消息</label><input type="text" class="wf-modal-input" id="wf_m_lock_msg" data-key="lock_msg" value="${v("lock_msg")}"></div>`,
       open_tables: `
         <div class="form-group"><label>文件路径（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_file_paths" data-key="file_paths" value="${v("file_paths")}" placeholder="多个文件用,分隔"></div>`,
+      revert_svn: `
+        ${_fb("回退路径","target_path","wf_m_rv_path","dir")}
+        <div class="form-group"><label>排除路径（逗号分隔）</label>
+          <input type="text" class="wf-modal-input" id="wf_m_rv_exclude" data-key="exclude_paths" value="${v("exclude_paths")}" placeholder="多个路径用,分隔">
+        </div>
+        <label class="wf-rv-check"><input type="checkbox" data-key="delete_unversioned" ${step.delete_unversioned?'checked':''}> 永久删除未版本控制的文件</label>`,
     };
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
   }
@@ -2222,11 +2228,33 @@ function buildWorkflowTab(panel) {
     if (_wfHistoryDd) _wfHistoryDd.remove();
     const dd = document.createElement("div");
     dd.className = "wf-history-drop";
-    items.forEach(v => {
-      const item = document.createElement("div");
-      item.className = "wf-history-item";
-      item.textContent = v;
-      item.addEventListener("mousedown", (ev) => {
+    items.forEach((v, i) => {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;padding:4px 12px;font-size:13px;color:var(--text);cursor:pointer;word-break:break-all;line-height:1.4";
+      row.addEventListener("mouseenter", () => row.style.background = "rgba(94,162,255,.1)");
+      row.addEventListener("mouseleave", () => row.style.background = "");
+      const label = document.createElement("span");
+      label.style.cssText = "flex:1;min-width:0;word-break:break-all;line-height:1.4";
+      label.textContent = v;
+      row.appendChild(label);
+      const del = document.createElement("span");
+      del.textContent = "×";
+      del.style.cssText = "cursor:pointer;color:var(--dim);font-size:14px;line-height:1;padding:0 2px 0 8px;flex-shrink:0";
+      del.addEventListener("mouseenter", () => del.style.color = "var(--danger)");
+      del.addEventListener("mouseleave", () => del.style.color = "var(--dim)");
+      del.addEventListener("mousedown", (dEv) => {
+        dEv.stopPropagation();
+        dEv.preventDefault();
+        const hist = (config[key]||[]).filter((_, idx) => idx !== i);
+        config[key] = hist;
+        saveConfig({[key]: hist});
+        dd.remove();
+        _wfHistoryDd = null;
+        inp.focus();
+        setTimeout(() => _wfHistoryShow(inp, pool), 50);
+      });
+      row.appendChild(del);
+      row.addEventListener("mousedown", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
         inp.value = v;
@@ -2235,7 +2263,7 @@ function buildWorkflowTab(panel) {
         _wfHistoryDd = null;
         inp.focus();
       });
-      dd.appendChild(item);
+      dd.appendChild(row);
     });
     const rect = inp.getBoundingClientRect();
     dd.style.left = rect.left + "px";
@@ -2464,6 +2492,11 @@ function _wfAutoName(step) {
   if (t === "merge_table") {
     const paths = step.input_paths || [];
     return paths.map(p => { const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/")); return i >= 0 ? p.substring(i+1) : p; }).filter(Boolean).join(",");
+  }
+  if (t === "revert_svn") {
+    const p = step.target_path || "";
+    const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
+    return i >= 0 ? p.substring(i+1) : p;
   }
   return "";
 }
@@ -2832,6 +2865,50 @@ async function runTask(url, body, btn, logId, label, onDone) {
   const logEl = document.getElementById(logId);
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
   const tabKey = _URL_TAB[url];
+  let _outputPath = "";
+
+  const _logBuf = [];
+  let _logTimer = null;
+  function _logFlush() {
+    if (!_logBuf.length) return;
+    const lines = _logBuf.splice(0);
+    const frag = document.createDocumentFragment();
+    for (const raw of lines) {
+      const m = raw.match(/^\[(\d{2}:\d{2}:\d{2})\](?:\[(\w+)\])?\s*(.*)/);
+      let tag = "", msg = raw;
+      if (m) {
+        msg = m[3] || "";
+        tag = (m[2] || "").toLowerCase();
+        msg = `<span class="ts">${m[1]}</span> ${msg}`;
+      }
+      if (label) {
+        msg = `<span style="color:var(--accent);font-weight:600">[${escapeHtml(label)}]</span> ${msg}`;
+      }
+      const cls = {"error":"error","warn":"warn","ok":"success","success":"success","info":"info"}[tag] || "";
+      const div = document.createElement("div");
+      div.className = cls;
+      div.innerHTML = msg;
+      const _m = msg.match(/(?:已生成修改总结|修改总结)[:\s]+(.+?)\\修改总结\.txt/);
+      if (_m) _outputPath = _m[1].trim();
+      const _pm = msg.match(/\[输出路径\]\s+(.+)/);
+      if (_pm) _outputPath = _pm[1].trim();
+      frag.appendChild(div);
+    }
+    _logAppend(logEl, frag);
+  }
+  function _logStartTimer() {
+    if (_logTimer) return;
+    _logTimer = setInterval(() => {
+      if (_logBuf.length) _logFlush();
+    }, 80);
+  }
+  function _logStopTimer() {
+    if (_logTimer) { clearInterval(_logTimer); _logTimer = null; }
+  }
+  function _logPush(raw) {
+    _logBuf.push(raw);
+    if (!_logTimer) _logStartTimer();
+  }
   _incRunning();
   if (tabKey) _incTabRunning(tabKey);
   if (!label) {
@@ -2866,9 +2943,10 @@ async function runTask(url, body, btn, logId, label, onDone) {
   if (_esMap[url]) _esMap[url].close();
   const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
   _esMap[url] = evtSrc;
-  let _outputPath = "";
   evtSrc.onmessage = (e) => {
     if (e.data === "[DONE]") {
+      _logStopTimer();
+      _logFlush();
       evtSrc.close();
       _esMap[url] = null;
       _done();
@@ -2884,30 +2962,12 @@ async function runTask(url, body, btn, logId, label, onDone) {
     const lines = e.data.split("\n");
     for (const raw of lines) {
       if (!raw.trim()) continue;
-      const m = raw.match(/^\[(\d{2}:\d{2}:\d{2})\](?:\[(\w+)\])?\s*(.*)/);
-      let tag = "", msg = raw;
-      if (m) {
-        msg = m[3] || "";
-        tag = (m[2] || "").toLowerCase();
-        msg = `<span class="ts">${m[1]}</span> ${msg}`;
-      }
-      if (label) {
-        msg = `<span style="color:var(--accent);font-weight:600">[${escapeHtml(label)}]</span> ${msg}`;
-      }
-      const cls = {"error":"error","warn":"warn","ok":"success","success":"success","info":"info"}[tag] || "";
-      const div = document.createElement("div");
-      div.className = cls;
-      div.innerHTML = msg;
-      const _m = msg.match(/(?:已生成修改总结|修改总结)[:\s]+(.+?)\\修改总结\.txt/);
-      if (_m) _outputPath = _m[1].trim();
-      const _pm = msg.match(/\[输出路径\]\s+(.+)/);
-      if (_pm) {
-        _outputPath = _pm[1].trim();
-      }
-      _logAppend(logEl, div);
+      _logPush(raw);
     }
   };
   evtSrc.onerror = () => {
+    _logStopTimer();
+    _logFlush();
     evtSrc.close();
     _esMap[url] = null;
     _done();
@@ -3798,13 +3858,6 @@ document.addEventListener("click",e=>{
     case "run-upload": runUpload(); break;
     case "run-translate": runTranslate(); break;
     case "wf-create": wfCreate(); break;
-    case "svn-today": {
-      const s = document.getElementById("svn_start");
-      const e = document.getElementById("svn_end");
-      if (s._dpSet) s._dpSet(cy, cm-1, cd); else s.value = `${cy}-${String(cm).padStart(2,"0")}-${String(cd).padStart(2,"0")}`;
-      if (e._dpSet) e._dpSet(cy, cm-1, cd); else e.value = `${cy}-${String(cm).padStart(2,"0")}-${String(cd).padStart(2,"0")}`;
-      break;
-    }
     case "svn-advanced": openAdvSettings(); break;
     case "close-adv-settings": closeAdvSettings(); break;
     case "save-adv-settings": saveAdvSettings(); break;

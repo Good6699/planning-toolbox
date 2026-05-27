@@ -839,3 +839,9 @@ while (true):
 - **根因**：浏览器滚动锚定（Scroll Anchoring）默认会阻止页面位移，与 JS 的 `scrollTop = scrollHeight` 自动滚动争夺控制权，累积到 32px 阈值后 JS 判断永久失效
 - **解决方案**：采用 CSS-Tricks 推荐的哨兵元素方案——日志容器内放 `<div class="log-anchor">`（`overflow-anchor:auto`），日志行设 `overflow-anchor:none`，浏览器自动钉住哨兵位置。新增 `_logAppend()` 在哨兵前插入日志行，`_logClear()` 清空时重建哨兵，首次追加时强制滚底激活锚定
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### 自定义日期选择器替代原生 input[type=date]
+- **场景**：2026-05-27 merge/SVN 页签的日期选择器，原生 `<input type="date">` 弹出菜单中点击"今天"自动关闭、hover 高亮不居中、弹窗被父卡片 overflow:hidden 裁剪
+- **根因**：原生 date picker 是 Shadow DOM，行为/样式不可控制；父 `.card` 有 `overflow:hidden` 裁剪了 `position:absolute` 的子元素
+- **解决方案**：自定义 `_initDatePicker()` JS 组件——`position:fixed` 挂到 `document.body`，用 `getBoundingClientRect()` 动态定位；📅 图标触发按钮；手动输入同步；上下自适应
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)

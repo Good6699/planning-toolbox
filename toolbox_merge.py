@@ -370,6 +370,18 @@ def _svn_merge_single_file(svn_exe, cmd, log_callback):
         return "error", str(e)
 
 
+def _svn_strip_mergeinfo(svn_exe, local_file):
+    """清除单个文件的 svn:mergeinfo 属性，避免提交时显示 mergeinfo 变更"""
+    try:
+        subprocess.run(
+            [svn_exe, "propdel", "svn:mergeinfo", local_file] + _build_svn_auth_args(None, None),
+            capture_output=True, timeout=15,
+            **_get_subprocess_kwargs()
+        )
+    except Exception:
+        pass
+
+
 def _svn_merge_with_retry(svn_exe, source_url, revision, file_path, local_file,
                           auth_args, _log):
     """执行 svn merge + 失败时 revert+retry + 最后手段 resolve
@@ -384,9 +396,11 @@ def _svn_merge_with_retry(svn_exe, source_url, revision, file_path, local_file,
     status, out_text = _svn_merge_single_file(svn_exe, cmd, _log)
     if status == "ok":
         _log(f"  ✅ 合并成功: {file_path}", "ok")
+        _svn_strip_mergeinfo(svn_exe, local_file)
         return 1, 0, 0, []
     if status == "conflict":
         _log(f"  ⚠ 已用源版本覆盖(冲突消解): {file_path}", "warn")
+        _svn_strip_mergeinfo(svn_exe, local_file)
         return 1, 1, 0, [file_path]
     if status == "e155010":
         _log(f"  → 文件未跟踪，转为新增: {file_path}", "info")
@@ -410,9 +424,11 @@ def _svn_merge_with_retry(svn_exe, source_url, revision, file_path, local_file,
         status2, out_text2 = _svn_merge_single_file(svn_exe, cmd2, _log)
         if status2 == "ok":
             _log(f"  ✅ 合并成功: {file_path}", "ok")
+            _svn_strip_mergeinfo(svn_exe, local_file)
             return 1, 0, 0, []
         if status2 == "conflict":
             _log(f"  ⚠ 已用源版本覆盖(冲突消解): {file_path}", "warn")
+            _svn_strip_mergeinfo(svn_exe, local_file)
             return 1, 1, 0, [file_path]
         _log(f"  ⚠ 重新合并仍失败: {out_text2.strip()}", "warn")
         _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args)

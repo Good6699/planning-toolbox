@@ -432,9 +432,11 @@ def _svn_merge_with_retry(svn_exe, source_url, revision, file_path, local_file,
             return 1, 1, 0, [file_path]
         _log(f"  ⚠ 重新合并仍失败: {out_text2.strip()}", "warn")
         _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args)
+        _svn_strip_mergeinfo(svn_exe, local_file)
         _log(f"  → 已用源版本强制覆盖（最后手段）: {file_path}", "warn")
     else:
         _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args)
+        _svn_strip_mergeinfo(svn_exe, local_file)
         _log(f"  → revert 失败，已用源版本强制覆盖: {file_path}", "warn")
     return 0, 1, 0, [file_path]
 

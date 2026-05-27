@@ -827,3 +827,15 @@ while (true):
 - **根因**：`svn add --force --quiet <file>` 在父目录未跟踪时返回 exit code 1（`E200009: 目标非法`），但 `subprocess.run` 没传 `check=True`，代码也不检查 `r.returncode`，硬记为成功
 - **解决方案**：`svn add` 加上 `--parents` 参数自动跟踪父目录，并检查返回码，非零时返回失败计数
 - **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)
+
+### merge 后文件属性噪声（mergeinfo + mime-type）清除
+- **场景**：2026-05-27 merge 后 TortoiseSVN 提交弹窗中每个文件都显示 `svn:mergeinfo` 和 `svn:mime-type` 属性变更，手动 SVN merge 不会出现
+- **根因**：逐文件 `svn merge -c` 会在每个文件上写 mergeinfo（目录级 merge 只写在根目录），`svn add` 自动检测二进制文件设 mime-type。代码中 `_svn_strip_noise_props` 调用只覆盖了 mod 路径出口，漏掉了 add 路径（_svn_export_add + 目录新增）
+- **解决方案**：`_svn_strip_noise_props` 循环清除 svn:mergeinfo 和 svn:mime-type，并在所有 9 个 svn add/merge 成功出口都调用它
+- **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)
+
+### 日志自动滚动停止：CSS overflow-anchor 哨兵方案替代 JS scrollTop 判断
+- **场景**：2026-05-27 merge 日志自动滚动滚几条就停，需手动往下拉
+- **根因**：浏览器滚动锚定（Scroll Anchoring）默认会阻止页面位移，与 JS 的 `scrollTop = scrollHeight` 自动滚动争夺控制权，累积到 32px 阈值后 JS 判断永久失效
+- **解决方案**：采用 CSS-Tricks 推荐的哨兵元素方案——日志容器内放 `<div class="log-anchor">`（`overflow-anchor:auto`），日志行设 `overflow-anchor:none`，浏览器自动钉住哨兵位置。新增 `_logAppend()` 在哨兵前插入日志行，`_logClear()` 清空时重建哨兵，首次追加时强制滚底激活锚定
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)

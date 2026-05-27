@@ -845,6 +845,8 @@ input::placeholder,textarea::placeholder{
 .log .info{color:var(--accent);}
 .log .warn{color:#ffb866;}
 .log .ts{color:var(--dim);margin-right:4px;}
+.log > *:not(.log-anchor){overflow-anchor:none;}
+.log-anchor{overflow-anchor:auto;height:1px;}
 .toggle-group{
   display:flex;
   gap:4px;
@@ -1668,7 +1670,7 @@ function buildSvnTab(panel) {
               <button class="btn btn-normal btn-sm" data-action="svn-clear-cache">清除缓存</button>
             </div>
           </div>
-          <div class="log" id="svn_log"></div>
+          <div class="log" id="svn_log"><div class="log-anchor"></div></div>
         </div>
       </div>
     </div>
@@ -1794,7 +1796,7 @@ function buildUploadTab(panel) {
             <span style="font-weight:600">执行日志</span>
             <button class="btn btn-normal btn-sm" data-action="clear-changelist">清理changelist</button>
           </div>
-          <div class="log" id="upload_log"></div>
+          <div class="log" id="upload_log"><div class="log-anchor"></div></div>
         </div>
       </div>
     </div>
@@ -1893,7 +1895,7 @@ function buildWorkflowTab(panel) {
           <div class="card-header compact">
             <span style="font-weight:600">执行日志</span>
           </div>
-          <div class="log" id="wf_log"></div>
+          <div class="log" id="wf_log"><div class="log-anchor"></div></div>
         </div>
       </div>
     </div>
@@ -2527,7 +2529,7 @@ function buildTranslateTab(panel) {
           <div class="card-header compact">
             <span style="font-weight:600">执行日志</span>
           </div>
-          <div class="log" id="tr_log"></div>
+          <div class="log" id="tr_log"><div class="log-anchor"></div></div>
         </div>
       </div>
     </div>
@@ -2724,6 +2726,15 @@ function _decTabRunning(tabKey) {
   _tabCount[tabKey] = Math.max(0, _tabCount[tabKey] - 1);
   if (_tabCount[tabKey] === 0) _setTabDot(tabKey, false);
 }
+function _logAppend(el, child) {
+  const a = el.querySelector(".log-anchor");
+  if (a) el.insertBefore(child, a);
+  else el.appendChild(child);
+  if (el.scrollTop < 1) el.scrollTop = el.scrollHeight;
+}
+function _logClear(el) {
+  el.innerHTML = '<div class="log-anchor"></div>';
+}
 async function runTask(url, body, btn, logId, label, onDone) {
   const logEl = document.getElementById(logId);
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
@@ -2734,7 +2745,7 @@ async function runTask(url, body, btn, logId, label, onDone) {
     if (!btn.dataset.orig) btn.dataset.orig = btn.textContent;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>执行中...';
-    logEl.innerHTML = "";
+    _logClear(logEl);
   }
   const r = await fetch(url, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const d = await r.json();
@@ -2772,7 +2783,7 @@ async function runTask(url, body, btn, logId, label, onDone) {
         const _hint = document.createElement("div");
         _hint.textContent = "📂 正在打开文件夹: " + _outputPath;
         _hint.style.cssText = "color:var(--accent);font-size:12px";
-        logEl.appendChild(_hint);
+        _logAppend(logEl, _hint);
         _openFolder(_outputPath);
       }
       return;
@@ -2800,10 +2811,8 @@ async function runTask(url, body, btn, logId, label, onDone) {
       if (_pm) {
         _outputPath = _pm[1].trim();
       }
-      logEl.appendChild(div);
+      _logAppend(logEl, div);
     }
-    const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 32;
-    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
   };
   evtSrc.onerror = () => {
     evtSrc.close();
@@ -3179,7 +3188,7 @@ function buildMergeTab(panel) {
           <div class="card-header compact">
             <span style="font-weight:600">执行日志</span>
           </div>
-          <div class="log" id="merge_log"></div>
+          <div class="log" id="merge_log"><div class="log-anchor"></div></div>
         </div>
       </div>
     </div>
@@ -3344,7 +3353,7 @@ async function runMergeQuery() {
   const orig = btn.textContent;
   btn.innerHTML = '<span class="spinner"></span>查询中...';
   const logEl = document.getElementById("merge_log");
-  logEl.innerHTML = "";
+  _logClear(logEl);
   _incRunning();
   _incTabRunning("merge");
   try {
@@ -3402,10 +3411,8 @@ async function runMergeQuery() {
         if (!raw.trim()) continue;
         const div = document.createElement("div");
         div.textContent = raw;
-        logEl.appendChild(div);
+        _logAppend(logEl, div);
       }
-      const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 32;
-      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
     };
   } catch (err) {
     btn.disabled = false;
@@ -3575,7 +3582,7 @@ async function runMergeRun() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>合并中...';
   const logEl = document.getElementById("merge_log");
-  logEl.innerHTML = "";
+  _logClear(logEl);
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
   _incRunning();
   _incTabRunning("merge");
@@ -3615,10 +3622,8 @@ async function runMergeRun() {
         if (!raw.trim()) continue;
         const div = document.createElement("div");
         div.textContent = raw;
-        logEl.appendChild(div);
+        _logAppend(logEl, div);
       }
-      const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 32;
-      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
     };
   } catch (err) {
     logEl.innerHTML = '<span class="error">❌ 请求失败: '+escapeHtml(err.message)+'</span>';
@@ -3650,7 +3655,7 @@ async function runMergeAnalysis() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>分析中...';
   const logEl = document.getElementById("merge_log");
-  logEl.innerHTML = "";
+  _logClear(logEl);
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
   _incRunning();
   _incTabRunning("merge");
@@ -3680,10 +3685,8 @@ async function runMergeAnalysis() {
         if (!raw.trim()) continue;
         const div = document.createElement("div");
         div.textContent = raw;
-        logEl.appendChild(div);
+        _logAppend(logEl, div);
       }
-      const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 32;
-      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
     };
   } catch (err) {
     btn.disabled = false;

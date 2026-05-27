@@ -172,6 +172,7 @@ def _svn_export_add(svn_exe, source_url, revision, file_path, local_file, auth_a
     except Exception:
         log_callback(f"  ⚠ svn add 失败: {file_path}", "warn")
         return False
+    _svn_strip_noise_props(svn_exe, local_file)
     return True
 
 
@@ -477,6 +478,7 @@ def _svn_merge_one_file(svn_exe, source_url, revision, file_path, local_file,
         except Exception:
             _log(f"  ⚠ svn add 失败: {file_path}", "warn")
             return 0, 1, 0, [file_path]
+        _svn_strip_noise_props(svn_exe, local_file)
         _log(f"  ✅ 新增目录: {file_path}", "ok")
         return 1, 0, 0, []
 
@@ -486,6 +488,7 @@ def _svn_merge_one_file(svn_exe, source_url, revision, file_path, local_file,
         ok = _svn_export_add(svn_exe, source_url, revision,
                              file_path, local_file, auth_args, _log)
         if ok:
+            _svn_strip_noise_props(svn_exe, local_file)
             _log(f"  ✅ 新增文件: {file_path}", "ok")
             return 1, 0, 0, []
         return 0, 1, 0, [file_path]

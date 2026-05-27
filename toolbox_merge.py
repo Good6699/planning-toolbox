@@ -161,13 +161,17 @@ def _svn_export_add(svn_exe, source_url, revision, file_path, local_file, auth_a
     if not ok:
         log_callback(msg, "warn")
         return False
-    add_cmd = [svn_exe, "add", "--force", "--quiet", local_file] + auth_args
+    add_cmd = [svn_exe, "add", "--parents", "--force", "--quiet", local_file] + auth_args
     try:
-        subprocess.run(add_cmd, capture_output=True, text=True,
-                       encoding="utf-8", errors="replace",
-                       timeout=30, **_get_subprocess_kwargs())
+        r = subprocess.run(add_cmd, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace",
+                           timeout=30, **_get_subprocess_kwargs())
+        if r.returncode != 0:
+            log_callback(f"  ⚠ svn add 失败: {file_path}", "warn")
+            return False
     except Exception:
         log_callback(f"  ⚠ svn add 失败: {file_path}", "warn")
+        return False
     return True
 
 
@@ -443,13 +447,17 @@ def _svn_merge_one_file(svn_exe, source_url, revision, file_path, local_file,
             _log(msg, "warn")
             return 0, 1, 0, [file_path]
         try:
-            subprocess.run(
-                [svn_exe, "add", "--force", "--quiet", local_file] + auth_args,
+            r = subprocess.run(
+                [svn_exe, "add", "--parents", "--force", "--quiet", local_file] + auth_args,
                 capture_output=True, timeout=30,
                 **_get_subprocess_kwargs()
             )
+            if r.returncode != 0:
+                _log(f"  ⚠ svn add 失败: {file_path}", "warn")
+                return 0, 1, 0, [file_path]
         except Exception:
             _log(f"  ⚠ svn add 失败: {file_path}", "warn")
+            return 0, 1, 0, [file_path]
         _log(f"  ✅ 新增目录: {file_path}", "ok")
         return 1, 0, 0, []
 

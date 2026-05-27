@@ -821,3 +821,9 @@ while (true):
 - **场景**：2026-05-26 `svn diff --summarize` 返回的目录条目（如 `Assets`）被当成文件执行 `svn merge` 导致 E155035
 - **规则**：① 目录属性修改（mergeinfo 等）直接跳过 ② 目录新增用 `svn export --force` 递归下载整个目录树 + `svn add --force` ③ 目录删除用 `svn merge`（有 BASE 基线可用）④ 同一版本中目录优先处理，其子文件自动跳过（covered_prefixes 过滤）
 - **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### 新增文件夹显示"无版本"：svn add 缺 --parents + 不检查返回码
+- **场景**：2026-05-27 合并 70 版本后 TortoiseSVN 弹窗中新增文件夹 `D3Atlas997_1/` 及子文件全部显示"无版本"（`?` 状态），日志却显示 `✅ 新增文件`
+- **根因**：`svn add --force --quiet <file>` 在父目录未跟踪时返回 exit code 1（`E200009: 目标非法`），但 `subprocess.run` 没传 `check=True`，代码也不检查 `r.returncode`，硬记为成功
+- **解决方案**：`svn add` 加上 `--parents` 参数自动跟踪父目录，并检查返回码，非零时返回失败计数
+- **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)

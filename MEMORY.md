@@ -180,6 +180,18 @@
 - **解决方案**：改用 `if (sb) { sb.classList.remove("running"); ... }` 安全守卫
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### revert_svn 排除文件在冲突处理阶段被误覆盖
+- **场景**：2026-05-27 `revert_svn` 工作流步骤中 `InstallClient.bat` 虽在排除列表，但最终仍被 SVN 版本强制覆盖
+- **根因**：`_exec_revert_svn` 的冲突检查阶段重新对整个路径执行 `svn status` 后直接调用 `_svn_resolve_conflict`，没有再次应用 `exclude_paths` 过滤。排除逻辑只保护了 batch revert 阶段，后半段冲突处理绕过了排除
+- **解决方案**：在冲突处理阶段，`_svn_parse_status` 之后、`_svn_resolve_conflict` 之前，对 `conflicts` 列表调用 `_svn_filter_exclude(conflicts, exclude_paths, put)`
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### _svn_filter_exclude 路径分隔符未归一化导致排除失效
+- **场景**：2026-05-27 排除配置 `Assets/Code_Lua/test/test.lua`（Unix `/` 分隔符）无法匹配 SVN 返回的 Windows 路径 `F:\...\Assets\Code_Lua\test\test.lua`
+- **根因**：`_match` 函数用 `fp.endswith(os.sep + excl)` 匹配时，`excl` 内部的分隔符仍是 `/`，与 `os.sep`（`\`）不统一，导致尾部匹配失败。而 `InstallClient.bat` 能匹配是因为走了第三个条件 `fn == excl`（文件名刚好等于排除项本身）
+- **解决方案**：匹配前对 `excl` 做 `excl.replace("/", os.sep).replace("\\", os.sep)` 归一化分隔符
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
 ### 严格禁止修改与当前功能无关的文件
 - **场景**：在实现SVN精准文件合并功能时，"顺手"修改了 `desktop_main.py` 的 ctypes 窗口子类化参数类型（`c_longlong` → `wintypes`），导致窗口拖动闪现和关闭按钮异常
 - **根因**：违反了"只改用户指定的部分，其他保持原样"的纪律。`desktop_main.py` 的窗口子类化在原始版本中工作正常，无需改动。修改一个非目标文件引入了两个新 bug（拖拽闪现 + 关闭异常），调试时间远超 SVN 合并功能本身的开发时间

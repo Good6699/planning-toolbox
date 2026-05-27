@@ -1082,7 +1082,8 @@ def _svn_filter_exclude(files, exclude_paths, put=None):
     def _match(fp):
         fn = os.path.basename(fp)
         for excl in exclude_paths:
-            if fp == excl or fp.endswith(os.sep + excl):
+            excl_norm = excl.replace("/", os.sep).replace("\\", os.sep)
+            if fp == excl_norm or fp.endswith(os.sep + excl_norm):
                 return True
             if fn == excl:
                 return True
@@ -1274,6 +1275,8 @@ def _exec_revert_svn(step, put, task_id=None):
                          capture_output=True, timeout=60,
                          **_get_subprocess_kwargs())
     conflicts, _ = _svn_parse_status(_svn_decode_output(st2.stdout), target_path)
+    if exclude_paths:
+        conflicts, _ = _svn_filter_exclude(conflicts, exclude_paths, put)
     if conflicts:
         put(f"发现 {len(conflicts)} 个冲突文件\n")
         for cf in conflicts:

@@ -382,15 +382,20 @@ def _svn_merge_single_file(svn_exe, cmd, log_callback):
 
 def _svn_strip_noise_props(svn_exe, local_file):
     """清除文件属性噪声（mergeinfo、mime-type），避免提交弹窗显示不必要的属性变更"""
+    targets = [local_file]
+    parent = os.path.dirname(local_file)
+    if parent and parent != local_file:
+        targets.append(parent)
     for prop in ("svn:mergeinfo", "svn:mime-type"):
-        try:
-            subprocess.run(
-                [svn_exe, "propdel", prop, local_file] + _build_svn_auth_args(None, None),
-                capture_output=True, timeout=15,
-                **_get_subprocess_kwargs()
-            )
-        except Exception:
-            pass
+        for t in targets:
+            try:
+                subprocess.run(
+                    [svn_exe, "propdel", prop, t] + _build_svn_auth_args(None, None),
+                    capture_output=True, timeout=15,
+                    **_get_subprocess_kwargs()
+                )
+            except Exception:
+                pass
 
 
 def _build_merge_c_args(revisions):

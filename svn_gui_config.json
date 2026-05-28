@@ -1,7 +1,7 @@
 {
   "svn_urls": [
-    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/gameData",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/Client"
@@ -9,24 +9,25 @@
   "cmp_file_presets": [
     "Texts"
   ],
-  "merge_file_filter_mode": "include",
-  "merge_file_filter_exclude_text": "Assets\\StreamingAssets\\SkillConfig,Assets\\StreamingAssets\\BinData,Assets\\StreamingAssets\\GenerateData,Assets\\StreamingAssets\\Language,Assets\\Code,Assets\\Code_Lua,gameData\\UpLoadBackup,gameData\\老D3废弃表,gameData\\配置描述文档,gameData\\.ExcelTool2,gameData\\.svn,gameData\\config,gameData\\config_temp,gameData\\ErlangExportCopy,gameData\\ExportTxt,gameData\\macro,gameData\\old,gameData\\oldGameData,gameData\\protobuf",
+  "merge_file_filter_mode": "exclude",
+  "merge_file_filter_exclude_text": "Assets\\StreamingAssets\\SkillConfig,Assets\\StreamingAssets\\BinData,Assets\\StreamingAssets\\GenerateData,Assets\\StreamingAssets\\Language,Assets\\Code,Assets\\Code_Lua,gameData\\UpLoadBackup,gameData\\老D3废弃表,gameData\\配置描述文档,gameData\\.ExcelTool2,gameData\\.svn,gameData\\config,gameData\\config_temp,gameData\\ErlangExportCopy,gameData\\ExportTxt,gameData\\macro,gameData\\old,gameData\\oldGameData,gameData\\protobuf,Assets\\StreamingAssets\\GenerateMsg",
   "merge_file_filter_include_text": "gameData\\Text\\Texts.xlsm,gameData\\Data2,gameData\\Language",
   "svn_keyword_history": [
-    "专武,腐败秘境,职业",
-    "专武",
-    "裂隙",
     "腐败秘境",
+    "专武,腐败秘境,职业",
+    "神器",
+    "裂隙",
+    "专武",
     "腐败"
   ],
   "svn_author_history": [
-    "gaoyang",
-    "zhaowei"
+    "zhaowei",
+    "gaoyang"
   ],
   "merge_target_history": [
-    "G:\\D3_KR2\\Client",
+    "F:\\D3_KR2_DEV\\Client",
     "G:\\D3_KR2\\gameData",
-    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData"
+    "G:\\D3_KR2\\Client"
   ],
   "output_dir_history": [
     "C:\\Users\\admin\\.qclaw\\workspace\\输出",
@@ -128,7 +129,7 @@
   },
   "workers": "10",
   "parse_workers": "10",
-  "exclude_dirs": "BinData, GenerateData, Language,config,.ExcelTool2,ExportTxt,Code,Code_Lua,GenerateMsg",
+  "exclude_dirs": "BinData, GenerateData, Language,config,.ExcelTool2,ExportTxt,Code,Code_Lua,GenerateMsg,PrefabsInfo",
   "cmp_title_rows": "3",
   "cmp_id_col": "2",
   "cmp_output_cols": "",
@@ -146,6 +147,8 @@
     "C:\\Users\\admin\\.qclaw\\workspace\\输出"
   ],
   "tgt_dir_history": [
+    "F:\\D3_KR2_DEV\\Client",
+    "F:\\D3_KR2_DEV\\gameData\\Text",
     "G:\\D3_KR2\\Client",
     "G:\\D3_KR2\\gameData\\Text",
     "G:/D3_JP/Client"
@@ -192,7 +195,7 @@
       ]
     },
     {
-      "name": "KR2打开表格",
+      "name": "KR2单独操作",
       "steps": [
         {
           "file_paths": [
@@ -200,6 +203,57 @@
           ],
           "name": "Texts.xlsm",
           "type": "open_tables"
+        },
+        {
+          "delete_unversioned": false,
+          "exclude_paths": [
+            "Assets/Code_Lua/test/test.lua",
+            "Assets/StreamingAssets/LocalVersion.xml",
+            "InstallClient.bat"
+          ],
+          "name": "Client",
+          "target_path": "F:\\D3_KR2_DEV\\Client",
+          "type": "revert_svn"
+        }
+      ]
+    },
+    {
+      "name": "KR2_DEV导出文字表",
+      "steps": [
+        {
+          "lock_msg": "",
+          "name": "Texts.xlsm",
+          "target_path": "F:\\D3_KR2_DEV\\gameData\\Text\\Texts.xlsm",
+          "type": "lock_svn",
+          "update_dirs": [
+            "F:\\D3_KR2_DEV\\Client\\Assets\\StreamingAssets",
+            "F:\\D3_KR2_DEV\\gameData"
+          ]
+        },
+        {
+          "input_file": "F:\\D3_KR2_DEV\\gameData\\Text\\Texts.xlsm",
+          "lang_codes": "",
+          "name": "Texts.xlsm",
+          "tools": [
+            "F:\\D3_KR2_DEV\\gameData\\Text\\服务器文字表导出_替换文本引用.bat",
+            "F:\\D3_KR2_DEV\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
+          ],
+          "type": "export_text"
+        },
+        {
+          "dirs": [
+            "F:\\D3_KR2_DEV\\Client\\Assets\\StreamingAssets",
+            "F:\\D3_KR2_DEV\\gameData"
+          ],
+          "name": "StreamingAssets,gameData",
+          "type": "upload_svn"
+        },
+        {
+          "lock_msg": "",
+          "name": "Texts.xlsm",
+          "target_path": "F:\\D3_KR2_DEV\\gameData\\Text\\Texts.xlsm",
+          "type": "unlock_svn",
+          "update_dirs": []
         }
       ]
     },
@@ -362,14 +416,29 @@
     "ExportTxt"
   ],
   "_wf_history_texts": [
-    "G:\\D3_KR2\\Client\\Assets\\StreamingAssets, G:\\D3_KR2\\gameData",
+    "Assets/Code_Lua/test/test.lua, Assets/StreamingAssets/LocalVersion.xml, InstallClient.bat",
+    "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
+    "Assets/Code_Lua/test/test.lua,Assets/StreamingAssets/LocalVersion.xml,InstallClient.bat",
+    "F:\\D3_KR2_DEV\\Client\\Assets\\StreamingAssets, F:\\D3_KR2_DEV\\gameData",
+    "F:\\D3_KR2_DEV\\gameData\\Text\\服务器文字表导出_替换文本引用.bat, F:\\D3_KR2_DEV\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
     "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat, G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
+    "G:\\D3_KR2\\Client\\Assets\\StreamingAssets, G:\\D3_KR2\\gameData",
     "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat,G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
     "G:\\D3_KR2\\Client\\Assets\\StreamingAssets,G:\\D3_KR2\\gameData",
     "G:\\D3_KR2\\Client\\Assets\\StreamingAssets,"
   ],
   "_wf_history_paths": [
-    "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
+    "F:\\D3_KR2_DEV\\Client",
+    "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
+    "F:\\D3_KR2_DEV\\gameData\\Text\\Texts.xlsm",
+    "G:\\D3_EU\\Client"
   ],
+  "window_w": 1377,
+  "window_h": 827,
+  "svn_url_mappings": {
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client": "G:\\D3_KR2\\Client",
+    "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData": "G:\\D3_KR2\\gameData"
+  },
+  "svn_user": "",
   "tr_api_key_enc": "/ZhanvpqNABPoNt3CbrSkfxhsARxEX7yxR/83CnNjAHvkEQ="
 }

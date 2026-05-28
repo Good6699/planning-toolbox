@@ -915,3 +915,27 @@ while (true):
 - **根因**：原生 date picker 是 Shadow DOM，行为/样式不可控制；父 `.card` 有 `overflow:hidden` 裁剪了 `position:absolute` 的子元素
 - **解决方案**：自定义 `_initDatePicker()` JS 组件——`position:fixed` 挂到 `document.body`，用 `getBoundingClientRect()` 动态定位；📅 图标触发按钮；手动输入同步；上下自适应
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### mergeinfo 属性噪声三防线清理
+- **场景**：2026-05-28 逐文件精准合并 379 个文件后，WC 根及子目录出现大量 `svn:mergeinfo` 属性修改，提交弹窗一片红色属性变更
+- **根因**：`svn merge --ignore-ancestry` 在 Windows SVN 1.14 上仍然写 mergeinfo。逐文件 379 次 merge 导致 mergeinfo 扩散到根目录和多个子目录。之前的解决方案只清理了文件级，没清理父目录和 WC 根
+- **解决方案**：三道防线——(1) 合并前 `propdel --depth infinity` 预防性清理 WC 根；(2) 每次 merge/add 后不仅清理文件自身，还清理其父目录；(3) 合并后用 `propdel --depth infinity` 双属性（mergeinfo + mime-type）清扫，超时后自动 cleanup 重试
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)
+
+### svn status 属性状态列（第二列 M）被忽略导致纯属性修改被跳过
+- **场景**：2026-05-28 `svn status` 输出 ` M` 格式的 mergeinfo 属性修改路径，全部未被回退
+- **根因**：`_svn_parse_status` 只检查 `line[0]`（内容状态），` M` 的第一列是空格，不匹配任何状态码。纯属性修改（mergeinfo 等）全部被无声跳过
+- **解决方案**：解析 `line[1]` 属性状态列，当 `prop_sc == "M" and sc == " "` 时也加入 modified 列表
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### svn revert 目录需要 --depth infinity，根目录属性用 --depth empty
+- **场景**：2026-05-28 工作流 SVN 回退步骤中，批量 `revert --targets` 失败后逐文件回落，目录报 E155038
+- **根因**：`svn revert dir` 不支持目录（需 `--depth infinity`）。且 `--targets` 遇到无效路径时整个命令失败，无逐文件兜底。根目录 ` M` 用 `propdel` 清不掉，必须用 `revert --depth empty`
+- **解决方案**：`_svn_batch_revert` 的逐文件回落中，目录自动加 `--depth infinity`，根目录（==target_path）跳过由末尾统一处理。末尾追加 `svn revert target_path --depth empty` 清根目录属性
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### SVN 输出解码：先 GBK 再 UTF-8（中文 Windows）
+- **场景**：2026-05-28 `svn revert` 输出的中文路径在日志中显示为乱码（"鈽"等）
+- **根因**：`_svn_decode_output` 先试 `decode("utf-8")`，而 GBK 的中文字节（如"这"=D5E2）恰好在 UTF-8 中也是合法序列，解码"成功"但产生错字。`except` 永远不会触发，GBK 兜底永不执行
+- **解决方案**：两个解码函数都改为先试 GBK、再试 UTF-8。SVN 在中文 Windows 上的输出编码始终是系统代码页（GBK）
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)

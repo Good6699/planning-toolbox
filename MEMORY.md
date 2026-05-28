@@ -948,11 +948,18 @@ while (true):
 - **解决方案**：自定义 `_initDatePicker()` JS 组件——`position:fixed` 挂到 `document.body`，用 `getBoundingClientRect()` 动态定位；📅 图标触发按钮；手动输入同步；上下自适应
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
-### mergeinfo 属性噪声三防线清理
-- **场景**：2026-05-28 逐文件精准合并 379 个文件后，WC 根及子目录出现大量 `svn:mergeinfo` 属性修改，提交弹窗一片红色属性变更
-- **根因**：`svn merge --ignore-ancestry` 在 Windows SVN 1.14 上仍然写 mergeinfo。逐文件 379 次 merge 导致 mergeinfo 扩散到根目录和多个子目录。之前的解决方案只清理了文件级，没清理父目录和 WC 根
-- **解决方案**：三道防线——(1) 合并前 `propdel --depth infinity` 预防性清理 WC 根；(2) 每次 merge/add 后不仅清理文件自身，还清理其父目录；(3) 合并后用 `propdel --depth infinity` 双属性（mergeinfo + mime-type）清扫，超时后自动 cleanup 重试
-- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)
+### mergeinfo 属性噪声真因：propdel 自身产生 ` M` + 旧版遗留（已修正）
+- **场景**：2026-05-28 逐文件精准合并后 WC 出现大量 ` M` 属性变更
+- **错误诊断**：一度认为是 `svn merge --ignore-ancestry` 在 SVN 1.14 上仍然写 mergeinfo
+- **根因（2026-05-28 实测纠正）**：
+  1. **`--ignore-ancestry` 完全正常**，在 SVN 1.14.5 上实测不写入任何 mergeinfo（本地仓库 + 远程仓库双重验证）
+  2. **`propdel svn:mergeinfo` 自身产生 ` M`** — 代码中 `_svn_strip_noise_props` 和合并后 `propdel --depth infinity` 清理历史遗留 mergeinfo 时，属性删除操作本身在 `svn status` 中显示为 ` M`，在 TortoiseSVN 提交弹窗中就是"红色属性变更"
+  3. **历史遗留** — 旧版代码没有 `--ignore-ancestry` 时写入的 mergeinfo 未清理
+- **最终解决方案**：彻底移除所有 propdel 清理：
+  - `toolbox_merge.py`：删除 `_svn_strip_noise_props` 函数定义及全部 8 处调用
+  - `web_app.py`：删除合并后 `propdel --depth infinity` 整个清理块
+  - 合并后 `svn status` 只显示内容变更（`M` 第一列），无属性噪声
+- **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
 ### svn status 属性状态列（第二列 M）被忽略导致纯属性修改被跳过
 - **场景**：2026-05-28 `svn status` 输出 ` M` 格式的 mergeinfo 属性修改路径，全部未被回退

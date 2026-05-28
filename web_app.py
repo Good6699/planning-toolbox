@@ -2340,35 +2340,6 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
             for cf in all_conflict_files:
                 q.put(f"  - {cf}\n")
 
-        q.put("\n清理 SVN 属性噪声...\n")
-        svn_exe = _get_svn_path()
-        for prop in ("svn:mergeinfo", "svn:mime-type"):
-            try:
-                subprocess.run(
-                    [svn_exe, "propdel", prop, target_path, "--depth",
-                     "infinity", "--quiet"],
-                    capture_output=True, timeout=120,
-                    **_get_subprocess_kwargs()
-                )
-            except subprocess.TimeoutExpired:
-                q.put(f"  ⚠ 递归清理 {prop} 超时，执行 svn cleanup...\n")
-                subprocess.run(
-                    [svn_exe, "cleanup", target_path],
-                    capture_output=True, timeout=60,
-                    **_get_subprocess_kwargs()
-                )
-                try:
-                    subprocess.run(
-                        [svn_exe, "propdel", prop, target_path, "--depth",
-                         "infinity", "--quiet"],
-                        capture_output=True, timeout=120,
-                        **_get_subprocess_kwargs()
-                    )
-                except Exception as e:
-                    q.put(f"  ⚠ 递归清理 {prop} 失败: {e}\n")
-            except Exception as e:
-                q.put(f"  ⚠ 递归清理 {prop} 失败: {e}\n")
-
         q.put(f"\n{'='*50}\n")
         q.put("🔄 正在唤起SVN提交弹窗...\n")
         opened = open_commit_dialog(target_path)

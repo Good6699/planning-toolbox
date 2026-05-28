@@ -1937,8 +1937,11 @@ function buildWorkflowTab(panel) {
       </div>
     </div>
   `;
-  let expandedIdx = -1;
+  let expandedIdx = _wfExpandedIdx;
   const parents = panel.querySelectorAll(".wf-parent");
+  if (expandedIdx >= 0 && expandedIdx < parents.length) {
+    parents[expandedIdx].classList.add("expanded");
+  }
   parents.forEach((el, i) => {
     const header = el.querySelector(".wf-parent-header");
     header.addEventListener("click", (e) => {
@@ -2435,9 +2438,12 @@ function buildWorkflowTab(panel) {
 }
 let _wfSortables = [];
 let _wfHistoryDd = null;
+let _wfExpandedIdx = -1;
 function _wfRebuild() {
   _wfSortables.forEach(s => s.destroy());
   _wfSortables = [];
+  const ep = document.querySelector("#wf_tree .wf-parent.expanded");
+  _wfExpandedIdx = ep ? Number(ep.dataset.idx) : -1;
   buildWorkflowTab(S.workflow.panel);
 }
 document.addEventListener("click", (e) => {
@@ -2830,7 +2836,7 @@ function _initDatePicker(inputId) {
     popup.innerHTML=h;
   }
   function _dpShow(){if(selectedDate){currentYear=selectedDate.y;currentMonth=selectedDate.m}else{var n=new Date();currentYear=n.getFullYear();currentMonth=n.getMonth()}_dpRender();_dpPosition();popup.style.display="block"}
-  function _dpSet(y,m,d){selectedDate={y,m,d};input.value=_dpStr(y,m,d);_dpRender()}
+  function _dpSet(y,m,d){selectedDate={y,m,d};currentYear=y;currentMonth=m;input.value=_dpStr(y,m,d);_dpRender()}
   function _dpClear(){selectedDate=null;input.value="";_dpRender()}
   input._dpSet=_dpSet;input._dpClear=_dpClear;
   input.addEventListener("focus",_dpShow);

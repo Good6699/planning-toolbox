@@ -327,6 +327,12 @@
 - **解决方案**：在 CSS（绿色标签 `.unlock_svn`）、web 版（`_exec_unlock_svn`）、tkinter 版（`_wf_execute_unlock_svn` / `_wf_show_unlock_svn_config`）以及前端 typeCn/typeIcon/设置表单/自动命名中，同步新增 `unlock_svn` 类型。解锁不加 `--force`，别人锁住的无法强制解锁
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
+### 工作流树展开状态在重建后自动折叠
+- **场景**：删除步骤后调用 `_wfRebuild()` 重新渲染工作流树，所有工作流父节点全部折叠，用户需要重新点击展开
+- **根因**：`buildWorkflowTab()` 内部 `expandedIdx` 是局部变量，每次重建重置为 `-1`。删除步骤等操作调用 `_wfRebuild()` 重建整个面板后，展开状态丢失
+- **解决方案**：将 `expandedIdx` 提升为全局变量 `_wfExpandedIdx`；`_wfRebuild()` 重建前从 DOM 读取当前展开的 `.wf-parent.expanded` 的 `data-idx`；重建后在 `buildWorkflowTab()` 初始化时根据 `_wfExpandedIdx` 恢复展开状态
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ## 2026-05-25 语义分析性能打点 + 子进程编码修复 + SVN URL映射系统
 
 ### 语义分析性能瓶颈—打点日志发现根因在 GUID 映射

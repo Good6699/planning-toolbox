@@ -1170,6 +1170,7 @@ class WorkflowTabMixin:
         for item in self.wf_tree.get_children():
             w = f.measure(self.wf_tree.item(item, "text"))
             max_w = max(max_w, w)
+            self.wf_tree.item(item, open=True)
             for child in self.wf_tree.get_children(item):
                 w = f.measure(self.wf_tree.item(child, "text"))
                 max_w = max(max_w, w + 20)

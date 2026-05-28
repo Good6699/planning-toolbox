@@ -711,7 +711,11 @@ def _run_wf_task(q, wf, steps, task_id):
     prefix = {"error": "❌ ", "ok": "✓ ", "warn": "⚠ ", "head": ""}
 
     def _put(msg, tag=""):
-        q.put(msg)
+        if msg is None:
+            q.put(None)
+            return
+        ts = datetime.now().strftime("%H:%M:%S")
+        q.put(f"[{ts}] {msg}")
 
     def _line(msg, tag=""):
         _put(f"{prefix.get(tag, '')}{msg}\n")
@@ -1059,176 +1063,6 @@ def _svn_decode_output(data):
         return data.decode("utf-8", errors="replace")
 
 
-def _svn_parse_status(text, target_path):
-    modified = []
-    unversioned = []
-    for line in text.strip().splitlines():
-        if not line or len(line) < 8:
-            continue
-        sc = line[0]
-        prop_sc = line[1] if len(line) > 1 else " "
-        fp = line[8:].strip()
-        if not fp:
-            continue
-        full = fp if os.path.isabs(fp) else os.path.normpath(os.path.join(target_path, fp))
-        if "\\:" in full or full.count(":") > 1:
-            continue
-        if sc in ("M", "A", "D", "R", "C"):
-            modified.append(full)
-        elif prop_sc == "M" and sc == " ":
-            modified.append(full)
-        elif sc == "?":
-            unversioned.append(full)
-    return modified, unversioned
-
-
-def _svn_filter_exclude(files, exclude_paths, put=None):
-    if not exclude_paths:
-        return files, []
-
-    def _match(fp):
-        fn = os.path.basename(fp)
-        for excl in exclude_paths:
-            excl_norm = excl.replace("/", os.sep).replace("\\", os.sep)
-            if fp == excl_norm or fp.endswith(os.sep + excl_norm):
-                return True
-            if fn == excl:
-                return True
-        return False
-    excluded = [f for f in files if _match(f)]
-    kept = [f for f in files if not _match(f)]
-    if excluded and put:
-        for ef in excluded:
-            put(f"  已排除: {ef}\n")
-    return kept, excluded
-
-
-def _svn_resolve_conflict(svn, cf, put):
-    put(f"  冲突: {cf}\n")
-    if os.path.isdir(cf):
-        try:
-            subprocess.run(
-                [svn, "revert", cf, "--depth", "infinity"],
-                capture_output=True, timeout=60,
-                **_get_subprocess_kwargs())
-            put(f"  已回退目录: {cf}\n")
-        except Exception as e:
-            put(f"  目录回退失败: {cf} - {e}\n")
-        return
-    try:
-        url_r = subprocess.run(
-            [svn, "info", "--show-item", "url", cf],
-            capture_output=True, text=True, timeout=30,
-            **_get_subprocess_kwargs())
-        if url_r.returncode != 0:
-            put(f"  无法获取文件URL: {cf}\n")
-            return
-        url = url_r.stdout.strip()
-        cat_r = subprocess.run(
-            [svn, "cat", url],
-            capture_output=True, timeout=30,
-            **_get_subprocess_kwargs())
-        if cat_r.returncode != 0:
-            put(f"  无法获取SVN版本: {cf}\n")
-            return
-        with open(cf, "wb") as f:
-            f.write(cat_r.stdout)
-        subprocess.run(
-            [svn, "resolve", "--accept", "working", cf],
-            capture_output=True, timeout=30,
-            **_get_subprocess_kwargs())
-        put(f"  已用SVN版本覆盖: {cf}\n")
-    except Exception as e:
-        put(f"  冲突处理异常: {cf} - {e}\n")
-
-
-def _svn_batch_revert(svn, files, target_path, put, task_id):
-    put(f"正在回退 {len(files)} 个文件...\n")
-    tmpdir = None
-    proc = None
-    try:
-        tmpdir = tempfile.mkdtemp(prefix="svn_revert_")
-        tfile = os.path.join(tmpdir, "targets.txt")
-        with open(tfile, "w", encoding="utf-8") as f:
-            for fp in files:
-                f.write(fp + "\n")
-        proc = subprocess.Popen(
-            [svn, "revert", "--targets", tfile],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            **_get_subprocess_kwargs())
-        _register_proc(proc, task_id)
-        try:
-            for raw_line in proc.stdout:
-                line = _svn_decode_output(raw_line).strip()
-                if line:
-                    put(f"↩ {line}\n")
-            proc.wait(timeout=120)
-            if proc.returncode == 0:
-                put(f"已回退 {len(files)} 个文件\n")
-                return True
-            stderr = _svn_decode_output(proc.stderr.read())[-200:]
-            put(f"批量回退失败: {stderr}\n")
-            put("改为逐文件回退（跳过无效路径）...\n")
-            for fp in files:
-                try:
-                    if os.path.isdir(fp) and os.path.normpath(fp) == os.path.normpath(target_path):
-                        put(f"↩ {os.path.basename(fp)}（根目录属性，后续统一处理）\n")
-                        continue
-                    cmd = [svn, "revert", fp]
-                    if os.path.isdir(fp):
-                        cmd += ["--depth", "infinity"]
-                    r = subprocess.run(
-                        cmd,
-                        capture_output=True, timeout=30,
-                        **_get_subprocess_kwargs()
-                    )
-                    if r.returncode == 0:
-                        put(f"↩ {os.path.basename(fp)}\n")
-                    else:
-                        err = _svn_decode_output(r.stderr)[:200]
-                        put(f"⚠ 跳过: {os.path.basename(fp)} - {err}\n")
-                except Exception as e:
-                    put(f"⚠ 跳过: {os.path.basename(fp)} - {e}\n")
-            put("逐文件回退完成\n")
-            return True
-        finally:
-            _unregister_proc(proc, task_id)
-    except Exception as e:
-        if proc:
-            _unregister_proc(proc, task_id)
-        put(f"回退失败: {e}\n")
-        return False
-    finally:
-        if tmpdir:
-            try:
-                shutil.rmtree(tmpdir)
-            except Exception:
-                pass
-
-
-def _svn_delete_unversioned(files, put):
-    put(f"正在删除 {len(files)} 个未版本控制文件...\n")
-    deleted = 0
-    failed = 0
-    for fp in files:
-        try:
-            if os.path.isfile(fp):
-                os.remove(fp)
-                put(f"🗑 已删除: {fp}\n")
-                deleted += 1
-            elif os.path.isdir(fp):
-                shutil.rmtree(fp)
-                put(f"🗑 已删除目录: {fp}\n")
-                deleted += 1
-        except Exception as e:
-            put(f"删除失败（跳过）: {fp} - {e}\n")
-            failed += 1
-    put(f"已删除 {deleted} 个未版本控制文件")
-    if failed:
-        put(f"，{failed} 个跳过")
-    put("\n")
-
-
 def _exec_revert_svn(step, put, task_id=None):
     target_path = step.get("target_path", "").strip()
     if not target_path or not os.path.exists(target_path):
@@ -1237,7 +1071,7 @@ def _exec_revert_svn(step, put, task_id=None):
     svn = _get_svn_path()
     put(f"SVN回退: {target_path}\n")
 
-    # 先 cleanup 确保无残留锁，再更新
+    # 先 cleanup 确保无残留锁
     put("正在 cleanup 工作副本...\n")
     try:
         subprocess.run([svn, "cleanup", target_path],
@@ -1246,102 +1080,80 @@ def _exec_revert_svn(step, put, task_id=None):
     except Exception:
         pass
 
-    put("正在更新到最新版本...\n")
-    if not _svn_update_with_cleanup(svn, target_path, put, task_id):
-        return False
-
-    put("正在扫描本地修改...\n")
-    sp = subprocess.run([svn, "status", target_path],
-                        capture_output=True, timeout=60,
-                        **_get_subprocess_kwargs())
-    if sp.returncode != 0:
-        err = _svn_decode_output(sp.stderr)[:500] if sp.stderr else "未知错误"
-        put(f"SVN status 失败: {err}\n")
-        put("尝试 cleanup 后重试...\n")
-        try:
-            subprocess.run([svn, "cleanup", target_path],
-                           capture_output=True, timeout=60,
-                           **_get_subprocess_kwargs())
-            put("cleanup 完成\n")
-        except Exception as e:
-            put(f"cleanup 警告: {e}\n")
-        sp = subprocess.run([svn, "status", target_path],
-                            capture_output=True, timeout=60,
-                            **_get_subprocess_kwargs())
-    if sp.returncode != 0:
-        err = _svn_decode_output(sp.stderr)[:500] if sp.stderr else "未知错误"
-        put(f"SVN status 仍然失败: {err}\n")
-        put("改为执行全量回退（无法应用排除过滤）...\n")
-        proc = subprocess.Popen(
-            [svn, "revert", "-R", target_path],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, encoding="utf-8", errors="replace",
-            **_get_subprocess_kwargs())
-        _register_proc(proc, task_id)
-        try:
-            stdout, stderr = proc.communicate(timeout=120)
-            for line in stdout.strip().splitlines():
-                line = line.strip()
-                if line:
-                    put(f"↩ {line}\n")
-            if stderr.strip():
-                put(f"回退警告: {stderr.strip()[-200:]}\n")
-            put("全量回退完成\n")
-        finally:
-            _unregister_proc(proc, task_id)
-        modified = []
-        unversioned = []
-    else:
-        modified, unversioned = _svn_parse_status(_svn_decode_output(sp.stdout), target_path)
-    if not modified and not unversioned:
-        put("没有需要回退的文件\n")
-        return True
-    put(f"发现 {len(modified)} 个已修改文件")
-    if unversioned:
-        put(f"，{len(unversioned)} 个未版本控制文件")
-    put("\n")
-
+    # 解析排除路径
     raw_exclude = step.get("exclude_paths", [])
     if isinstance(raw_exclude, str):
         exclude_paths = [e.strip() for e in raw_exclude.split(",") if e.strip()]
     else:
         exclude_paths = [e.strip() for e in raw_exclude if e.strip()]
-    if exclude_paths:
-        before = len(modified)
-        modified, excluded_files = _svn_filter_exclude(modified, exclude_paths, put)
-        excluded_count = before - len(modified)
-        if excluded_count:
-            put(f"排除 {excluded_count} 个文件\n")
-        unversioned, _ = _svn_filter_exclude(unversioned, exclude_paths, put)
 
-    if modified:
-        if not _svn_batch_revert(svn, modified, target_path, put, task_id):
+    # 直接将排除路径解析为实际文件/目录路径
+    excluded_files = []
+    for excl in exclude_paths:
+        excl_norm = excl.replace("/", os.sep).replace("\\", os.sep)
+        candidate = excl_norm if os.path.isabs(excl_norm) else os.path.join(target_path, excl_norm)
+        if os.path.exists(candidate):
+            excluded_files.append(os.path.normpath(candidate))
+    if excluded_files:
+        put(f"排除 {len(excluded_files)} 个文件/目录\n")
+
+    tmpdir = None
+    try:
+        if excluded_files:
+            tmpdir = tempfile.mkdtemp(prefix="svn_revert_bak_")
+            put("正在备份排除的文件到临时目录...\n")
+            for fp in excluded_files:
+                rel = os.path.relpath(fp, target_path)
+                dest = os.path.join(tmpdir, rel)
+                try:
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    if os.path.isdir(fp):
+                        shutil.copytree(fp, dest, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(fp, dest)
+                except Exception as e:
+                    put(f"  ⚠ 备份失败（跳过排除）: {rel} - {e}\n")
+
+        put("正在全量回退本地所有修改...\n")
+        r = subprocess.run(
+            [svn, "revert", "-R", target_path],
+            capture_output=True, timeout=120,
+            **_get_subprocess_kwargs())
+        if r.returncode != 0:
+            err = _svn_decode_output(r.stderr)[:200] if r.stderr else ""
+            put(f"全量回退异常: {err}\n")
             return False
 
-    put("正在检查冲突状态...\n")
-    st2 = subprocess.run([svn, "status", target_path],
-                         capture_output=True, timeout=60,
-                         **_get_subprocess_kwargs())
-    conflicts, _ = _svn_parse_status(_svn_decode_output(st2.stdout), target_path)
-    if exclude_paths:
-        conflicts, _ = _svn_filter_exclude(conflicts, exclude_paths, put)
-    if conflicts:
-        put(f"发现 {len(conflicts)} 个冲突文件\n")
-        for cf in conflicts:
-            _svn_resolve_conflict(svn, cf, put)
-        put("冲突处理完成\n")
-    else:
-        put("无冲突\n")
+        if excluded_files and tmpdir:
+            put("正在恢复排除的文件...\n")
+            for fp in excluded_files:
+                rel = os.path.relpath(fp, target_path)
+                src = os.path.join(tmpdir, rel)
+                if not os.path.exists(src):
+                    continue
+                try:
+                    if os.path.isdir(src):
+                        if os.path.exists(fp):
+                            shutil.rmtree(fp)
+                        shutil.copytree(src, fp)
+                    else:
+                        os.makedirs(os.path.dirname(fp), exist_ok=True)
+                        shutil.copy2(src, fp)
+                except Exception as e:
+                    put(f"  ⚠ 恢复失败: {rel} - {e}\n")
+            put("排除文件恢复完成\n")
+    finally:
+        if tmpdir:
+            try:
+                shutil.rmtree(tmpdir)
+            except Exception:
+                pass
 
-    if step.get("delete_unversioned", False) and unversioned:
-        _svn_delete_unversioned(unversioned, put)
-
-    # 清除根目录残留的属性修改（mergeinfo 等）
+    put("清理根目录残留属性...\n")
     subprocess.run(
         [svn, "revert", target_path, "--depth", "empty"],
         capture_output=True, timeout=30,
-        **_get_subprocess_kwargs()
-    )
+        **_get_subprocess_kwargs())
 
     put("SVN 回退完成\n")
     return True
@@ -2491,35 +2303,6 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
                 f["path"] = raw[len(strip_prefix):]
             elif raw.startswith("/"):
                 f["path"] = raw[1:]
-
-        # 合并前预防性清理：清除 WC 根上已有的 mergeinfo/mime-type，防止被后续操作继承
-        svn_exe = _get_svn_path()
-        for prop in ("svn:mergeinfo", "svn:mime-type"):
-            try:
-                subprocess.run(
-                    [svn_exe, "propdel", prop, target_path, "--depth",
-                     "infinity", "--quiet"],
-                    capture_output=True, timeout=120,
-                    **_get_subprocess_kwargs()
-                )
-            except subprocess.TimeoutExpired:
-                q.put(f"  ⚠ 清理 {prop} 超时，执行 svn cleanup...\n")
-                subprocess.run(
-                    [svn_exe, "cleanup", target_path],
-                    capture_output=True, timeout=60,
-                    **_get_subprocess_kwargs()
-                )
-                try:
-                    subprocess.run(
-                        [svn_exe, "propdel", prop, target_path, "--depth",
-                         "infinity", "--quiet"],
-                        capture_output=True, timeout=120,
-                        **_get_subprocess_kwargs()
-                    )
-                except Exception as e:
-                    q.put(f"  ⚠ 清理 {prop} 失败: {e}\n")
-            except Exception as e:
-                q.put(f"  ⚠ 清理 {prop} 失败: {e}\n")
 
         total_merged = 0
         total_conflict = 0

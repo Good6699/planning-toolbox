@@ -85,6 +85,30 @@
 - **根因**：`target_path` 一个变量扛两个角色——既用于语义分析的 GUID → 脚本名映射，又用于 SVN 合并的目标路径。`api_merge_run` 中 `resolve_svn_url_to_local(source_url)` 的返回值覆盖了用户指定的合并目标路径
 - **解决方案**：语义分析 API 引入独立 `guid_path` 变量，只从源SVN地址映射获取 GUID 映射路径；合并 API 移除 `resolve_svn_url_to_local(source_url)` 对 `target_path` 的覆盖逻辑，保持用户指定的合并目标路径不变
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### SVN 输出解码：先 GBK 再 UTF-8（中文 Windows）
+- **场景**：2026-05-28 `svn revert` 输出的中文路径在日志中显示为乱码（"鈽"等）
+- **根因**：`_svn_decode_output` 先试 `decode("utf-8")`，而 GBK 的中文字节（如"这"=D5E2）恰好在 UTF-8 中也是合法序列，解码"成功"但产生错字。`except` 永远不会触发，GBK 兜底永不执行
+- **解决方案**：两个解码函数都改为先试 GBK、再试 UTF-8。SVN 在中文 Windows 上的输出编码始终是系统代码页（GBK）
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### merge 前全量 propdel --depth infinity 导致大型WC卡死
+- **场景**：2026-05-28 精准合并 301 版本 381 个文件时，F:\D3_KR2_DEV\Client（大型游戏客户端项目）在 banner 后无任何日志输出，用户以为卡死
+- **根因**：合并前的 `svn propdel svn:mergeinfo --depth infinity` 是对整个 WC 的递归全量操作，遍历数万文件且无进度日志。超时后的 cleanup + 重试形成死循环。`svn merge --ignore-ancestry` 已保证 mergeinfo 不参与合并，前置清理是冗余的
+- **解决方案**：直接移除合并前的 `svn propdel --depth infinity` 全量递归操作。`--ignore-ancestry` 已足够，逐文件 `_svn_strip_noise_props` 和合并后清扫保留作为兜底
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### SVN 回退用备份排除→svn revert -R 替代逐文件处理
+- **场景**：2026-05-28 revert_svn 工作流步骤在大型 WC 上效率低，后续改用的逐文件 propdel + os.remove + svn update 方案也过于复杂
+- **根因**：旧方案有 `svn status` 全量扫描 + `svn update` 全量 + 逐文件属性清理 + 逐文件删除 + `svn update` 重下载 + 第三次 status 查冲突 + 逐文件 resolve，多达 6 步 3 次全量 SVN 操作。多轮全树遍历是慢的根因
+- **解决方案**：新流程压缩为 `cleanup → status（1 次全量）→ 备份排除文件 → svn revert -R（1 次全量回退所有修改+属性）→ 恢复排除文件 → revert --depth empty 清根属性`。`svn revert -R` 一次性处理所有内容修改和属性修改（包括 mergeinfo/mime-type），不需要额外 propdel。排除文件用文件系统备份/恢复保护，不依赖 status 过滤。删掉了 6 个废弃函数（~200 行死代码）
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### Web 版工作流日志加时间戳
+- **场景**：2026-05-28 工作流执行时日志没有时间显示，无法判断每个步骤的耗时
+- **根因**：`_run_wf_task` 的 `_put` 直接 `q.put(msg)` 不加时间戳，而桌面版 `_wlog` 已有 `[{ts}]` 前缀
+- **解决方案**：在 `_put` 中拦截 `None` 标记（流结束），其余消息自动加 `[{HH:MM:SS}]` 前缀，与桌面版 _wlog 格式对齐
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 - **下载/解析流水线**：下载批次后立即提交解析任务，不等待全部下载完成，总时间=max(下载,解析)而非相加
 - **ID Map缓存**：对比阶段预构建ID→SC映射并缓存，避免每次对比都重建，对比提速约50%
 - **pywebview 文件浏览最佳实践**：
@@ -934,8 +958,3 @@ while (true):
 - **解决方案**：`_svn_batch_revert` 的逐文件回落中，目录自动加 `--depth infinity`，根目录（==target_path）跳过由末尾统一处理。末尾追加 `svn revert target_path --depth empty` 清根目录属性
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
-### SVN 输出解码：先 GBK 再 UTF-8（中文 Windows）
-- **场景**：2026-05-28 `svn revert` 输出的中文路径在日志中显示为乱码（"鈽"等）
-- **根因**：`_svn_decode_output` 先试 `decode("utf-8")`，而 GBK 的中文字节（如"这"=D5E2）恰好在 UTF-8 中也是合法序列，解码"成功"但产生错字。`except` 永远不会触发，GBK 兜底永不执行
-- **解决方案**：两个解码函数都改为先试 GBK、再试 UTF-8。SVN 在中文 Windows 上的输出编码始终是系统代码页（GBK）
-- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)

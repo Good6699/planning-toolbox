@@ -1313,6 +1313,8 @@ input::placeholder,textarea::placeholder{
 .merge-side-cards>.card{
   flex:1 1 360px;
   min-height:0;
+  display:flex;
+  flex-direction:column;
 }
 .merge-version-list{
   max-height:360px;
@@ -1320,6 +1322,7 @@ input::placeholder,textarea::placeholder{
   display:flex;
   flex-direction:column;
   gap:1px;
+  flex:1;
 }
 .merge-version-footer{
   display:flex;
@@ -1401,11 +1404,12 @@ input::placeholder,textarea::placeholder{
   font-size:12px;
 }
 .merge-file-list{
-  max-height:350px;
+  max-height:360px;
   overflow-y:auto;
   display:flex;
   flex-direction:column;
   gap:1px;
+  flex:1;
 }
 .merge-file-item{
   display:flex;
@@ -3739,10 +3743,21 @@ async function runMergeRun() {
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
   _incRunning();
   _incTabRunning("merge");
+  const revFileMap = {};
+  _mergeData.versions.forEach(v => {
+    if (!_mergeData.checkedRevs[v.rev]) return;
+    (v.files || []).forEach(f => {
+      if (!_isPathExcluded(f.path) && _mergeData.checkedFiles[f.path]) {
+        if (!revFileMap[f.path]) revFileMap[f.path] = [];
+        revFileMap[f.path].push(v.rev);
+      }
+    });
+  });
   const body = {
     source_url: sourceUrl,
     target_path: targetPath,
     revisions: checkedRevs,
+    rev_file_map: revFileMap,
     files: [...document.querySelectorAll("#merge_file_list .merge-file-item input:checked")].map(cb => {
       const item = cb.closest(".merge-file-item");
       return {path: item.dataset.path, action: item.dataset.action || "mod"};

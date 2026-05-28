@@ -299,12 +299,21 @@ def _svn_revert_file(svn_exe, local_file):
 
 
 def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args):
-    """清除 SVN 冲突状态，用源版本完整替换（最后手段）
+    """清除 SVN 冲突/删除状态，用源版本完整替换（最后手段）
 
     当 revert + 重新 merge 都失败时使用。
-    先用 svn cat 下载源版本内容覆盖本地文件，
-    再用 svn resolve --accept working 清除冲突状态。
+    先 svn revert 撤销 SVN 元数据（删除/冲突标记），
+    再用 svn cat 下载源版本内容覆盖本地文件，
+    最后 svn resolve --accept working 确认状态。
     """
+    try:
+        subprocess.run(
+            [svn_exe, "revert", local_file],
+            capture_output=True, timeout=30,
+            **_get_subprocess_kwargs()
+        )
+    except Exception:
+        pass
     file_url = source_url.rstrip("/") + "/" + file_path
     try:
         proc = subprocess.Popen(
@@ -384,17 +393,26 @@ def _svn_strip_noise_props(svn_exe, local_file):
             pass
 
 
-def _svn_merge_with_retry(svn_exe, source_url, revision, file_path, local_file,
+def _build_merge_c_args(revisions):
+    """从版本号列表构建 -c 参数列表"""
+    args = []
+    for r in sorted(revisions):
+        args += ["-c", str(r)]
+    return args
+
+
+def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
                           auth_args, _log):
-    """执行 svn merge + 失败时 revert+retry + 最后手段 resolve
+    """执行 svn merge (多版本) + 失败时 revert+retry + 最后手段 resolve
 
     返回 (merged, conflict, skip, conflict_files_added)
     """
     _log(f"  → 合并: {file_path}", "info")
+    latest_rev = max(revisions)
+    rev_args = _build_merge_c_args(revisions)
     cmd = [
-        svn_exe, "merge", "--accept", "theirs-full",
-        "-c", str(revision), source_url, local_file
-    ] + auth_args
+        svn_exe, "merge", "--ignore-ancestry", "--accept", "theirs-full",
+    ] + rev_args + [source_url, local_file] + auth_args
     status, out_text = _svn_merge_single_file(svn_exe, cmd, _log)
     if status == "ok":
         _log(f"  ✅ 合并成功: {file_path}", "ok")
@@ -406,7 +424,7 @@ def _svn_merge_with_retry(svn_exe, source_url, revision, file_path, local_file,
         return 1, 1, 0, [file_path]
     if status == "e155010":
         _log(f"  → 文件未跟踪，转为新增: {file_path}", "info")
-        ok = _svn_export_add(svn_exe, source_url, revision,
+        ok = _svn_export_add(svn_exe, source_url, latest_rev,
                              file_path, local_file, auth_args, _log)
         if ok:
             _log(f"  ✅ 新增文件: {file_path}", "ok")
@@ -420,9 +438,8 @@ def _svn_merge_with_retry(svn_exe, source_url, revision, file_path, local_file,
     if ok:
         _log(f"  → 已 revert，重新合并: {file_path}", "info")
         cmd2 = [
-            svn_exe, "merge", "--accept", "theirs-full",
-            "-c", str(revision), source_url, local_file
-        ] + auth_args
+            svn_exe, "merge", "--ignore-ancestry", "--accept", "theirs-full",
+        ] + rev_args + [source_url, local_file] + auth_args
         status2, out_text2 = _svn_merge_single_file(svn_exe, cmd2, _log)
         if status2 == "ok":
             _log(f"  ✅ 合并成功: {file_path}", "ok")
@@ -433,25 +450,26 @@ def _svn_merge_with_retry(svn_exe, source_url, revision, file_path, local_file,
             _svn_strip_noise_props(svn_exe, local_file)
             return 1, 1, 0, [file_path]
         _log(f"  ⚠ 重新合并仍失败: {out_text2.strip()}", "warn")
-        _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args)
+        _svn_resolve_conflict(svn_exe, source_url, latest_rev, file_path, local_file, auth_args)
         _svn_strip_noise_props(svn_exe, local_file)
         _log(f"  → 已用源版本强制覆盖（最后手段）: {file_path}", "warn")
     else:
-        _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args)
+        _svn_resolve_conflict(svn_exe, source_url, latest_rev, file_path, local_file, auth_args)
         _svn_strip_noise_props(svn_exe, local_file)
         _log(f"  → revert 失败，已用源版本强制覆盖: {file_path}", "warn")
     return 0, 1, 0, [file_path]
 
 
-def _svn_merge_one_file(svn_exe, source_url, revision, file_path, local_file,
+def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
                         action, auth_args, _log):
-    """处理单个文件的 add/del/mod merge
+    """处理单个文件的 add/del/mod merge（多版本合并）
 
     目录新增/删除也走 svn merge 让 SVN 递归处理整个目录树。
     目录属性修改（mergeinfo 等）直接跳过。
     返回 (merged, conflict, skip, conflict_files_added)
     """
     is_dir = _is_dir_path(file_path)
+    latest_rev = max(revisions)
 
     # 目录属性修改 → 跳过（mergeinfo 等噪声）
     if is_dir and action == "mod":
@@ -462,7 +480,7 @@ def _svn_merge_one_file(svn_exe, source_url, revision, file_path, local_file,
     if is_dir and action == "add":
         _log(f"  → 新增目录: {file_path}", "info")
         file_url = source_url.rstrip("/") + "/" + file_path
-        ok, msg = _svn_try_export(svn_exe, file_url, revision, local_file, auth_args)
+        ok, msg = _svn_try_export(svn_exe, file_url, latest_rev, local_file, auth_args)
         if not ok:
             _log(msg, "warn")
             return 0, 1, 0, [file_path]
@@ -482,10 +500,10 @@ def _svn_merge_one_file(svn_exe, source_url, revision, file_path, local_file,
         _log(f"  ✅ 新增目录: {file_path}", "ok")
         return 1, 0, 0, []
 
-    # 文件新增 → export + add
+    # 文件新增 → export + add（用最新版本）
     if action == "add" and not is_dir:
         _log(f"  → 新增: {file_path}", "info")
-        ok = _svn_export_add(svn_exe, source_url, revision,
+        ok = _svn_export_add(svn_exe, source_url, latest_rev,
                              file_path, local_file, auth_args, _log)
         if ok:
             _svn_strip_noise_props(svn_exe, local_file)
@@ -512,13 +530,13 @@ def _svn_merge_one_file(svn_exe, source_url, revision, file_path, local_file,
         return 0, 0, 1, []
 
     return _svn_merge_with_retry(
-        svn_exe, source_url, revision, file_path, local_file,
+        svn_exe, source_url, revisions, file_path, local_file,
         auth_args, _log)
 
 
-def svn_merge(source_url, target_wc, revision, files,
+def svn_merge(source_url, target_wc, revisions, files,
               svn_user=None, svn_pass=None, log_callback=None):
-    """对选中的文件执行svn merge，使用 --accept theirs-full"""
+    """对选中的文件执行svn merge（多版本合并），使用 --accept theirs-full"""
     def _log(msg, level="info"):
         if log_callback:
             log_callback(msg, level)
@@ -538,7 +556,7 @@ def svn_merge(source_url, target_wc, revision, files,
             continue
         local_file = os.path.join(target_wc, file_path)
         m, c, s, cf = _svn_merge_one_file(
-            svn_exe, source_url, revision, file_path, local_file,
+            svn_exe, source_url, revisions, file_path, local_file,
             action, auth_args, _log)
         merged_count += m
         conflict_count += c

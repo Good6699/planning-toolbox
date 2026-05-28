@@ -28,7 +28,7 @@ from toolbox_config import (  # noqa: E402
 )
 from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock  # noqa: E402
 from xlsm_zipper import apply_via_excel  # noqa: E402
-from toolbox_merge import svn_log, svn_merge, svn_log_changed_files, open_commit_dialog, resolve_target_path, resolve_svn_url_to_local, migrate_old_svn_mappings, _is_dir_path  # noqa: E402
+from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path, resolve_svn_url_to_local, migrate_old_svn_mappings  # noqa: E402
 
 if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
     if len(sys.argv) < 3:
@@ -2408,82 +2408,9 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
         _log_queues.pop(task_id, None)
 
 
-def _merge_one_revision(rev, source_url, target_path, selected_paths,
-                        svn_user, svn_pass, q, ts):
-    """处理单个版本的合并：先处理目录，再处理文件
-
-    返回 (merged, conflict, skipped, conflict_files)
-    """
-    def _log(msg, level="info"):
-        tag = f"[{ts}][{level}]" if level != "info" else f"[{ts}]"
-        q.put(f"{tag} {msg}\n")
-
-    q.put(f"\n── 处理版本 r{rev} ──\n")
-    try:
-        rev_files = svn_log_changed_files(
-            source_url, rev,
-            svn_user=svn_user, svn_pass=svn_pass
-        )
-    except Exception as e:
-        q.put(f"  ⚠ 查询版本 r{rev} 文件列表失败: {e}\n")
-        return 0, 0, 0, []
-
-    rev_selected = [
-        {"path": rf["path"], "action": rf["action"]}
-        for rf in rev_files if rf["path"] in selected_paths
-    ]
-    if not rev_selected:
-        q.put("  ℹ 无勾选文件在此版本中变更，跳过\n")
-        return 0, 0, 0, []
-
-    rev_dirs = [item for item in rev_selected if _is_dir_path(item["path"])]
-    rev_files_only = [item for item in rev_selected if not _is_dir_path(item["path"])]
-
-    total_merged = 0
-    total_conflict = 0
-    total_skipped = 0
-    all_conflict_files = []
-    covered_prefixes = []
-
-    for d in rev_dirs:
-        try:
-            result = svn_merge(
-                source_url, target_path, rev, [d],
-                svn_user=svn_user, svn_pass=svn_pass,
-                log_callback=_log
-            )
-            total_merged += result["merged"]
-            total_conflict += result["conflict"]
-            total_skipped += result["skipped"]
-            all_conflict_files.extend(result["conflict_files"])
-            covered_prefixes.append(d["path"].rstrip("/") + "/")
-        except Exception as e:
-            q.put(f"  ❌ 目录 r{rev} 合并失败: {d['path']} → {e}\n")
-
-    remaining = [f for f in rev_files_only
-                 if not any(f["path"].startswith(p) for p in covered_prefixes)]
-    if not remaining:
-        return total_merged, total_conflict, total_skipped, all_conflict_files
-
-    try:
-        result = svn_merge(
-            source_url, target_path, rev, remaining,
-            svn_user=svn_user, svn_pass=svn_pass,
-            log_callback=_log
-        )
-        total_merged += result["merged"]
-        total_conflict += result["conflict"]
-        total_skipped += result["skipped"]
-        all_conflict_files.extend(result["conflict_files"])
-    except Exception as e:
-        q.put(f"  ❌ 版本 r{rev} 文件合并失败: {e}\n")
-
-    return total_merged, total_conflict, total_skipped, all_conflict_files
-
-
-def _merge_worker(task_id, source_url, target_path, revisions, files,
+def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, files,
                   svn_user, svn_pass):
-    """后台合并任务线程"""
+    """后台合并任务线程（文件优先循环，每文件多 -c 合并）"""
     q = _log_queues.setdefault(task_id, queue.Queue())
     ts = datetime.now().strftime("%H:%M:%S")
 
@@ -2514,17 +2441,27 @@ def _merge_worker(task_id, source_url, target_path, revisions, files,
         total_conflict = 0
         total_skipped = 0
         all_conflict_files = []
+        total_files = len(files)
+        done_count = 0
 
-        selected_paths = {f["path"] for f in files}
-
-        for rev in revisions:
-            m, c, s, cf = _merge_one_revision(
-                rev, source_url, target_path, selected_paths,
-                svn_user, svn_pass, q, ts)
-            total_merged += m
-            total_conflict += c
-            total_skipped += s
-            all_conflict_files.extend(cf)
+        for f in files:
+            file_path = f["path"]
+            file_revs = rev_file_map.get(file_path, revisions)
+            q.put(f"\n── 合并: {file_path} (版本: {file_revs}) ──\n")
+            try:
+                result = svn_merge(
+                    source_url, target_path, file_revs, [f],
+                    svn_user=svn_user, svn_pass=svn_pass,
+                    log_callback=_log
+                )
+                total_merged += result["merged"]
+                total_conflict += result["conflict"]
+                total_skipped += result["skipped"]
+                all_conflict_files.extend(result["conflict_files"])
+            except Exception as e:
+                q.put(f"  ❌ 合并失败: {file_path} → {e}\n")
+            done_count += 1
+            q.put(f"  📊 进度: {done_count}/{total_files}\n")
 
         q.put("\n" + "=" * 50 + "\n")
         q.put("📊 合并统计\n")
@@ -2535,6 +2472,18 @@ def _merge_worker(task_id, source_url, target_path, revisions, files,
             q.put("\n📋 冲突文件清单（已用源版本覆盖）：\n")
             for cf in all_conflict_files:
                 q.put(f"  - {cf}\n")
+
+        q.put("\n清理 SVN 属性噪声...\n")
+        try:
+            svn_exe = _get_svn_path()
+            subprocess.run(
+                [svn_exe, "propdel", "svn:mergeinfo", target_path, "--depth",
+                 "infinity", "--quiet"],
+                capture_output=True, timeout=30,
+                **_get_subprocess_kwargs()
+            )
+        except Exception:
+            pass
 
         q.put(f"\n{'='*50}\n")
         q.put("🔄 正在唤起SVN提交弹窗...\n")
@@ -2558,6 +2507,7 @@ def api_merge_run():
     source_url = data.get("source_url", "").strip()
     target_url_or_path = data.get("target_path", "").strip()
     revisions = data.get("revisions", [])
+    rev_file_map = data.get("rev_file_map", {})
     files = data.get("files", [])
     if not source_url:
         return jsonify({"ok": False, "error": "源SVN地址不能为空"}), 400
@@ -2579,7 +2529,7 @@ def api_merge_run():
     task_id = _get_next_task_id()
     t = threading.Thread(target=_merge_worker,
                          args=(task_id, source_url, target_path,
-                               revisions, files,
+                               revisions, rev_file_map, files,
                                svn_user or None, svn_pass or None),
                          daemon=True)
     t.start()

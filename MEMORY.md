@@ -180,6 +180,29 @@
 - **解决方案**：改用 `if (sb) { sb.classList.remove("running"); ... }` 安全守卫
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 
+### svn merge 改用 --ignore-ancestry 跳过 mergeinfo 追踪
+- **场景**：2026-05-28 多版本合并 379 个文件时每个文件都产生 mergeinfo 检查/写入开销，且旧版本运行遗留的 svn:mergeinfo 未被清理，提交时显示红色属性变更
+- **根因**：`svn merge` 默认启用 Merge Tracking，每次 merge 会检查并写入 `svn:mergeinfo` 属性。WC 根目录上的 mergeinfo 不会被 `_svn_strip_noise_props` 清理，导致提交时出现多余的属性变更
+- **解决方案**：
+  1. `svn merge` 加 `--ignore-ancestry` 跳过 mergeinfo 处理，cherry-pick 场景无须 mergeinfo
+  2. 合并完成后对整个 WC 根目录执行 `svn propdel svn:mergeinfo --depth infinity --quiet` 彻底清理
+- **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### _svn_resolve_conflict 需要先 svn revert 再 svn cat
+- **场景**：2026-05-28 svn merge 失败进入最后手段时，`svn cat` 虽然写回了文件内容，但 SVN 元数据中文件仍处于"已删除"状态，提交时显示为红色
+- **根因**：`svn merge -c r1 -c r2 ...` 申请多个 changeset，如果其中包含对该文件的删除操作，文件被标记为删除后 `svn resolve --accept working` 无效
+- **解决方案**：在 `svn cat` 之前先执行 `svn revert` 撤销 SVN 的删除/冲突标记，再用源版本覆盖，最后 `svn resolve --accept working`
+- **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_merge.py)
+
+### 逐版本合并改为文件优先+多版本批处理
+- **场景**：2026-05-28 原版本循环 `for rev in revisions` 逐版本 merge 效率低，每个版本需额外远程查询 `svn diff --summarize`，且同一个文件被 N 个版本修改就要 merge N 次
+- **根因**：外循环按版本遍历，数据来源用远程 SVN 查询而非前端缓存
+- **解决方案**：
+  1. 外循环改为按文件遍历，每个文件一次 `svn merge -c r1 -c r2 ...` 批处理
+  2. 前端 `_mergeData.versions` 已有每个版本的变更文件数据，通过 `rev_file_map` 传给后端，去掉远程查询
+  3. 每文件合并后输出 `📊 进度: X/N` 实时进度
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ### revert_svn 排除文件在冲突处理阶段被误覆盖
 - **场景**：2026-05-27 `revert_svn` 工作流步骤中 `InstallClient.bat` 虽在排除列表，但最终仍被 SVN 版本强制覆盖
 - **根因**：`_exec_revert_svn` 的冲突检查阶段重新对整个路径执行 `svn status` 后直接调用 `_svn_resolve_conflict`，没有再次应用 `exclude_paths` 过滤。排除逻辑只保护了 batch revert 阶段，后半段冲突处理绕过了排除

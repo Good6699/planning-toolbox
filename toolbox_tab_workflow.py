@@ -1128,6 +1128,8 @@ class WorkflowTabMixin:
 
     def _wf_load_workflows(self):
         self._wf_data = list(self.config.get("workflows", []))
+        for wf in self._wf_data:
+            wf["steps"] = [s for s in wf.get("steps", []) if s is not None]
         self._selected_wf = None
         self._selected_step = None
         self._wf_refresh_tree()

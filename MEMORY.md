@@ -109,6 +109,7 @@
 - **根因**：`_run_wf_task` 的 `_put` 直接 `q.put(msg)` 不加时间戳，而桌面版 `_wlog` 已有 `[{ts}]` 前缀
 - **解决方案**：在 `_put` 中拦截 `None` 标记（流结束），其余消息自动加 `[{HH:MM:SS}]` 前缀，与桌面版 _wlog 格式对齐
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
 - **下载/解析流水线**：下载批次后立即提交解析任务，不等待全部下载完成，总时间=max(下载,解析)而非相加
 - **ID Map缓存**：对比阶段预构建ID→SC映射并缓存，避免每次对比都重建，对比提速约50%
 - **pywebview 文件浏览最佳实践**：
@@ -818,6 +819,13 @@ while (true):
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
 - 双文件对比的正确策略：先轻量级探测（ZIP hash）→ 只对差异 sheet 做重解析
 - 同 size 不同 hash 的 sheet 是格式/样式/压缩差异，不影响单元格数据
+
+### SortableJS 拖拽排序将 .wf-add-step-item 混入步骤数组导致 null 写入 config
+- **场景**：2026-05-28 工作流拖拽步骤排序后，关闭应用再打开，工作流页签白屏加载不出来
+- **根因**：SortableJS 的 `onEnd` 回调遍历 `container.children`（所有子元素），未过滤 `.wf-add-step-item`（"添加步骤"按钮）。该按钮无 `data-step` 属性 → `Number(undefined)` → `NaN` → `wf.steps[NaN]` → `undefined` → `JSON.stringify` 将 `undefined` 序列化为 `null` → 下次启动解析 `null.type` 时报 TypeError 白屏
+- **解决方案**：三处修复：① SortableJS `onEnd` 中 `[...container.children].filter(el => el.classList.contains("wf-child"))` 过滤非步骤元素；② `buildWorkflowTab` 渲染时 `(wf.steps||[]).filter(Boolean)` 防御 `null` step；③ `_wf_load_workflows` 加载时清理 `None` step
+- **教训**：SortableJS `filter` 选项只阻止元素被拖拽，不影响 `onEnd` 回调中的 `container.children`。拖拽后重建数组的代码必须手动过滤非步骤 DOM 元素。`JSON.stringify` 会将数组中的 `undefined` 转为 `null`，写入 JSON 后无法恢复。
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)、[toolbox_tab_workflow.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_tab_workflow.py)
 
 ### 配置丢失——提交了精简版 config 覆盖了完整运行数据
 - **场景**：2026-05-23 提交 `3d33ea3`（`chore: add config file svn_gui_config.json`）时将不含工作流/翻译/对比预设等运行数据的精简版 config 提交到了 Git，导致 `svn_gui_config.json` 中的 6 个工作流、翻译 API 配置、对比预设全部丢失

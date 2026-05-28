@@ -184,13 +184,6 @@
           ],
           "name": "StreamingAssets,gameData",
           "type": "upload_svn"
-        },
-        {
-          "lock_msg": "",
-          "name": "Texts.xlsm",
-          "target_path": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
-          "type": "unlock_svn",
-          "update_dirs": []
         }
       ]
     },
@@ -198,11 +191,28 @@
       "name": "KR2单独操作",
       "steps": [
         {
+          "type": "lock_svn",
+          "name": "Texts.xlsm",
+          "target_path": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
+          "update_dirs": [
+            "G:\\D3_KR2\\Client\\Assets\\StreamingAssets",
+            "G:\\D3_KR2\\gameData"
+          ],
+          "lock_msg": ""
+        },
+        {
           "file_paths": [
             "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
           ],
           "name": "Texts.xlsm",
           "type": "open_tables"
+        },
+        {
+          "lock_msg": "",
+          "name": "Texts.xlsm",
+          "target_path": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
+          "type": "unlock_svn",
+          "update_dirs": []
         },
         {
           "delete_unversioned": false,
@@ -416,13 +426,13 @@
     "ExportTxt"
   ],
   "_wf_history_texts": [
+    "G:\\D3_KR2\\Client\\Assets\\StreamingAssets, G:\\D3_KR2\\gameData",
     "Assets/Code_Lua/test/test.lua, Assets/StreamingAssets/LocalVersion.xml, InstallClient.bat",
     "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
     "Assets/Code_Lua/test/test.lua,Assets/StreamingAssets/LocalVersion.xml,InstallClient.bat",
     "F:\\D3_KR2_DEV\\Client\\Assets\\StreamingAssets, F:\\D3_KR2_DEV\\gameData",
     "F:\\D3_KR2_DEV\\gameData\\Text\\服务器文字表导出_替换文本引用.bat, F:\\D3_KR2_DEV\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
     "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat, G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
-    "G:\\D3_KR2\\Client\\Assets\\StreamingAssets, G:\\D3_KR2\\gameData",
     "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat,G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
     "G:\\D3_KR2\\Client\\Assets\\StreamingAssets,G:\\D3_KR2\\gameData",
     "G:\\D3_KR2\\Client\\Assets\\StreamingAssets,"

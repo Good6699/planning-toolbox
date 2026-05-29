@@ -140,6 +140,12 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 - **解决方案**：删除 daemon 线程中的 `_init_window()`（含 `_find_window_hwnd` 轮询 + 线程启动），改为在 `_boot_app()` 中新建 `_subclass_on_ui_thread()` 调用，确保 WNDPROC 替换在 pywebview 的 UI 线程同步执行
 - **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
 
+### 彻底移除窗口子类化，改用 pywebview events.closing
+- **场景**：将子类化移到 UI 线程后问题仍存在——WebView2 导航与 SetWindowLongPtrW 的竞态依然在 `_boot_app` 的 loaded → load_url 期间触发
+- **根因**：`SetWindowSubclass` 总是失败（零操作系统的 comctl32 状态），fallback 到 `SetWindowLongPtrW`。而 `SetWindowLongPtrW` 本身在 WebView2 导航期间修改 WNDPROC 就会干扰消息处理，即使在同一线程
+- **解决方案**：彻底删除所有子类化代码（`_fallback_subclass`、`_subclass_window`、`_subclass_on_ui_thread` 及全部全局变量，~110 行）。窗口是 frameless 的，无标题栏 X 按钮，WM_CLOSE 仅由 Alt+F4 触发（无需拦截）；HTML 关闭按钮已通过 `fetch("/api/close")` 隐藏到托盘
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
+
 ### 项目文件重组：Tkinter 旧版清理 + 核心代码集中到 toolbox_core/
 - **场景**：2026-05-29 工作目录混杂 Tkinter 旧版代码、测试脚本、Web 桌面版代码，零散 60+ 文件难以管理
 - **根因**：项目从 Tkinter 版演进到 Web 桌面版（pywebview + Flask）后，旧版代码及大量开发测试脚本未清理，造成文件冗余

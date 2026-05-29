@@ -634,9 +634,6 @@ def _tray_thread():
     os._exit(0)
 
 
-_wnd_proc_ref = None
-
-
 def _get_cursor_screen_center(win_w=None, win_h=None):
     if win_w is None:
         win_w = WINDOW_W
@@ -698,112 +695,6 @@ def _undock_and_center(hwnd):
         win32gui.SetForegroundWindow(hwnd)
     except Exception:
         pass
-
-
-_wnd_proc_fallback_ref = None
-_fallback_original = 0
-
-
-def _fallback_subclass(hwnd):
-    global _wnd_proc_fallback_ref
-    GWLP_WNDPROC = -4
-
-    WNDPROC = ctypes.WINFUNCTYPE(
-        ctypes.c_longlong, ctypes.c_longlong, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong
-    )
-
-    ctypes.windll.user32.DefWindowProcW.argtypes = (
-        ctypes.c_longlong, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong
-    )
-    ctypes.windll.user32.CallWindowProcW.argtypes = (
-        ctypes.c_longlong, ctypes.c_longlong, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong
-    )
-
-    def _wnd_proc(hwnd_inner, msg, wparam, lparam):
-        global _window_visible
-        if msg == 0x0010:
-            _save_window_rect()
-            try:
-                for w in webview.windows:
-                    w.hide()
-            except Exception:
-                pass
-            ctypes.windll.user32.ShowWindow(hwnd_inner, 0)
-            _window_visible = False
-            return 0
-        if msg == 0x0006 and wparam == 1:
-            if _docker and _docker.docked:
-                _docker._taskbar_activate = True
-        if _fallback_original:
-            return ctypes.windll.user32.CallWindowProcW(
-                _fallback_original, hwnd_inner, msg, wparam, lparam
-            )
-        return ctypes.windll.user32.DefWindowProcW(
-            hwnd_inner, msg, wparam, lparam
-        )
-
-    _wnd_proc_fallback_ref = WNDPROC(_wnd_proc)
-    ctypes.windll.user32.SetWindowLongPtrW.restype = ctypes.c_longlong
-    new_ptr = ctypes.cast(_wnd_proc_fallback_ref, ctypes.c_void_p).value
-    global _fallback_original
-    _fallback_original = ctypes.windll.user32.SetWindowLongPtrW(
-        hwnd, GWLP_WNDPROC, new_ptr
-    )
-    print(f"[子类化] fallback 完成, 原 WNDPROC={_fallback_original:#x}", file=sys.stderr)
-
-
-def _subclass_window(hwnd):
-    global _wnd_proc_ref
-    _SUBCLASS_ID = 1001
-
-    SUBCLASSPROC = ctypes.WINFUNCTYPE(
-        ctypes.c_longlong,
-        ctypes.c_longlong, ctypes.c_uint, ctypes.c_longlong, ctypes.c_longlong,
-        ctypes.c_ulonglong, ctypes.c_ulonglong,
-    )
-
-    def _subclass_proc(hwnd_inner, msg, wparam, lparam, uId, dwRef):
-        global _window_visible
-        if msg == 0x0010:
-            _save_window_rect()
-            try:
-                for w in webview.windows:
-                    w.hide()
-            except Exception:
-                pass
-            ctypes.windll.user32.ShowWindow(hwnd_inner, 0)
-            _window_visible = False
-            return 0
-        if msg == 0x0006 and wparam == 1:
-            if _docker and _docker.docked:
-                _docker._taskbar_activate = True
-        return ctypes.windll.comctl32.DefSubclassProc(
-            hwnd_inner, msg, wparam, lparam
-        )
-
-    _wnd_proc_ref = SUBCLASSPROC(_subclass_proc)
-    ctypes.windll.comctl32.DefSubclassProc.restype = ctypes.c_longlong
-    ctypes.windll.comctl32.SetWindowSubclass.argtypes = (
-        ctypes.c_longlong, ctypes.c_ulonglong, ctypes.c_ulonglong, ctypes.c_ulonglong,
-    )
-    ctypes.windll.comctl32.InitCommonControls()
-    result = ctypes.windll.comctl32.SetWindowSubclass(
-        hwnd, ctypes.cast(_wnd_proc_ref, ctypes.c_void_p).value,
-        _SUBCLASS_ID, 0
-    )
-    if not result:
-        print("[子类化] SetWindowSubclass 失败, 尝试 fallback", file=sys.stderr)
-        _fallback_subclass(hwnd)
-
-
-def _subclass_on_ui_thread():
-    hwnd = _find_window_hwnd(timeout=3)
-    if not hwnd:
-        return
-    try:
-        _subclass_window(hwnd)
-    except Exception as e:
-        print(f"[子类化异常] {e}", file=sys.stderr)
 
 
 def _find_window_hwnd(timeout=5):
@@ -952,7 +843,6 @@ def main():
 
     def _boot_app(window):
         window.events.loaded.wait(timeout=30)
-        _subclass_on_ui_thread()
         _set_progress(window, 15, "界面就绪")
 
         global _docker

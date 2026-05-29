@@ -575,6 +575,14 @@ class ResizeApi:
     def app_ready(self):
         pass
 
+    def focusWindow(self):
+        hwnd = _find_window_hwnd(timeout=0.1)
+        if hwnd:
+            try:
+                _undock_and_center(hwnd)
+            except Exception:
+                pass
+
     def browseFile(self, directory=""):
         try:
             w = webview.windows[0]

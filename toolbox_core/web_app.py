@@ -1119,6 +1119,22 @@ def _exec_revert_svn(step, put, task_id=None):
                     put(f"  ⚠ 备份失败（跳过排除）: {rel} - {e}\n")
 
         put("正在全量回退本地所有修改...\n")
+        # 先清理所有 changelist 标签，避免回退后残留空分组
+        put("清理 SVN changelist 标签...\n")
+        try:
+            subprocess.run(
+                [svn, "changelist", "--remove", "--changelist", "语义合并",
+                 target_path, "--depth", "infinity"],
+                capture_output=True, timeout=60,
+                **_get_subprocess_kwargs())
+            subprocess.run(
+                [svn, "changelist", "--remove", "--changelist", "本次修改",
+                 target_path, "--depth", "infinity"],
+                capture_output=True, timeout=60,
+                **_get_subprocess_kwargs())
+        except Exception:
+            pass
+
         r = subprocess.run(
             [svn, "revert", "-R", target_path],
             capture_output=True, timeout=120,
@@ -1152,6 +1168,45 @@ def _exec_revert_svn(step, put, task_id=None):
                 shutil.rmtree(tmpdir)
             except Exception:
                 pass
+
+    # 删除未版本控制的文件
+    if step.get("delete_unversioned"):
+        put("正在扫描未版本控制文件...\n")
+        excluded_set = set(os.path.normpath(f) for f in excluded_files)
+        try:
+            r_status = subprocess.run(
+                [svn, "status", "--no-ignore", target_path],
+                capture_output=True, timeout=60,
+                **_get_subprocess_kwargs()
+            )
+            if r_status.returncode == 0:
+                unversioned = []
+                for line in _svn_decode_output(r_status.stdout).splitlines():
+                    if len(line) < 8 or line[0] != "?":
+                        continue
+                    p = line[7:].strip()
+                    if not os.path.isabs(p):
+                        p = os.path.join(target_path, p)
+                    p = os.path.normpath(p)
+                    if p not in excluded_set:
+                        unversioned.append(p)
+                if unversioned:
+                    put(f"正在删除 {len(unversioned)} 个未版本控制文件...\n")
+                    deleted = 0
+                    for fp in unversioned:
+                        try:
+                            if os.path.isdir(fp):
+                                shutil.rmtree(fp, ignore_errors=True)
+                            else:
+                                os.remove(fp)
+                            deleted += 1
+                        except Exception:
+                            pass
+                    put(f"  已删除 {deleted} 个文件\n")
+                else:
+                    put("  没有未版本控制的文件\n")
+        except Exception as e:
+            put(f"  ⚠ 扫描未版本文件失败: {e}\n")
 
     put("清理根目录残留属性...\n")
     subprocess.run(

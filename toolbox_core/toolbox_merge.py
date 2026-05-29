@@ -42,7 +42,7 @@ def _run_svn(cmd, timeout=120):
     full_cmd = [svn_exe] + cmd
     result = subprocess.run(
         full_cmd,
-        capture_output=True, text=True,
+        capture_output=True,
         encoding="utf-8", errors="replace",
         timeout=timeout,
         **_get_subprocess_kwargs()
@@ -134,7 +134,7 @@ def find_wc_root(target_path):
         cmd = [_get_svn_path(), "info", "--show-item", "wc-root", target_path]
         cmd += _get_subprocess_kwargs().get("startupinfo", [])
         result = subprocess.run(
-            cmd, capture_output=True, text=True,
+            cmd, capture_output=True,
             encoding="utf-8", errors="replace",
             timeout=15
         )
@@ -163,7 +163,7 @@ def _svn_export_add(svn_exe, source_url, revision, file_path, local_file, auth_a
         return False
     add_cmd = [svn_exe, "add", "--parents", "--force", "--quiet", local_file] + auth_args
     try:
-        r = subprocess.run(add_cmd, capture_output=True, text=True,
+        r = subprocess.run(add_cmd, capture_output=True,
                            encoding="utf-8", errors="replace",
                            timeout=30, **_get_subprocess_kwargs())
         if r.returncode != 0:
@@ -335,7 +335,7 @@ def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, 
     try:
         subprocess.run(
             [svn_exe, "resolve", "--accept", "working", local_file] + auth_args,
-            capture_output=True, text=True,
+            capture_output=True,
             encoding="utf-8", errors="replace",
             timeout=30, **_get_subprocess_kwargs()
         )
@@ -526,7 +526,7 @@ def svn_update_target(target_path, svn_user=None, svn_pass=None, log_callback=No
     _log("  → 执行: svn update --accept theirs-full --force", "info")
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True,
+            cmd, capture_output=True,
             encoding="utf-8", errors="replace",
             timeout=300,
             **_get_subprocess_kwargs()
@@ -672,7 +672,7 @@ def resolve_svn_url_to_local(url, cfg=None):
             try:
                 r = subprocess.run(
                     [svn_exe, "info", "--show-item", "url", d],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True, encoding="utf-8", errors="replace", timeout=5,
                     **_get_subprocess_kwargs()
                 )
                 wc_url = r.stdout.strip() if r.returncode == 0 else ""
@@ -709,7 +709,7 @@ def _scan_drives_for_svn_wc(url, svn_exe=None):
                     try:
                         r = subprocess.run(
                             [svn_exe, "info", "--show-item", "url", first],
-                            capture_output=True, text=True, timeout=5,
+                            capture_output=True, encoding="utf-8", errors="replace", timeout=5,
                             **_get_subprocess_kwargs()
                         )
                         wc_url = r.stdout.strip() if r.returncode == 0 else ""
@@ -728,7 +728,7 @@ def _scan_drives_for_svn_wc(url, svn_exe=None):
                                 try:
                                     r = subprocess.run(
                                         [svn_exe, "info", "--show-item", "url", second],
-                                        capture_output=True, text=True, timeout=5,
+                                        capture_output=True, encoding="utf-8", errors="replace", timeout=5,
                                         **_get_subprocess_kwargs()
                                     )
                                     wc_url = r.stdout.strip() if r.returncode == 0 else ""
@@ -746,7 +746,7 @@ def _scan_drives_for_svn_wc(url, svn_exe=None):
                                         try:
                                             r = subprocess.run(
                                                 [svn_exe, "info", "--show-item", "url", third],
-                                                capture_output=True, text=True, timeout=5,
+                                                capture_output=True, encoding="utf-8", errors="replace", timeout=5,
                                                 **_get_subprocess_kwargs()
                                             )
                                             wc_url = r.stdout.strip() if r.returncode == 0 else ""
@@ -794,7 +794,7 @@ def migrate_old_svn_mappings(cfg):
         try:
             r = subprocess.run(
                 [svn_exe, "info", "--show-item", "wc-root", d],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, encoding="utf-8", errors="replace", timeout=5,
                 **_get_subprocess_kwargs()
             )
             wc_root = r.stdout.strip() if r.returncode == 0 else ""
@@ -802,7 +802,7 @@ def migrate_old_svn_mappings(cfg):
                 continue
             r2 = subprocess.run(
                 [svn_exe, "info", "--show-item", "url", wc_root],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True, encoding="utf-8", errors="replace", timeout=5,
                 **_get_subprocess_kwargs()
             )
             wc_url = r2.stdout.strip() if r2.returncode == 0 else ""

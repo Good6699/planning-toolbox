@@ -1,0 +1,916 @@
+# 策划工具箱桌面版
+# 高级感启动动画系统 — AI执行文档（适配版）
+
+---
+
+# 一、项目目标
+
+为：
+
+- pywebview + WinForms
+- Flask（内嵌 18123）
+- WebView2
+- 单文件 SPA 前端
+
+构建：
+
+# "工业级专业工具风格"的启动动画系统
+
+要求：
+
+- 主窗口绝不能提前显示
+- 禁止白屏
+- 禁止网页加载感
+- 启动过程具有高级感
+- 动画克制、专业、稳定
+- 完全适配当前暗黑工业风UI
+
+---
+
+# 二、最终效果
+
+程序启动：
+
+```text
+黑屏
+→ Splash 显示（Logo 渐显+背景呼吸）
+→ splash.js 轮询 Flask /api/splash/status 获取真实进度
+→ Python 在各真实启动阶段更新状态：
+    BOOTSTRAPPING FLASK (10%) → FLASK READY (25%)
+    → LOADING INTERFACE (40%) → INITIALIZING MODULES (60%)
+    → WAITING FOR APPLICATION (75%) → READY (100%)
+→ SPA 加载完毕 → app_ready() 回调
+→ 主窗口淡入 + 0.3s 后 Splash 消失
+```
+
+整体效果参考：
+
+* JetBrains
+* Linear
+* Notion Desktop
+* Unreal Engine
+* Houdini
+
+禁止：
+
+* 科技光污染
+* 粒子满天飞
+* HUD扫描线
+* 大LOGO突脸
+* 花哨页游风
+
+---
+
+# 三、实际项目目录结构
+
+```text
+project/
+│
+├── desktop_main.py          ← 主入口（已有，非文档假设的 main.py）
+├── web_app.py               ← Flask 后端（已有，非 flask_app.py）
+│
+├── splash/                  ← 需新建
+│   ├── splash.html
+│   ├── splash.css
+│   └── splash.js
+│
+├── templates/
+│   └── index.html           ← 单文件 SPA（已有，非 web/app.js）
+│
+└── assets/                  ← 需新建
+    └── logo.svg
+```
+
+---
+
+# 四、项目关键差异说明（重要）
+
+## 4.1 入口文件
+
+| 文档假设 | 实际项目 |
+|---------|---------|
+| `main.py` | `desktop_main.py` |
+| `flask_app.py`（端口 4399） | `web_app.py`（端口 **18123**） |
+| `web/app.js` 独立 SPA | `templates/index.html` 单文件内联 SPA |
+
+## 4.2 现有 `desktop_main.py` 已包含的复杂功能
+
+在添加 Splash 前，必须清楚以下已有功能不会被破坏：
+
+| 功能 | 代码位置 | 说明 |
+|------|---------|------|
+| 单实例锁 | `_acquire_instance_lock()` | 端口 18124 检测防多开 |
+| Flask 内嵌启动 | `_start_flask()` | `werkzeug.make_server` 非 Flask CLI |
+| Flask 等待就绪 | `_wait_for_flask(timeout=15)` | 轮询 `http://127.0.0.1:18123` |
+| 系统托盘 | `_tray_thread()` | pystray，含"显示窗口"/"退出" |
+| QQ式贴边 | `class EdgeDocker` | 左右上下贴边 + 滑入滑出动画 |
+| 窗口子类化 | `_subclass_window()` | 窗口关闭→隐藏到托盘 |
+| 拖拽支持 | `_init_dnd()` | pywebview DOM DnD API |
+| 窗口大小记忆 | `load_config()` | 读取 `window_w`/`window_h` |
+| Resize API | `class ResizeApi` | JS ↔ Python 双向窗口缩放 |
+| 光标屏幕居中 | `_get_cursor_screen_center()` | 多屏幕支持 |
+
+## 4.3 启动流程对比
+
+### 原有流程（无 Splash）
+
+```
+desktop_main.main()
+  ├─ _acquire_instance_lock()           # 单实例
+  ├─ _start_flask() (daemon thread)     # 后台起 Flask
+  ├─ _wait_for_flask(timeout=15)        # 等 Flask 就绪
+  ├─ _tray_thread() (daemon thread)     # 系统托盘
+  ├─ webview.create_window(hidden=False)# 主窗口直接显示
+  ├─ _init_dnd()                        # 拖拽
+  ├─ _init_window()                     # 窗口子类化
+  ├─ EdgeDocker.start()                 # 贴边
+  └─ webview.start()                    # 事件循环
+```
+
+### 新流程（带 Splash + 真实进度轮询）
+
+```
+desktop_main.main()
+  ├─ _acquire_instance_lock()           # 单实例
+  │   └─ _splash_status → phase 1       # 状态更新
+  ├─ _start_flask() (daemon thread)     # 后台起 Flask
+  ├─ _wait_for_flask(timeout=15)        # 等 Flask 就绪
+  │   └─ _splash_status → phase 2       # 状态更新
+  ├─ 创建 Splash 窗口                    # frameless 置顶
+  │   └─ _splash_status → phase 3       # 状态更新
+  │   └─ splash.js 开始轮询 /api/splash/status
+  ├─ _tray_thread() (daemon thread)     # 系统托盘
+  ├─ webview.create_window(hidden=True) # 主窗口隐藏启动
+  │   └─ _splash_status → phase 4       # 状态更新
+  ├─ _init_dnd() + _init_window()       # 拖拽 + 子类化
+  ├─ EdgeDocker.start()                 # 贴边
+  ├─ _splash_status → phase 5           # 状态更新
+  ├─ webview.start()                    # 事件循环
+  │   └─ SPA 加载完毕 → app_ready()
+  │       ├─ _splash_status → phase 7 READY
+  │       ├─ main_window.show()         # 主窗口显示（淡入动画 0.45s）
+  │       └─ sleep(0.3s) + splash.destroy()
+  └─ (原有 tray / docker 逻辑不变)
+```
+
+---
+
+# 五、主程序启动逻辑（适配后）
+
+# desktop_main.py 改造要点
+
+```python
+# 在 desktop_main.py 中新增以下内容
+
+import threading
+import time
+import webview
+import os
+
+# ─── 新增全局变量 ───
+SPLASH_W = 760
+SPLASH_H = 460
+splash_window = None
+_splash_status_ref = None  # 指向 web_app._splash_status，Flask 就绪后获取
+```
+
+### 改造 1：给已有的 `ResizeApi` 类添加 `app_ready()` 方法
+
+`ResizeApi` 是主窗口的 `js_api`，已在 `create_window(js_api=resize_api)` 中注册。
+SPA 通过 `window.pywebview.api.app_ready()` 直接调用此方法。
+
+```python
+# 在 class ResizeApi 中添加：
+    def app_ready(self):
+        global splash_window
+        if _splash_status_ref is not None:
+            _splash_status_ref["phase"] = 7
+            _splash_status_ref["text"] = "READY"
+            _splash_status_ref["progress"] = 100
+        if self._window:
+            self._window.show()
+        time.sleep(0.3)
+        if splash_window:
+            splash_window.destroy()
+            splash_window = None
+```
+
+### 改造 2：添加状态更新辅助函数（在 main() 之前）
+
+```python
+def _set_splash_phase(phase, text, progress):
+    if _splash_status_ref is not None:
+        _splash_status_ref["phase"] = phase
+        _splash_status_ref["text"] = text
+        _splash_status_ref["progress"] = progress
+```
+
+### 改造 3：main() 中添加 Splash 窗口 + 主窗口 hidden + 真实状态更新
+
+```python
+# ─── main() 函数 ───
+def main():
+    global _splash_status_ref, splash_window
+    _acquire_instance_lock()
+    _set_splash_phase(1, "BOOTSTRAPPING FLASK", 10)
+
+    flask_thread = threading.Thread(target=_start_flask, daemon=True)
+    flask_thread.start()
+
+    if not _wait_for_flask(timeout=15):
+        print("[错误] Flask 未能在 15 秒内就绪", file=sys.stderr)
+        sys.exit(1)
+
+    # 获取 web_app 模块中的 _splash_status 引用
+    import web_app as _web_app_mod
+    _splash_status_ref = _web_app_mod._splash_status
+    _set_splash_phase(2, "FLASK READY", 25)
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    splash_url = os.path.join(script_dir, "splash", "splash.html")
+    splash_window = webview.create_window(
+        title="启动中",
+        url=splash_url,
+        width=SPLASH_W,
+        height=SPLASH_H,
+        frameless=True,
+        easy_drag=False,
+        resizable=False,
+        on_top=True,
+        background_color="#0f1115",
+    )
+    _set_splash_phase(3, "LOADING INTERFACE", 40)
+
+    tray_thread = threading.Thread(target=_tray_thread, daemon=True)
+    tray_thread.start()
+
+    config = load_config()
+    saved_w = config.get("window_w", 0)
+    saved_h = config.get("window_h", 0)
+    has_saved = saved_w >= 800 and saved_h >= 400
+    init_cx, init_cy = _get_cursor_screen_center()
+
+    resize_api = ResizeApi()
+
+    window = webview.create_window(
+        "策划工具箱",
+        url="http://127.0.0.1:18123",
+        width=WINDOW_W,
+        height=WINDOW_H,
+        x=init_cx,
+        y=init_cy,
+        frameless=True,
+        easy_drag=False,
+        shadow=True,
+        background_color="#0f1115",
+        text_select=True,
+        zoomable=False,
+        resizable=True,
+        js_api=resize_api,
+        hidden=True,
+    )
+    resize_api.set_window(window)
+    _set_splash_phase(4, "INITIALIZING MODULES", 60)
+
+    _init_dnd(window)
+
+    if has_saved:
+        def _restore_window_size():
+            try:
+                cx, cy = _get_cursor_screen_center(saved_w, saved_h)
+                window.move(cx, cy)
+                window.resize(saved_w, saved_h)
+            except Exception:
+                pass
+        window.events.shown += _restore_window_size
+
+    # 窗口子类化
+    def _init_window(hwnd=None):
+        if hwnd is None:
+            hwnd = _find_window_hwnd(timeout=10)
+        if not hwnd:
+            return
+        try:
+            _subclass_window(hwnd)
+        except Exception as e:
+            print(f"[子类化异常] {e}", file=sys.stderr)
+
+    hwnd = _find_window_hwnd(timeout=0.3)
+    if hwnd:
+        _init_window(hwnd)
+    else:
+        threading.Thread(target=_init_window, daemon=True).start()
+
+    # 贴边
+    global _docker
+    docker = EdgeDocker(window)
+    _docker = docker
+    docker.start()
+
+    _set_splash_phase(5, "WAITING FOR APPLICATION", 75)
+
+    try:
+        webview.start(debug=False)
+    finally:
+        if not _tray_stop.is_set():
+            _tray_stop.set()
+            if _tray_icon:
+                _tray_icon.stop()
+    sys.exit(0)
+```
+
+### 关键改动说明
+
+1. **Splash 窗口在 Flask 就绪后创建** — 确保后端已准备好响应 SPA 请求和状态端点
+2. **主窗口 `hidden=True`** — pywebview 原生支持，窗口创建但不显示
+3. **`app_ready()` 合并到 `ResizeApi`** — 因为 `webview.start()` 没有 `api` 参数，JS API 必须通过 `create_window(js_api=...)` 按窗口设置
+4. **`web_app.py` 新增 `/api/splash/status` 端点** — Splash 页面通过轮询此端点获取真实进度
+5. **`_splash_status` 是 `web_app.py` 模块级的可变 dict** — `desktop_main.py` 在 Flask 就绪后获取其引用，直接修改内容即实时反映到状态端点
+6. **状态更新是纯 dict 操作无需锁** — CPython GIL 保护简单赋值
+7. **`_set_splash_phase()` 辅助函数** — 封装状态更新逻辑，方便在各阶段调用
+
+---
+
+# 六、前端 Ready 通知机制
+
+# templates/index.html
+
+SPA 当前启动逻辑（第 4002 行附近）：
+
+```javascript
+window.addEventListener("DOMContentLoaded", async () => {
+  await loadConfig();              // 加载配置
+  switchTab("svn");                // 切换到 SVN 页签
+  setTimeout(checkZoom, 300);      // 缩放检测
+  _zoomPollTimer = setInterval(checkZoom, 1500);
+
+  // ★ 等待至少一帧渲染完成（确保 hidden→show 后 WebView2 有内容可绘制）
+  await new Promise(r => requestAnimationFrame(r));
+  await new Promise(r => setTimeout(r, 30));
+
+  // ★ 通知 Python Splash：主应用就绪
+  try {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.app_ready) {
+      await window.pywebview.api.app_ready();
+    }
+  } catch(e) {
+    // 非 pywebview 环境（纯浏览器调试）忽略
+    console.warn("[Splash] app_ready not available", e);
+  }
+});
+```
+
+### 改动说明
+
+- 当前 SPA 启动很简单：`loadConfig()` + `switchTab("svn")`，没有复杂的预加载链
+- 因此 `app_ready()` 直接放在 `DOMContentLoaded` 末尾即可
+- 用 `try/catch` 包裹，确保纯浏览器调试（`web_launcher.py`）不受影响
+- `switchTab("svn")` 是同步的，`buildSvnTab` 是惰性构建，第一次切换时渲染 DOM
+
+---
+
+# 七、Splash 页面
+
+# splash/splash.html
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>策划工具箱</title>
+<link rel="stylesheet" href="splash.css">
+</head>
+<body>
+<div class="bg-flow"></div>
+<div class="splash-root">
+    <div class="logo-wrap">
+        <div class="logo-box">
+            <img src="../assets/logo.svg">
+        </div>
+        <div class="title">策划工具箱</div>
+        <div class="subtitle">Game Pipeline Toolkit</div>
+    </div>
+    <div class="boot-panel">
+        <div class="boot-text" id="boot_text">INITIALIZING...</div>
+        <div class="progress-wrap">
+            <div class="progress-bar" id="progress_bar"></div>
+        </div>
+    </div>
+</div>
+<script src="splash.js"></script>
+</body>
+</html>
+```
+
+### 与文档假设版本的唯一区别
+
+- CSS/JS 引用路径改为 `splash.css` / `splash.js`（同目录下，不变）
+- `<img>` 的 `src="../assets/logo.svg"` 可行，因为 splash HTML 在 `splash/` 子目录
+
+---
+
+# 八、Splash 样式
+
+# splash/splash.css
+
+```css
+:root{
+    --bg:#0f1115;
+    --bg2:#151821;
+    --text:#f2f5ff;
+    --sub:#8b96ad;
+    --accent:#5ea2ff;
+}
+*{
+    box-sizing:border-box;
+}
+html,body{
+    width:100%;
+    height:100%;
+    margin:0;
+    overflow:hidden;
+    background:#0f1115;
+    font-family:"Segoe UI","Microsoft YaHei UI",sans-serif;
+}
+body{
+    background:radial-gradient(circle at top,#1c2540 0%,#0f1115 45%);
+    animation:bgMove 12s ease-in-out infinite alternate;
+}
+.bg-flow{
+    position:absolute;
+    inset:-10%;
+    background:radial-gradient(circle at 30% 20%,rgba(94,162,255,.08),transparent 40%);
+    filter:blur(80px);
+    animation:flowMove 14s ease-in-out infinite alternate;
+}
+.splash-root{
+    position:relative;
+    width:100%;
+    height:100%;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+}
+.logo-wrap{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    animation:logoReveal .9s cubic-bezier(.2,.8,.2,1) forwards;
+}
+.logo-box{
+    width:84px;
+    height:84px;
+    border-radius:20px;
+    background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02));
+    border:1px solid rgba(255,255,255,.08);
+    backdrop-filter:blur(20px);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+.logo-box img{
+    width:58px;
+    height:58px;
+}
+.title{
+    margin-top:20px;
+    font-size:30px;
+    font-weight:700;
+    letter-spacing:1px;
+    color:#ffffff;
+}
+.subtitle{
+    margin-top:8px;
+    font-size:13px;
+    color:var(--sub);
+    letter-spacing:3px;
+}
+.boot-panel{
+    position:absolute;
+    bottom:54px;
+    width:360px;
+}
+.boot-text{
+    font-size:11px;
+    letter-spacing:2px;
+    color:var(--sub);
+    margin-bottom:12px;
+}
+.progress-wrap{
+    width:100%;
+    height:2px;
+    background:rgba(255,255,255,.06);
+    overflow:hidden;
+    border-radius:999px;
+}
+.progress-bar{
+    width:0%;
+    height:100%;
+    background:linear-gradient(90deg,#5ea2ff,#7cb8ff);
+    box-shadow:0 0 16px rgba(94,162,255,.7);
+}
+
+@keyframes logoReveal{
+    0%{
+        opacity:0;
+        transform:scale(.96);
+        filter:blur(10px);
+    }
+    100%{
+        opacity:1;
+        transform:scale(1);
+        filter:blur(0);
+    }
+}
+@keyframes bgMove{
+    0%{ background-position:50% 0%; }
+    100%{ background-position:50% 8%; }
+}
+@keyframes flowMove{
+    0%{ transform:translateX(-40px) translateY(-20px); }
+    100%{ transform:translateX(40px) translateY(20px); }
+}
+```
+
+### 与文档假设版本的唯一区别
+
+- 样式完全不变，风格与项目现有 CSS 变量一致（`--bg:#0f1115`, `--accent:#5ea2ff`）
+
+---
+
+# 九、Splash 动画脚本
+
+# splash/splash.js
+
+```javascript
+const bootText = document.getElementById("boot_text");
+const progressBar = document.getElementById("progress_bar");
+const STATUS_URL = "http://127.0.0.1:18123/api/splash/status";
+
+async function pollStatus() {
+    try {
+        const r = await fetch(STATUS_URL);
+        const data = await r.json();
+        bootText.innerText = data.text || "INITIALIZING...";
+        progressBar.style.width = (data.progress || 0) + "%";
+        if (data.phase < 7) {
+            setTimeout(pollStatus, 250);
+        }
+    } catch (e) {
+        bootText.innerText = "INITIALIZING...";
+        setTimeout(pollStatus, 400);
+    }
+}
+
+setTimeout(pollStatus, 200);
+```
+
+### 真实进度机制
+
+- splash.js 不再使用硬编码步骤，而是每 **250ms** 轮询 `http://127.0.0.1:18123/api/splash/status`
+- Python 在各个真实启动阶段更新 `_splash_status` 字典
+- 响应格式：`{"phase": 3, "text": "LOADING INTERFACE", "progress": 40}`
+- phase 3 之前（Flask 未就绪）fetch 会抛异常，splash.js 显示 "INITIALIZING..." 并过 400ms 重试
+- phase 7（READY）停止轮询，此时 app_ready() 即将关闭 Splash
+
+### 状态与里程碑对照
+
+| Phase | Text | Progress | 触发时机 |
+|:-----:|------|:--------:|---------|
+| 0 | INITIALIZING... | 0% | 默认 |
+| 1 | BOOTSTRAPPING FLASK | 10% | instance lock 后 |
+| 2 | FLASK READY | 25% | Flask 就绪后 |
+| 3 | LOADING INTERFACE | 40% | Splash 窗口创建后 |
+| 4 | INITIALIZING MODULES | 60% | 主窗口创建后 |
+| 5 | WAITING FOR APPLICATION | 75% | webview.start 前 |
+| 7 | READY | 100% | app_ready() 调用时 |
+
+---
+
+# 九、Flask 后端改动 — 状态端点
+
+# web_app.py
+
+### 新增 1：模块级状态变量
+
+在 `app = Flask(__name__)` 之后添加：
+
+```python
+_splash_status = {"phase": 0, "text": "INITIALIZING...", "progress": 0}
+```
+
+### 新增 2：状态查询端点
+
+```python
+@app.route("/api/splash/status")
+def splash_status():
+    return jsonify(_splash_status)
+```
+
+`desktop_main.py` 在 Flask 就绪后通过 `import web_app` 获取 `_splash_status` 的引用，
+直接修改其内容即可实时反映到轮询端点，无需加锁。
+
+---
+
+# 十、主窗口淡入
+
+# templates/index.html 中的样式
+
+在现有 `.app` 样式规则中添加淡入动画：
+
+```css
+.app{
+    width:100%;
+    height:100%;
+    display:grid;
+    grid-template-columns:var(--sidebar-width) minmax(0,1fr);
+    opacity:0;                                    /* ★ 新增 */
+    animation:appFadeIn .45s ease forwards;       /* ★ 新增 */
+}
+
+@keyframes appFadeIn{
+    from{ opacity:0; }
+    to{ opacity:1; }
+}
+```
+
+### 改动说明
+
+- 当前 `.app` 样式在第 64 行左右，`opacity:0` + `animation` 是唯一的新增
+- `forwards` 确保动画结束后保持 `opacity:1`
+
+---
+
+# 十一、前端 Ready 通知机制
+
+# templates/index.html
+
+SPA 当前启动逻辑（第 4010 行附近）：
+
+```javascript
+window.addEventListener("DOMContentLoaded", async () => {
+  await loadConfig();
+  switchTab("svn");
+  setTimeout(checkZoom, 300);
+  _zoomPollTimer = setInterval(checkZoom, 1500);
+
+  // 通知 Python Splash：主应用就绪
+  try {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.app_ready) {
+      await window.pywebview.api.app_ready();
+    }
+  } catch(e) {
+    // 非 pywebview 环境（纯浏览器调试）忽略
+    console.warn("[Splash] app_ready not available", e);
+  }
+});
+```
+
+### 改动说明
+
+- SPA 启动：`loadConfig()` + `switchTab("svn")`，完成后立即通知 Python
+- `app_ready()` 调用 `ResizeApi.app_ready()` → 主窗口 `show()` + 0.3s 后 Splash 关闭
+- 时延由 Python 端的状态轮询和 `sleep(0.3)` 管理，前端不需要额外延迟
+- `try/catch` 确保纯浏览器调试不受影响
+
+---
+
+# 十二、新增文件清单
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `splash/splash.html` | **新建** | Splash 页面结构 |
+| `splash/splash.css` | **新建** | Splash 动画样式 |
+| `splash/splash.js` | **新建** | 进度文字动画 |
+| `assets/logo.svg` | **新建** | 工具箱 Logo（需设计） |
+
+### 无 SVG Logo 时的备用方案
+
+如果暂时没有设计好的 `logo.svg`，可以：
+1. 使用内联 SVG 替代 — 在 `splash/splash.html` 的 `logo-box` 中直接嵌入 SVG 代码
+2. 使用现有页面中的 logo SVG 代码（第 90-92 行附近已有 sidebar logo SVG）
+3. 先用 CSS 图形占位（如一个圆角方块 + 字母缩写）
+
+---
+
+# 十三、需要修改的现有文件
+
+| 文件 | 改动内容 | 改动量 |
+|------|---------|:------:|
+| `web_app.py` | 新增 `_splash_status` 变量 + `/api/splash/status` 端点 | ~10 行 |
+| `desktop_main.py` | 新增 `_splash_status_ref` + `_set_splash_phase()` + main() 状态更新 | ~50 行 |
+| `templates/index.html` | 在 DOMContentLoaded 末尾添加 pywebview.app_ready() 调用 | ~10 行 |
+| `templates/index.html` | 在 CSS 的 `.app` 规则中添加 opacity + animation | ~3 行 |
+| `splash/splash.js` | 改写为轮询 `/api/splash/status` | 全部重写 |
+
+### 总改动量估算
+
+新增文件：3 个（splash.html, splash.css, splash.js）
+修改文件：3 个（desktop_main.py, web_app.py, index.html）
+创建目录：2 个（splash/, assets/）
+
+---
+
+# 十四、性能要求
+
+必须：
+
+```text
+所有动画使用：
+transform
+opacity
+filter
+```
+
+禁止：
+
+```text
+大量box-shadow动态
+大面积blur动画
+复杂粒子
+canvas粒子系统
+svg路径实时计算
+```
+
+原因：
+
+WebView2下容易掉帧。
+
+---
+
+# 十四、动画基调要求
+
+必须：
+
+```text
+克制
+稳定
+工业感
+系统感
+专业桌面工具
+```
+
+禁止：
+
+```text
+页游风
+游戏登录器
+二次元
+炫酷科技UI
+赛博光污染
+```
+
+---
+
+# 十六、视觉基调
+
+推荐：
+
+```text
+深灰
+冷蓝
+玻璃拟态
+弱动态
+低饱和
+```
+
+不要：
+
+```text
+高亮蓝
+霓虹
+彩虹
+高频闪烁
+```
+
+---
+
+# 十六、窗口行为要求
+
+Splash：
+
+```text
+无边框
+不可缩放
+置顶
+固定大小（760×460）
+```
+
+主窗口：
+
+```text
+隐藏启动
+Ready后显示
+不可置顶（避免遮挡托盘菜单）
+```
+
+---
+
+# 十七、严禁事项
+
+严禁：
+
+```text
+主窗口先显示
+出现白屏
+先显示网页再加载
+浏览器默认loading
+出现未渲染DOM
+出现闪屏
+```
+
+---
+
+# 十九、注意事项（新增 — 适配实际项目）
+
+## 19.1 EdgeDocker 与 Splash 的交互
+
+- Splash 窗口置顶但主窗口不置顶，`EdgeDocker._slide_in` 中有 `HWND_TOPMOST` 逻辑，
+  需要确保 `main_window.show()` 之后不会意外影响到 Splash（因为 Splash 在 destroy 前始终置顶）
+- 如果主窗口 show() 时被 Splash 遮挡，可调用 `main_window.topmost = True` 再立即取消
+
+## 19.2 托盘"显示窗口"行为
+
+- `_show_window()` 中通过 `FindWindowW` 查找窗口并 `ShowWindow`，Splash 窗口标题是"启动中"，
+  不会被误识别为"策划工具箱"，不影响。
+
+## 19.3 单实例锁不受影响
+
+- `_acquire_instance_lock()` 在 main() 最开头执行，Splash 窗口创建在后，不冲突。
+
+## 19.4 子类化窗口关闭行为
+
+- 当前子类化拦截 `WM_CLOSE`（0x0010）将窗口隐藏到托盘，不影响 Splash 的 destroy。
+- Splash 窗口没有子类化，直接 `destroy()` 正常关闭。
+
+## 19.5 pywebview 多窗口注意事项
+
+- pywebview 支持多窗口，但必须在 `webview.start()` 之前 `create_window` 全部创建完毕
+- 因此 Splash 窗口必须在主窗口之前创建
+- `webview.start(api)` 的 api 参数是全局 JS API，Splash 和主窗口都能调用
+
+---
+
+# 二十、推荐后续升级（可选）
+
+未来可增加：
+
+## 1. 实时模块初始化状态
+
+```text
+SVN SERVICE READY
+CACHE SYSTEM READY
+WORKFLOW ENGINE READY
+```
+
+逐个亮起。需要后端提供 SSE 或轮询接口。
+
+## 2. GPU级模糊淡出
+
+Splash 关闭时应用模糊 → 透明过渡，而非瞬间消失。需要额外 CSS 动画和延迟逻辑。
+
+## 3. Windows Acrylic 背景
+
+Splash 使用 Win32 Acrylic API（SetWindowCompositionAttribute），适用于 Win10 1803+。
+
+## 4. 启动音效（极轻）
+
+极短的启动音效（<0.5s），需使用 `winsound` 或 MediaPlayer。
+
+---
+
+# 二十一、最终目标
+
+最终效果：
+
+不是：
+
+```text
+打开网页
+```
+
+而是：
+
+```text
+启动专业桌面工具
+```
+
+要求达到：
+
+* JetBrains
+* Linear
+* Unreal Editor
+* Houdini
+
+那种：
+
+```text
+高级
+克制
+稳定
+专业
+```
+
+的启动质感。

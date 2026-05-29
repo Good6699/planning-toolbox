@@ -1,0 +1,854 @@
+# AI执行文档 — Unity 多工程 SVN 智能增量合并系统
+
+## 项目名称
+
+```text
+UnitySVNMergeTool
+```
+
+---
+
+# 一、项目目标
+
+开发一个：
+
+# Unity 多工程 SVN 智能增量合并工具
+
+用于：
+
+* 从源 Unity 工程 SVN 历史中筛选指定提交
+* 自动提取增量文件
+* 自动同步到目标 Unity 工程
+* 自动处理新增/修改/删除
+* 自动保护 Unity GUID/meta
+* 自动解决冲突
+* 自动同步 SVN 状态
+* 自动弹出 SVN 提交窗口
+
+---
+
+# 二、核心原则（最高优先级）
+
+# 1. 禁止使用 svn merge
+
+绝对禁止：
+
+```bash
+svn merge
+```
+
+原因：
+
+* 会生成 mergeinfo
+* 会产生树冲突
+* 会修改工作副本状态
+* Unity YAML 极易炸引用
+
+---
+
+# 2. 禁止全工程 revert
+
+绝对禁止：
+
+```bash
+svn revert -R .
+```
+
+原因：
+
+会清空本地文件。
+
+---
+
+# 3. 使用“文件级增量同步”
+
+工具本质：
+
+```text
+SVN差异提取
++
+文件同步覆盖
++
+Unity资源保护
+```
+
+而不是：
+
+```text
+传统SVN合并
+```
+
+---
+
+# 三、系统定位
+
+本工具不是 SVN 客户端。
+
+本工具是：
+
+# Unity SVN 增量迁移系统
+
+---
+
+# 四、核心功能
+
+# 1. SVN提交筛选
+
+支持：
+
+## 提交备注筛选
+
+支持：
+
+* 包含关键词
+* 多关键词
+* 正则
+
+示例：
+
+```text
+特效
+火山地图
+UI
+技能
+```
+
+---
+
+## 提交人筛选
+
+示例：
+
+```text
+FXTeam
+张三
+UI组
+```
+
+---
+
+## 时间范围筛选
+
+示例：
+
+```text
+2026-01-01 ~ 2026-01-20
+```
+
+---
+
+## Revision范围筛选
+
+示例：
+
+```text
+r12031-r12080
+```
+
+---
+
+# 五、SVN操作规范
+
+只允许使用：
+
+```bash
+svn log
+svn diff
+svn export
+svn cat
+svn info
+svn add
+svn delete
+svn status
+```
+
+禁止：
+
+```bash
+svn merge
+svn resolve
+svn revert -R
+```
+
+---
+
+# 六、差异提取系统
+
+# 1. 获取增量文件列表
+
+使用：
+
+```bash
+svn diff --summarize -r START:END
+```
+
+获取：
+
+```text
+A Assets/FX/Fire.prefab
+M Assets/UI/Main.prefab
+D Assets/Test/Test.prefab
+```
+
+---
+
+# 2. 增量文件导出
+
+使用：
+
+```bash
+svn export
+```
+
+导出到：
+
+```text
+TempMerge/
+```
+
+---
+
+# 七、文件同步规则
+
+# 1. 修改文件（M）
+
+规则：
+
+```text
+目标文件 → 备份 → 覆盖
+```
+
+---
+
+# 2. 新增文件（A）
+
+规则：
+
+```text
+自动复制到目标目录
+自动同步.meta
+```
+
+---
+
+# 3. 删除文件（D）
+
+规则：
+
+```text
+自动删除目标文件
+自动删除对应.meta
+```
+
+---
+
+# 4. 新增目录
+
+规则：
+
+```text
+自动创建目录
+同步folder.meta
+```
+
+---
+
+# 5. 删除目录
+
+规则：
+
+```text
+递归删除目录
+递归删除meta
+```
+
+---
+
+# 八、Unity资源保护系统（核心）
+
+# 1. meta强绑定规则
+
+任何 Unity 资源：
+
+```text
+prefab
+scene
+mat
+asset
+anim
+controller
+shader
+```
+
+必须：
+
+```text
+资源
++
+.meta
+同步处理
+```
+
+---
+
+# 2. GUID保护规则
+
+如果目标工程已存在资源：
+
+且：
+
+```text
+GUID不一致
+```
+
+禁止：
+
+```text
+覆盖.meta
+```
+
+只能：
+
+```text
+覆盖资源本体
+```
+
+否则：
+
+会导致：
+
+* prefab丢引用
+* scene missing
+* script missing
+
+---
+
+# 3. 文件夹meta规则
+
+Unity 文件夹也存在：
+
+```text
+folder.meta
+```
+
+必须同步。
+
+---
+
+# 九、插件保护系统
+
+以下目录：
+
+```text
+Assets/Plugins
+Packages
+ProjectSettings
+```
+
+默认：
+
+# 禁止自动覆盖
+
+原因：
+
+* DLL版本差异
+* asmdef差异
+* package依赖差异
+* 渲染管线差异
+
+---
+
+# 十、本地文件保护
+
+# 禁止：
+
+```text
+删除本地未版本化文件
+```
+
+如果文件：
+
+```text
+svn status == ?
+```
+
+默认：
+
+```text
+保留
+```
+
+---
+
+# 十一、冲突处理系统
+
+# 默认策略
+
+```text
+Incoming Wins
+```
+
+即：
+
+```text
+目标版本丢弃
+使用合并版本覆盖
+```
+
+---
+
+# 禁止：
+
+```bash
+svn resolve
+```
+
+冲突处理本质：
+
+```text
+文件覆盖
+```
+
+不是：
+
+```text
+SVN三方合并
+```
+
+---
+
+# 十二、Unity刷新优化（极重要）
+
+# 禁止：
+
+```text
+边复制边刷新Unity
+```
+
+---
+
+# 正确流程
+
+## 第一步
+
+关闭 Auto Refresh：
+
+```csharp
+AssetDatabase.DisallowAutoRefresh();
+```
+
+---
+
+## 第二步
+
+批量复制文件。
+
+---
+
+## 第三步
+
+统一刷新：
+
+```csharp
+AssetDatabase.Refresh();
+```
+
+---
+
+# 十三、性能优化
+
+# 1. 多线程复制
+
+使用：
+
+```text
+线程池
+```
+
+---
+
+# 2. Hash缓存
+
+使用：
+
+```text
+MD5/SHA1
+```
+
+一致则跳过复制。
+
+---
+
+# 3. 优先级队列
+
+优先处理：
+
+```text
+meta
+prefab
+scene
+```
+
+最后：
+
+```text
+贴图
+音频
+```
+
+---
+
+# 十四、依赖分析系统（高级）
+
+扫描：
+
+```yaml
+guid:
+```
+
+建立：
+
+```text
+GUID依赖图
+```
+
+---
+
+# 自动补齐依赖资源
+
+例如：
+
+```text
+Fire.prefab
+引用：
+Explosion.mat
+Explosion.png
+FX.shader
+```
+
+自动补齐。
+
+---
+
+# 十五、危险目录保护
+
+禁止自动操作：
+
+```text
+Library
+Temp
+Obj
+Logs
+UserSettings
+```
+
+---
+
+# 十六、日志系统
+
+必须记录：
+
+```text
+时间
+Revision
+提交人
+覆盖文件
+新增文件
+删除文件
+冲突文件
+失败文件
+```
+
+---
+
+# 日志格式
+
+```json
+{
+  "revision": 12331,
+  "author": "FXTeam",
+  "mergedFiles": 120,
+  "deletedFiles": 42,
+  "conflicts": 5,
+  "skipped": 12
+}
+```
+
+---
+
+# 十七、回滚系统
+
+# 每次合并前
+
+自动创建：
+
+```text
+Snapshots/
+```
+
+保存：
+
+```text
+被覆盖文件
+被删除文件
+```
+
+---
+
+# 回滚原理
+
+```text
+文件备份恢复
+```
+
+不是：
+
+```text
+svn revert
+```
+
+---
+
+# 十八、SVN状态同步
+
+# 合并完成后
+
+自动执行：
+
+---
+
+## 1. svn add
+
+```bash
+svn add --force Assets/NewFolder
+```
+
+---
+
+## 2. svn delete
+
+```bash
+svn delete Assets/Old.prefab
+```
+
+---
+
+# 十九、自动提交窗口
+
+# 合并结束后
+
+自动打开：
+
+## TortoiseSVN Commit Window
+
+Windows：
+
+```bash
+TortoiseProc.exe /command:commit /path:"D:\Project"
+```
+
+---
+
+# 注意
+
+# 禁止自动commit
+
+必须：
+
+```text
+用户手动确认提交
+```
+
+---
+
+# 二十、自动生成提交备注
+
+默认：
+
+```text
+[AutoMerge]
+
+Source:
+Project_A
+
+Revision:
+r12031-r12080
+
+Filter:
+特效
+火山地图
+
+Merged Files:
+231
+
+Deleted Files:
+42
+
+Conflicts Auto Resolved:
+15
+```
+
+---
+
+# 二十一、推荐目录结构
+
+```text
+UnitySVNMergeTool/
+│
+├── Core/
+│   ├── SVN/
+│   ├── Merge/
+│   ├── Unity/
+│   ├── Dependency/
+│   ├── Backup/
+│   └── Commit/
+│
+├── UI/
+│
+├── Temp/
+│
+├── Logs/
+│
+├── Snapshots/
+│
+└── Config/
+```
+
+---
+
+# 二十二、推荐配置文件
+
+```json
+{
+  "conflictPolicy": "incoming_wins",
+  "autoBackup": true,
+  "autoRefresh": false,
+  "protectMetaGuid": true,
+
+  "deletePolicy": {
+    "deleteMissingFiles": true,
+    "deleteMissingFolders": true,
+    "protectLocalUnversioned": true
+  },
+
+  "protectedFolders": [
+    "Assets/Plugins",
+    "Packages",
+    "ProjectSettings",
+    "Library",
+    "Temp",
+    "Obj"
+  ]
+}
+```
+
+---
+
+# 二十三、推荐实现阶段
+
+# 第一阶段（MVP）
+
+实现：
+
+* SVN日志读取
+* Revision筛选
+* 文件导出
+* 文件覆盖
+* 新增/删除同步
+* meta同步
+* 冲突覆盖
+* 日志系统
+* 自动提交窗口
+
+---
+
+# 第二阶段
+
+实现：
+
+* GUID检测
+* prefab依赖分析
+* Hash缓存
+* Unity刷新控制
+* Snapshot回滚
+
+---
+
+# 第三阶段（AI增强）
+
+实现：
+
+* 智能危险资源识别
+* 自动依赖补齐
+* prefab missing检测
+* 提交分类
+* 风险预测
+
+---
+
+# 二十四、完整执行流程
+
+```text
+读取SVN日志
+→ 筛选Revision
+→ 获取增量列表
+→ 导出增量文件
+→ 分析Unity依赖
+→ 创建目标备份
+→ 同步新增文件
+→ 同步修改文件
+→ 删除失效文件
+→ 删除失效目录
+→ 处理meta/GUID
+→ 自动解决冲突
+→ svn add
+→ svn delete
+→ Unity统一刷新
+→ 生成日志
+→ 自动打开SVN提交窗口
+→ 用户确认提交
+```
+
+---
+
+# 二十五、最终目标
+
+用户只需要：
+
+```text
+选择：
+源工程
+目标工程
+Revision范围
+关键词
+```
+
+点击：
+
+```text
+开始合并
+```
+
+工具自动：
+
+```text
+分析版本
+提取增量
+同步目录
+保护GUID
+解决冲突
+同步SVN状态
+生成日志
+打开提交窗口
+```
+
+最终达到：
+
+```text
+无需手动merge
+无需全工程revert
+无需手动删文件
+无需处理SVN冲突
+Unity引用不炸
+快速完成大型工程迁移
+```

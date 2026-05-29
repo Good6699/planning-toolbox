@@ -20,18 +20,18 @@
 
 ### 入口
 ```
-策划工具箱.bat → desktop_main.py → pywebview(WinForms) → 内嵌WebView2加载 http://127.0.0.1:18123
-                                  → 启动Flask后端(web_app.py, 端口18123)
-                                  → 系统托盘(pystray)
+main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebView2加载 http://127.0.0.1:18123
+                                        → 启动Flask后端(toolbox_core/web_app.py, 端口18123)
+                                        → 系统托盘(pystray)
 ```
 
-### 后端 (`web_app.py`)
+### 后端 (`toolbox_core/web_app.py`)
 - Flask，端口18123，SSE日志流 `/api/log/stream/<task_id>`
-- 路由清单：`GET /` `GET/POST /api/config` `POST /api/svn/run` `POST /api/upload/run` `POST /api/translate/run` `POST /api/workflow/run` `POST /api/workflow/list` `POST /api/workflow/save` `POST /api/files/list` `POST /api/path/verify` `POST /api/dir/browse` `POST /api/task/cancel` `POST /api/open/folder` `POST /api/svn/detect` `POST /api/svn/clear-changelist` `POST /api/svn/find-wc` `POST /api/svn/open-wc` `POST /api/cache/clear` `POST /api/merge/query` `POST /api/merge/run` `GET/POST /api/translate/lang-id-map` `POST /api/close` `GET /api/log/stream/<id>` `GET /api/static/<path>`
+- 路由清单：`GET /` `GET/POST /api/config` `POST /api/svn/run` `POST /api/upload/run` `POST /api/translate/run` `POST /api/workflow/run` `POST /api/workflow/list` `POST /api/workflow/save` `POST /api/files/list` `POST /api/path/verify` `POST /api/dir/browse` `POST /api/task/cancel` `POST /api/open/folder` `POST /api/svn/detect` `POST /api/svn/clear-changelist` `POST /api/svn/find-wc` `POST /api/svn/open-wc` `POST /api/cache/clear` `POST /api/merge/query` `POST /api/merge/run` `GET/POST /api/translate/lang-id-map` `POST /api/close` `GET /api/log/stream/<id>` `GET /api/static/<path>` `POST /api/svn/resolve-url` `POST /api/merge/analyze`
 - 工作流后端 `POST /api/workflow/run` 支持8种步骤类型：lock_svn/unlock_svn/export_text/upload_svn/open_tables/export_error_code/merge_translation/merge_table（全部已实现web版）
 - SSE心跳15s，超时断开保护
 
-### 前端 (`templates/index.html`)
+### 前端 (`toolbox_core/templates/index.html`)
 - 单文件SPA：CSS变量 + HTML模板 + JS事件委托
 - 五个页签：SVN记录/语义合并/复制合并/工作流/翻译
 
@@ -67,12 +67,20 @@
 
 | 类别 | 文件 | 说明 |
 |------|------|------|
-| 桌面入口 | `desktop_main.py` | pywebview 桌面壳（`策划工具箱.bat` 启动） |
-| 后端 | `web_app.py` | Flask API + 路由 |
-| 前端 | `templates/index.html` | 单文件 SPA |
-| 配置 | `svn_gui_config.json` | 用户配置持久化 |
+| 入口 | `main.py` | 根目录入口，跳转到 `toolbox_core/` |
+| 桌面入口 | `toolbox_core/desktop_main.py` | pywebview 桌面壳 |
+| 后端 | `toolbox_core/web_app.py` | Flask API + 路由 |
+| 前端 | `toolbox_core/templates/index.html` | 单文件 SPA |
+| 核心模块 | `toolbox_core/toolbox_config.py` | 配置加载/保存 |
+| 核心模块 | `toolbox_core/toolbox_platform.py` | SVN/子进程辅助 |
+| 核心模块 | `toolbox_core/toolbox_merge.py` | SVN 合并操作 |
+| 核心模块 | `toolbox_core/xlsm_zipper.py` | Excel 工具 |
+| 配置 | `toolbox_core/svn_gui_config.json` | 用户配置持久化 |
+| 资源 | `toolbox_core/splash/` | 启动动画 |
+| 资源 | `toolbox_core/assets/logo.svg` | Logo |
 | 规范 | `.trae/skills/toolbox-ui/SKILL.md` | UI 开发规范 |
 - 知识图谱：`graphify-out/`（`graphify_quick.py --no-viz` 增量更新）
+- Tkinter 旧版代码已于 2026-05-29 清理删除（`svn_compare_gui.py`, `toolbox_tab_*.py`, `svn_oneclick_compare.py` 等11个文件）
 
 ## 经验与决策
 
@@ -108,13 +116,19 @@
 - **场景**：2026-05-28 将浏览/打开按钮从文字改为 SVG 图标后，点击无反应
 - **根因**：`event.target` 是 `<svg>` 或 `<path>` 元素，不是 `<button>`，`closest("[data-action]")` 无法匹配到按钮的 `data-action` 属性；点击事件进入全局委托分支但找不到 action，不做任何处理
 - **解决方案**：在 `.btn` CSS 规则后添加 `.btn svg { pointer-events: none }`，让 SVG 不捕获鼠标事件，点击直接穿透到 `<button>` 本身
-- **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+- **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
 ### 浏览按钮需传输入框当前值作为默认目录
 - **场景**：2026-05-28 浏览按钮改为 SVG 图标后，用户反馈点击浏览没有定位到输入框中的地址
 - **根因**：`browseFile("tr_src")` / `browseDir("svn_output")` 等调用只传了 inputId，没传 `initialDir` 参数，文件对话框每次都从默认位置打开
 - **解决方案**：所有浏览按钮的事件分支都先读取输入框当前值，提取目录部分作为 `initialDir` 传入。文件路径用 `substring(0, lastIndexOf("\\"或"/"))` 取目录，目录路径直接用
-- **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+- **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
+### 项目文件重组：Tkinter 旧版清理 + 核心代码集中到 toolbox_core/
+- **场景**：2026-05-29 工作目录混杂 Tkinter 旧版代码、测试脚本、Web 桌面版代码，零散 60+ 文件难以管理
+- **根因**：项目从 Tkinter 版演进到 Web 桌面版（pywebview + Flask）后，旧版代码及大量开发测试脚本未清理，造成文件冗余
+- **解决方案**：将 Web 桌面版核心代码（12 文件 + templates/splash/assets）全部移动到 `toolbox_core/`；删除 11 个 Tkinter 旧版独有文件（`svn_compare_gui.py`, `toolbox_tab_*.py`, `svn_oneclick_compare.py` 等）；根目录创建 `main.py` 作为入口；修复 `py_modules` 路径查找逻辑支持父目录兜底
+- **涉及文件**：[main.py](file:///c:/Users/admin/.qclaw/workspace/main.py), [desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py), [web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
 
 ### Web 版工作流日志加时间戳
 - **场景**：2026-05-28 工作流执行时日志没有时间显示，无法判断每个步骤的耗时

@@ -76,6 +76,32 @@ _window_visible = True
 _docker = None
 _is_dragging = False
 
+WS_EX_TOOLWINDOW = 0x80
+WS_EX_APPWINDOW = 0x40000
+
+
+def _hide_from_taskbar(hwnd):
+    try:
+        ex = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
+        ex = ex | WS_EX_TOOLWINDOW
+        ex = ex & ~WS_EX_APPWINDOW
+        ctypes.windll.user32.SetWindowLongW(hwnd, -20, ex)
+        win32gui.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
+                              win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE | win32con.SWP_FRAMECHANGED)
+    except Exception:
+        pass
+
+
+def _show_taskbar_icon(hwnd):
+    try:
+        ex = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
+        ex = ex & ~WS_EX_TOOLWINDOW
+        ctypes.windll.user32.SetWindowLongW(hwnd, -20, ex)
+        win32gui.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
+                              win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE | win32con.SWP_FRAMECHANGED)
+    except Exception:
+        pass
+
 
 class EdgeDocker:
     def __init__(self, window):
@@ -325,12 +351,11 @@ class EdgeDocker:
             self._animate(hwnd, rect[0], rect[1], target_x, target_y, ease_in=True)
             if seq == self._op_seq:
                 self.docked = edge
-                self._prev_fg = win32gui.GetForegroundWindow()
                 try:
                     ex = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
                     ctypes.windll.user32.SetWindowLongW(hwnd, -20, ex | 0x8)
                     win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0,
-                                          win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
+                                          win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE | win32con.SWP_FRAMECHANGED)
                     desktop = ctypes.windll.user32.FindWindowW("Progman", None)
                     if desktop:
                         ctypes.windll.user32.SwitchToThisWindow(desktop, True)
@@ -338,10 +363,15 @@ class EdgeDocker:
                                                           win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
                 except Exception:
                     pass
+                ctypes.windll.user32.ShowWindow(hwnd, 0)
+                self._prev_fg = 0
+                self._taskbar_activate = False
         except Exception:
             self._busy_until = 0.0
 
     def _slide_out(self, hwnd):
+        ctypes.windll.user32.ShowWindow(hwnd, 9)
+        _hide_from_taskbar(hwnd)
         self._op_seq += 1
         seq = self._op_seq
         self._animating_seq = seq
@@ -362,7 +392,7 @@ class EdgeDocker:
                     ex = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
                     ctypes.windll.user32.SetWindowLongW(hwnd, -20, ex & ~0x8)
                     win32gui.SetWindowPos(hwnd, win32con.HWND_NOTOPMOST, 0, 0, 0, 0,
-                                          win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
+                                          win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE | win32con.SWP_FRAMECHANGED)
                 except Exception:
                     pass
         except Exception:
@@ -445,6 +475,7 @@ def _show_window(icon, item=None):
         if _docker and _docker.docked:
             _undock_and_center(hwnd)
         else:
+            _show_taskbar_icon(hwnd)
             win32gui.SetForegroundWindow(hwnd)
 
 
@@ -657,9 +688,11 @@ def _save_window_rect():
 
 
 def _undock_and_center(hwnd):
+    ctypes.windll.user32.ShowWindow(hwnd, 9)
+    _show_taskbar_icon(hwnd)
     if _docker:
         _docker.docked = None
-        _docker._busy_until = time.perf_counter() + 0.6
+        _docker._busy_until = time.perf_counter() + 1.0
     try:
         _center_on_cursor_screen(hwnd)
         win32gui.SetForegroundWindow(hwnd)

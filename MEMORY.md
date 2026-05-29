@@ -98,6 +98,13 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 - **场景**：2026-05-28 `svn revert` 输出的中文路径在日志中显示为乱码（"鈽"等）
 - **根因**：`_svn_decode_output` 先试 `decode("utf-8")`，而 GBK 的中文字节（如"这"=D5E2）恰好在 UTF-8 中也是合法序列，解码"成功"但产生错字。`except` 永远不会触发，GBK 兜底永不执行
 - **解决方案**：两个解码函数都改为先试 GBK、再试 UTF-8。SVN 在中文 Windows 上的输出编码始终是系统代码页（GBK）
+
+### 贴边收缩后隐藏任务栏图标
+- **场景**：窗口拖到屏幕边缘贴边收缩后，任务栏图标仍然显示（与托盘图标共存），需要只保留托盘图标
+- **根因**：Windows 任务栏图标与窗口可见性直接绑定。任务栏调用 `ShowWindow(hwnd, 0)` 隐藏窗口后，任务栏图标自然消失；反之 `ShowWindow(hwnd, 9)` 恢复窗口则图标出现
+- **解决方案**：采用混合策略——① 贴边收缩时 `ShowWindow(hwnd, 0)` 隐藏窗口（任务栏图标消失）+ 仍可 `GetWindowRect` 获取位置；② 鼠标靠近弹出时 `ShowWindow(hwnd, 9)` 显示窗口后调用 `_hide_from_taskbar()`（设 `WS_EX_TOOLWINDOW` + 清 `WS_EX_APPWINDOW`），使弹出窗口可见但无任务栏按钮；③ 只有双击托盘图标 → `_undock_and_center()` / `_show_window()` 时才调用 `_show_taskbar_icon()` 恢复任务栏图标
+- **经验**：`_slide_in()` 中必须清空 `self._prev_fg` 和 `self._taskbar_activate`，否则 `_tick_maybe_undock()` 会在窗口隐藏后仍认为需要居中弹出，导致"一回缩就回中"的 bug
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
 ### merge 前全量 propdel --depth infinity 导致大型WC卡死

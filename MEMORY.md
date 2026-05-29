@@ -146,6 +146,12 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 - **解决方案**：彻底删除所有子类化代码（`_fallback_subclass`、`_subclass_window`、`_subclass_on_ui_thread` 及全部全局变量，~110 行）。窗口是 frameless 的，无标题栏 X 按钮，WM_CLOSE 仅由 Alt+F4 触发（无需拦截）；HTML 关闭按钮已通过 `fetch("/api/close")` 隐藏到托盘
 - **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
 
+### 文件搬家后路径依赖全面修复（_cmp_worker 双引 + 输出目录 + svn log 超时）
+- **场景**：2026-05-29 项目文件重组后 `svn_oneclick_compare.py` 被移到 `toolbox_core/`，但 `_cmp_worker.py` 留在根目录，导致对比模式 Step2 子进程找不到脚本、Step1 全量 `svn log` 超时 120s、默认输出目录指向 `toolbox_core/输出` 而非项目根目录
+- **根因**：`toolbox_core/` 中的 `svn_oneclick_compare.py` 用 `__file__` 计算的路径都指向 `toolbox_core/` 自身，但 `_cmp_worker.py`（被 `subprocess.Popen` 作为子进程启动）在根目录，且 `_cmp_worker.py` 的 `sys.path.insert(0, __file__)` 找不到 `toolbox_core/` 中的 `svn_oneclick_compare` 模块，形成双向断点
+- **解决方案**：① 复制 `_cmp_worker.py` 到 `toolbox_core/`（与 `svn_oneclick_compare.py` 同目录，同时修复 root→toolbox_core 和 toolbox_core→root 双向引用）；② `_get_file_revs` 的全量 `svn log` 加 `--limit 50`（只需最近的50个版本即可找到上一版本，避免 120s 超时）；③ 三个模式的默认输出目录全部改用 `os.path.join(__file__, "..")`（回退到项目根目录）；④ export 完成后调用 `SetProcessWorkingSetSize(-1,-1,-1)` 释放 Windows 文件缓存
+- **涉及文件**：[svn_oneclick_compare.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/svn_oneclick_compare.py), [_cmp_worker.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/_cmp_worker.py)
+
 ### 项目文件重组：Tkinter 旧版清理 + 核心代码集中到 toolbox_core/
 - **场景**：2026-05-29 工作目录混杂 Tkinter 旧版代码、测试脚本、Web 桌面版代码，零散 60+ 文件难以管理
 - **根因**：项目从 Tkinter 版演进到 Web 桌面版（pywebview + Flask）后，旧版代码及大量开发测试脚本未清理，造成文件冗余

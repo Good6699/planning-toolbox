@@ -796,6 +796,16 @@ def _subclass_window(hwnd):
         _fallback_subclass(hwnd)
 
 
+def _subclass_on_ui_thread():
+    hwnd = _find_window_hwnd(timeout=3)
+    if not hwnd:
+        return
+    try:
+        _subclass_window(hwnd)
+    except Exception as e:
+        print(f"[子类化异常] {e}", file=sys.stderr)
+
+
 def _find_window_hwnd(timeout=5):
     start = time.time()
     while time.time() - start < timeout:
@@ -935,22 +945,6 @@ def main():
                 pass
         window.events.shown += _restore_window_size
 
-    def _init_window(hwnd=None):
-        if hwnd is None:
-            hwnd = _find_window_hwnd(timeout=10)
-        if not hwnd:
-            return
-        try:
-            _subclass_window(hwnd)
-        except Exception as e:
-            print(f"[子类化异常] {e}", file=sys.stderr)
-
-    hwnd = _find_window_hwnd(timeout=0.3)
-    if hwnd:
-        _init_window(hwnd)
-    else:
-        threading.Thread(target=_init_window, daemon=True).start()
-
     def _sigint_handler(signum, frame):
         os._exit(0)
 
@@ -958,6 +952,7 @@ def main():
 
     def _boot_app(window):
         window.events.loaded.wait(timeout=30)
+        _subclass_on_ui_thread()
         _set_progress(window, 15, "界面就绪")
 
         global _docker

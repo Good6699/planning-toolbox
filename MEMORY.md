@@ -132,6 +132,15 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 - **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
 ### 项目文件重组：Tkinter 旧版清理 + 核心代码集中到 toolbox_core/
+
+### 窗口子类化必须在 UI 线程执行（否则 WebView2 布局卡死）
+- **场景**：2026-05-29 更新代码后重启工具箱，闪屏到 100% 后右侧内容区空白，等 43 秒后 favicon 404 出现才渲染。第二次重启正常。偶尔复现。
+- **根因**：`_init_window()` 在 daemon 线程中调用 `_fallback_subclass()` 的 `SetWindowLongPtrW(hwnd, GWLP_WNDPROC, new_ptr)` 替换顶层窗口过程。这个 API 不是线程安全的，与 pywebview 主 UI 线程的 WebView2 导航期间窗口消息处理产生竞态，导致 Chromium 渲染引擎**局部假死**（页面 HTTP 200 已返回但布局计算不完成）。43 秒为 Chromium 内部超时时间，超时后渲染引擎恢复。
+- **触发条件**：`SetWindowSubclass` 总是失败（=每次启动都走 fallback），但竞态仅在 `_boot_app` 执行 `load_url()` 的同时 daemon 线程执行 `SetWindowLongPtrW` 的时间窗口内发生——约 50% 概率
+- **解决方案**：删除 daemon 线程中的 `_init_window()`（含 `_find_window_hwnd` 轮询 + 线程启动），改为在 `_boot_app()` 中新建 `_subclass_on_ui_thread()` 调用，确保 WNDPROC 替换在 pywebview 的 UI 线程同步执行
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
+
+### 项目文件重组：Tkinter 旧版清理 + 核心代码集中到 toolbox_core/
 - **场景**：2026-05-29 工作目录混杂 Tkinter 旧版代码、测试脚本、Web 桌面版代码，零散 60+ 文件难以管理
 - **根因**：项目从 Tkinter 版演进到 Web 桌面版（pywebview + Flask）后，旧版代码及大量开发测试脚本未清理，造成文件冗余
 - **解决方案**：将 Web 桌面版核心代码（12 文件 + templates/splash/assets）全部移动到 `toolbox_core/`；删除 11 个 Tkinter 旧版独有文件（`svn_compare_gui.py`, `toolbox_tab_*.py`, `svn_oneclick_compare.py` 等）；根目录创建 `main.py` 作为入口；修复 `py_modules` 路径查找逻辑支持父目录兜底

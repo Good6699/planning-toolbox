@@ -1061,6 +1061,12 @@ while (true):
 - **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### SVN XML 日期为 UTC，需转本地时区
+- **场景**：2026-05-29 版本列表显示的时间为 13:05，实际 SVN 日志显示 21:05（北京时间）
+- **根因**：`svn log --xml` 返回的 `<date>` 是 UTC 格式（`2026-05-29T13:05:56.123456Z`），后端直接 `.text[:19]` 截取未做时区转换，前端直接显示 UTC 时间
+- **解决方案**：新增 `_parse_svn_date()` 函数：`Z` → `+00:00` → `datetime.fromisoformat` → `astimezone()` 转本地 → `strftime` 输出 `YYYY-MM-DD HH:MM:SS`
+- **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/toolbox_merge.py)
+
 ### UI：⚙ 高级设置按钮移至 "过滤与输出" 标题右侧并缩小
 - **场景**：2026-05-29 用户觉得 SVN 记录页签右侧的 ⚙ 高级设置按钮位置太独立（单独占一行），且太大（font-size:32px）
 - **解决方案**：将按钮从独自一行（输出目录下方的 flex 容器）移到 `.section-label` 标题行右侧，使用 flexbox `justify-content:space-between` 布局，字号从 32px 缩小到 18px

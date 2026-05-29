@@ -52,6 +52,17 @@ def _run_svn(cmd, timeout=120):
     return result.stdout
 
 
+def _parse_svn_date(text):
+    """将 SVN XML 格式的 UTC 时间 (2026-05-29T13:05:56.123456Z) 转为本地时间字符串"""
+    try:
+        text = text.strip().replace("Z", "+00:00")
+        dt = datetime.fromisoformat(text)
+        local = dt.astimezone()
+        return local.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return text[:19] if text else ""
+
+
 def svn_log(source_url, start_date, end_date, author=None, keyword=None,
             svn_user=None, svn_pass=None, verbose=False):
     """查询SVN提交日志，返回版本列表。verbose=True 时返回文件列表"""
@@ -79,7 +90,7 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
             v = {
                 "rev": int(rev) if rev.isdigit() else rev,
                 "author": author_el.text if author_el is not None else "",
-                "date": date_el.text[:19] if date_el is not None and date_el.text else "",
+                "date": _parse_svn_date(date_el.text) if date_el is not None and date_el.text else "",
                 "msg": (msg_el.text or "").strip() if msg_el is not None else "",
             }
             if verbose:

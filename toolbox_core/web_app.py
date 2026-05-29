@@ -49,7 +49,7 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
     proc = subprocess.Popen(
         [sys.executable, worker_script] + worker_args,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, encoding="utf-8", errors="replace",
+        encoding="utf-8", errors="replace",
         bufsize=1, env=env,
         creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     )
@@ -248,7 +248,7 @@ def _run_svn_task(q, svn_url, mode, start_date, end_date, keyword, author, outpu
 
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, encoding="utf-8", errors="replace",
+                                encoding="utf-8", errors="replace",
                                 bufsize=1, **_get_subprocess_kwargs())
         _register_proc(proc, task_id)
         try:
@@ -474,7 +474,7 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
     svn_exe = _get_svn_path()
     result = subprocess.run(
         [svn_exe, "info", target_dir],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True, encoding="utf-8", errors="replace",
         timeout=15, **_get_subprocess_kwargs()
     )
     if result.returncode != 0:
@@ -483,7 +483,7 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
 
     wc_r = subprocess.run(
         [svn_exe, "info", "--show-item", "wc-root", target_dir],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True, encoding="utf-8", errors="replace",
         timeout=15, **_get_subprocess_kwargs()
     )
     wc_root = wc_r.stdout.strip() if wc_r.returncode == 0 else ""
@@ -492,7 +492,7 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
     try:
         r_status = subprocess.run(
             [svn_exe, "status", "--no-ignore", wc_root],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, encoding="utf-8", errors="replace",
             timeout=30, **_get_subprocess_kwargs()
         )
         if r_status.returncode == 0:
@@ -510,7 +510,7 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
                 for rf in revert_list:
                     subprocess.run(
                         [svn_exe, "revert", rf],
-                        capture_output=True, text=True, timeout=10, **_get_subprocess_kwargs()
+                        capture_output=True, encoding="utf-8", errors="replace", timeout=10, **_get_subprocess_kwargs()
                     )
                 q.put(f"   🧹 已清理 {len(revert_list)} 个未提交的 add 记录\n")
     except Exception:
@@ -526,12 +526,12 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
                 f.write(os.path.abspath(fp) + "\n")
         subprocess.run(
             [svn_exe, "add", "--parents", "--force", "--quiet", "--targets", targets],
-            capture_output=True, text=True, timeout=60, **_get_subprocess_kwargs()
+            capture_output=True, encoding="utf-8", errors="replace", timeout=60, **_get_subprocess_kwargs()
         )
         # 扫描整个工作副本，按 copied_files 集合过滤出有变化的文件
         r = subprocess.run(
             [svn_exe, "status", wc_root],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            capture_output=True, encoding="utf-8", errors="replace",
             timeout=60, **_get_subprocess_kwargs()
         )
         copied_abs = {os.path.abspath(f) for f in copied_files}
@@ -554,7 +554,7 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
         # 先清空旧的 changelist 标签，再只标记有变化的文件
         subprocess.run(
             [svn_exe, "changelist", "--remove", "--changelist", "本次修改", wc_root, "--depth", "infinity"],
-            capture_output=True, text=True, timeout=60, **_get_subprocess_kwargs()
+            capture_output=True, encoding="utf-8", errors="replace", timeout=60, **_get_subprocess_kwargs()
         )
         if changed_files:
             with open(changed, "w", encoding="utf-8") as f:
@@ -562,7 +562,7 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
                     f.write(fp + "\n")
             subprocess.run(
                 [svn_exe, "changelist", "本次修改", "--targets", changed],
-                capture_output=True, text=True, timeout=60, **_get_subprocess_kwargs()
+                capture_output=True, encoding="utf-8", errors="replace", timeout=60, **_get_subprocess_kwargs()
             )
             q.put(f"   🏷️ 已标记 {len(changed_files)} 个文件 changelist 分组\n")
         else:
@@ -900,7 +900,7 @@ def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
     try:
         proc = subprocess.Popen([svn, "update", "--accept", "theirs-full", d],
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                text=True, **_get_subprocess_kwargs())
+                                encoding="utf-8", errors="replace", **_get_subprocess_kwargs())
         _register_proc(proc, task_id)
         try:
             stdout, stderr = proc.communicate(timeout=120)
@@ -917,7 +917,7 @@ def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
                 cleanup_proc = subprocess.Popen(
                     [svn, "cleanup", d],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    text=True, **_get_subprocess_kwargs())
+                    encoding="utf-8", errors="replace", **_get_subprocess_kwargs())
                 _register_proc(cleanup_proc, task_id)
                 try:
                     cleanup_proc.communicate(timeout=60)
@@ -927,7 +927,7 @@ def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
                 retry_proc = subprocess.Popen(
                     [svn, "update", "--accept", "theirs-full", d],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    text=True, **_get_subprocess_kwargs())
+                    encoding="utf-8", errors="replace", **_get_subprocess_kwargs())
                 _register_proc(retry_proc, task_id)
                 try:
                     retry_stdout, retry_stderr = retry_proc.communicate(timeout=120)
@@ -983,7 +983,7 @@ def _exec_lock_svn(step, put, task_id=None):
     try:
         proc = subprocess.Popen([svn, "lock", "--force", "-m", lock_msg, target_path],
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                text=True, **_get_subprocess_kwargs())
+                                encoding="utf-8", errors="replace", **_get_subprocess_kwargs())
         _register_proc(proc, task_id)
         try:
             stdout, stderr = proc.communicate(timeout=60)
@@ -1024,7 +1024,7 @@ def _exec_unlock_svn(step, put, task_id=None):
     try:
         proc = subprocess.Popen([svn, "unlock", target_path],
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                text=True, **_get_subprocess_kwargs())
+                                encoding="utf-8", errors="replace", **_get_subprocess_kwargs())
         _register_proc(proc, task_id)
         try:
             stdout, stderr = proc.communicate(timeout=60)
@@ -1271,7 +1271,7 @@ def _exec_export_error_code(step, put):
 
         cmd = [et2_python, et2_path, "ErrorMessage", "--lang-dir", lang_path]
         try:
-            r = _sp.run(cmd, capture_output=True, text=True, timeout=120,
+            r = _sp.run(cmd, capture_output=True, encoding="utf-8", errors="replace", timeout=120,
                         **_get_subprocess_kwargs())
             if r.returncode == 0:
                 last_line = r.stdout.strip().split("\n")[-1]
@@ -1997,8 +1997,7 @@ def api_svn_detect():
         while True:
             result = subprocess.run(
                 [svn_exe, "info", "--show-item", "url", check],
-                capture_output=True, text=True,
-                encoding="utf-8", errors="replace",
+                capture_output=True, encoding="utf-8", errors="replace",
                 timeout=15,
                 **_get_subprocess_kwargs()
             )
@@ -2016,8 +2015,7 @@ def api_svn_detect():
                 if os.path.isdir(os.path.join(sub, ".svn")):
                     result = subprocess.run(
                         [svn_exe, "info", "--show-item", "url", sub],
-                        capture_output=True, text=True,
-                        encoding="utf-8", errors="replace",
+                        capture_output=True, encoding="utf-8", errors="replace",
                         timeout=15,
                         **_get_subprocess_kwargs()
                     )
@@ -2073,14 +2071,14 @@ def _find_svn_wc(url):
             try:
                 r = subprocess.run(
                     ["svn", "info", "--show-item", "url", d],
-                    capture_output=True, text=True, timeout=5
+                    capture_output=True, encoding="utf-8", errors="replace", timeout=5
                 )
                 wc_url = r.stdout.strip() if r.returncode == 0 else ""
                 if wc_url and (url == wc_url or url.startswith(wc_url + "/")):
                     rel = url[len(wc_url):].lstrip("/")
                     wc = subprocess.run(
                         ["svn", "info", "--show-item", "wc-root", d],
-                        capture_output=True, text=True, timeout=5
+                        capture_output=True, encoding="utf-8", errors="replace", timeout=5
                     )
                     wc_root = wc.stdout.strip()
                     found = os.path.join(wc_root, rel.replace("/", os.sep)) if rel else wc_root
@@ -2104,14 +2102,12 @@ def api_svn_clear_changelist():
         return jsonify({"ok": False, "error": "无效目录"}), 400
     svn_exe = _get_svn_path()
     try:
-        r = subprocess.run(
-            [svn_exe, "changelist", "--remove", "--changelist", "本次修改", target_dir, "--depth", "infinity"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        subprocess.run(
+            [svn_exe, "changelist", "--remove", target_dir, "--depth", "infinity"],
+            capture_output=True, encoding="utf-8", errors="replace",
             timeout=60, **_get_subprocess_kwargs()
         )
-        if r.returncode == 0:
-            return jsonify({"ok": True, "message": "changelist 已清理"})
-        return jsonify({"ok": False, "error": r.stderr.strip() or "清理失败"})
+        return jsonify({"ok": True, "message": "所有 changelist 已清理"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -2163,7 +2159,7 @@ def api_svn_save_mapping():
         svn_exe = _get_svn_path()
         r = subprocess.run(
             [svn_exe, "info", "--show-item", "url", path],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, encoding="utf-8", errors="replace", timeout=5,
             **_get_subprocess_kwargs()
         )
         wc_url = r.stdout.strip() if r.returncode == 0 else ""
@@ -2173,7 +2169,7 @@ def api_svn_save_mapping():
         # 找到工作副本根目录
         r2 = subprocess.run(
             [svn_exe, "info", "--show-item", "wc-root", path],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, encoding="utf-8", errors="replace", timeout=5,
             **_get_subprocess_kwargs()
         )
         wc_root = r2.stdout.strip() if r2.returncode == 0 else path

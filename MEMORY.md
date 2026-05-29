@@ -1033,3 +1033,36 @@ while (true):
 - **解决方案**：`_svn_batch_revert` 的逐文件回落中，目录自动加 `--depth infinity`，根目录（==target_path）跳过由末尾统一处理。末尾追加 `svn revert target_path --depth empty` 清根目录属性
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
+### subprocess text=True 在 Python 3.13 触发 RuntimeWarning
+- **场景**：2026-05-29 Python 3.13 下运行 svn 命令时，控制台输出 `RuntimeWarning: line buffering (buffering=1) isn't supported in binary mode`
+- **根因**：`subprocess.run(..., capture_output=True, text=True, ...)` 内部自动启用 `buffering=1`（行缓冲），但 stdout/stderr 底层是二进制管道（`'rb'`）。Python 3.13 新增检查，二进制流不支持行缓冲
+- **解决方案**：将 `text=True` 替换为显式 `encoding="utf-8", errors="replace"`，达到相同效果（返回 str）但不触发 buffering 自动启用。共修复 11 处调用
+- **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/toolbox_merge.py)
+
+### 语义合并 changelist 标签的三个根因及修复
+- **场景**：2026-05-29 语义合并完成后 367 个变更文件只有 273 个标入 changelist，94 个漏标
+- **根因1（? 未跟踪文件导致全体失败）**：`changed_flags = {'M', 'A', 'R', '!', '?'}` 把 `?` 文件写入了 `--targets` 列表。`svn changelist` 遇到 `?` 状态文件报 E200009，整个 `--targets` 原子操作失败，后续所有文件都不标记
+- **修复1**：flags 缩小为 `{'M', 'A', 'R'}`，排除 `?` 和 `!`
+- **根因2（目录静默跳过）**：`svn changelist` 只支持文件不支持目录（官方确认：changelists can be assigned only to files），目录会被静默跳过
+- **修复2**：写入 `chg_file` 前 `os.path.exists(p)` 过滤掉不存在的路径（幽灵 add）
+- **根因3（merge 目录时递归创建的子文件漏标）**：用户勾选了 D3Atlas156 目录，`merged_abs` 只含目录路径，但 `svn merge` 递归创建了内部文件，文件不在集合中
+- **修复3**：匹配逻辑增加父目录回退——文件不在 `merged_abs` 但父目录在则也纳入
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+
+### 语义合并缺少目录删除分支，导致被删目录残留
+- **场景**：2026-05-29 CorruptRealmPanel 目录在源端已被删除，合并后 `svn status` 显示为 `?` 未跟踪目录残留
+- **根因**：`_svn_merge_one_file` 只有 `action=del + !is_dir` 分支（文件删除），没有 `action=del + is_dir` 分支（目录删除）。目录删除落到 `_svn_merge_with_retry` → `export` 尝试导出 → 源端目录已不存在 → E160013 失败
+- **解决方案**：新增 `action=del + is_dir` 分支，调用 `_svn_delete_file` 执行 `svn delete --force` 删除目录
+- **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/toolbox_merge.py)
+
+### 日志自动滚动改为 atBottom 检测
+- **场景**：2026-05-29 语义合并日志输出时，用户手动上滑查看历史，立即被自动拉回底部
+- **根因**：`_logAppend` 用 `scrollTop < 1` 作为是否在顶部的判断，条件几乎永远为 false → 永远自动滚
+- **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
+### UI：⚙ 高级设置按钮移至 "过滤与输出" 标题右侧并缩小
+- **场景**：2026-05-29 用户觉得 SVN 记录页签右侧的 ⚙ 高级设置按钮位置太独立（单独占一行），且太大（font-size:32px）
+- **解决方案**：将按钮从独自一行（输出目录下方的 flex 容器）移到 `.section-label` 标题行右侧，使用 flexbox `justify-content:space-between` 布局，字号从 32px 缩小到 18px
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+

@@ -502,6 +502,19 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
         _log(f"  ⚠ 删除失败: {msg}", "warn")
         return 0, 1, 0, [file_path]
 
+    # 目录删除 → delete --force
+    if action == "del" and is_dir:
+        if not os.path.exists(local_file):
+            _log(f"  ▶ 目录已被删除，跳过: {file_path}", "info")
+            return 1, 0, 0, []
+        _log(f"  → 删除目录: {file_path}", "info")
+        ok, msg = _svn_delete_file(svn_exe, local_file, auth_args)
+        if ok:
+            _log(f"  ✅ 已删除目录: {file_path}", "ok")
+            return 1, 0, 0, []
+        _log(f"  ⚠ 删除目录失败: {msg}", "warn")
+        return 0, 1, 0, [file_path]
+
     # 目录删除 + 文件修改：统一走 svn merge
     if action != "add" and not os.path.exists(local_file):
         _log(f"⏭ 跳过(本地不存在): {file_path}", "warn")

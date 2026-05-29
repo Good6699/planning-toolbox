@@ -78,7 +78,11 @@ upload > L > 文件.3     → 复制合并左列第4个文件
 | 路径 | 控件 | 含义 |
 |------|------|------|
 | `merge > F > 源SVN地址` | `#merge_source` | 源SVN URL |
+| `merge > F > 源SVN地址 > 浏览` | `@browse-merge-source` | 浏览本地SVN工作副本 |
+| `merge > F > 源SVN地址 > 打开` | `@open-merge-source` | 打开文件夹 |
 | `merge > F > 目标路径` | `#merge_target` | 本地工作副本路径 |
+| `merge > F > 目标路径 > 浏览` | `@browse-merge-target` | 浏览本地目录 |
+| `merge > F > 目标路径 > 打开` | `@open-merge-target` | 打开文件夹 |
 | `merge > F > 起始日期` | `#merge_start` | 时间范围起始 |
 | `merge > F > 结束日期` | `#merge_end` | 时间范围结束 |
 | `merge > F > 作者` | `#merge_author` | 提交者过滤 |
@@ -211,8 +215,10 @@ upload > L > 文件.3     → 复制合并左列第4个文件
 |------|------|------|
 | `tr > L > 文件 > 路径` | `#tr_src` | 翻译文件路径 |
 | `tr > L > 文件 > 浏览` | `@browse-tr-src` | 浏览文件 |
+| `tr > L > 文件 > 打开` | `@open-tr-src` | 打开文件所在目录 |
 | `tr > L > 文件 > 参考` | `#tr_ref` | 参考文件 |
 | `tr > L > 文件 > 参考浏览` | `@browse-tr-ref` | 浏览参考 |
+| `tr > L > 文件 > 参考打开` | `@open-tr-ref` | 打开参考文件所在目录 |
 | `tr > L > 语言 > 源语言` | `#tr_src_lang` | 源语言列 |
 | `tr > L > 语言 > 高级` | `@tr-lang-adv-settings` | ⚙ 语言ID高级设置 |
 | `tr > L > 语言 > 目标.N` | `#tr_tgt_langs .checkbox` | 第N个目标语言 |
@@ -222,6 +228,7 @@ upload > L > 文件.3     → 复制合并左列第4个文件
 | `tr > R > API > 模型` | `#tr_model` | 模型名 |
 | `tr > R > 输出 > 目录` | `#tr_out` | 输出目录 |
 | `tr > R > 输出 > 浏览` | `@browse-tr-out` | 浏览输出 |
+| `tr > R > 输出 > 打开` | `@open-tr-out` | 打开输出目录 |
 | `tr > R > 输出 > Prompt` | `#tr_prompt` | 翻译Prompt |
 | `tr > R > 输出 > 批处理量` | `#tr_batch` | 批处理量数字 |
 | `tr > F > 日志` | `#tr_log` | 执行日志 |

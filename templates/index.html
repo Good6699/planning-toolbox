@@ -328,6 +328,9 @@ input::placeholder,textarea::placeholder{
 .btn:active{
   transform:translateY(0);
 }
+.btn svg{
+  pointer-events:none;
+}
 .btn-primary{
   background:linear-gradient(180deg,#67adff,#4b8dff);
   color:#fff;
@@ -1632,8 +1635,8 @@ function buildSvnTab(panel) {
           <div class="card-title">SVN 地址</div>
           <div class="flex-row">
             <input type="text" id="svn_url" placeholder="输入 SVN 仓库 URL" style="flex:1" autocomplete="off" class="svn-url-drop-target">
-            <button class="btn btn-normal" style="flex-shrink:0" data-action="browse-svn-url" title="浏览本地SVN工作副本">浏览</button>
-            <button class="btn btn-normal" style="flex-shrink:0" data-action="open-svn-url" title="打开文件夹">打开</button>
+            <button class="btn btn-normal" style="flex-shrink:0" data-action="browse-svn-url" title="浏览本地SVN工作副本"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
+            <button class="btn btn-normal" style="flex-shrink:0" data-action="open-svn-url" title="打开文件夹"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
           </div>
           <div class="svn-url-drop-hint">可将文件/文件夹拖拽到输入框自动识别 SVN 地址</div>
         </div>
@@ -1672,8 +1675,8 @@ function buildSvnTab(panel) {
             <label>输出目录</label>
             <div class="flex-row">
               <input type="text" id="svn_output" placeholder="选择输出目录" style="flex:1" autocomplete="off">
-              <button class="btn btn-normal" style="flex-shrink:0" data-action="browse-svn-output" id="svn_browse_btn">浏览</button>
-              <button class="btn btn-normal" style="flex-shrink:0" data-action="open-svn-output" title="打开输出文件夹" id="svn_open_btn">打开</button>
+              <button class="btn btn-normal" style="flex-shrink:0" data-action="browse-svn-output" id="svn_browse_btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
+              <button class="btn btn-normal" style="flex-shrink:0" data-action="open-svn-output" title="打开输出文件夹" id="svn_open_btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
             </div>
             <div style="display:flex;margin-top:8px">
               <div style="margin-left:auto;width:56px;text-align:center">
@@ -1784,8 +1787,8 @@ function buildUploadTab(panel) {
           <div class="card-title">源目录</div>
           <div class="flex-row">
             <input type="text" id="upload_src" placeholder="选择源目录" style="flex:1" autocomplete="off">
-            <button class="btn btn-normal" data-action="browse-upload-src">浏览</button>
-            <button class="btn btn-normal" data-action="refresh-files">刷新</button>
+            <button class="btn btn-normal" data-action="browse-upload-src"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
+            <button class="btn btn-normal" data-action="refresh-files" title="刷新文件列表"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115.4-5.6L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15.4 5.6L3 16"/></svg></button>
           </div>
         </div>
         <div class="card">
@@ -1806,7 +1809,7 @@ function buildUploadTab(panel) {
             <label>SVN 目标目录</label>
             <div class="flex-row">
               <input type="text" id="upload_tgt" placeholder="选择目标 SVN 工作目录" style="flex:1" autocomplete="off">
-              <button class="btn btn-normal" data-action="browse-upload-tgt">浏览</button>
+              <button class="btn btn-normal" data-action="browse-upload-tgt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
             </div>
           </div>
         </div>
@@ -2174,7 +2177,7 @@ function buildWorkflowTab(panel) {
     const _fb = (label, dataKey, id, browseType) => `
       <div class="form-group"><label>${label}</label>
         <div class="flex-row"><input type="text" class="wf-modal-input" id="${id}" data-key="${dataKey}" value="${v(dataKey)}" style="flex:1" placeholder="${browseType==='dir'?'选择目录':'选择文件'}">
-        <button class="btn btn-normal btn-sm" onclick="(function(t,i){var v=document.getElementById(i).value.trim(),d=v.substring(0,v.lastIndexOf('\\\\'));if(!d)d=v;if(t==='file')browseFile(i,d||'');else browseDir(i,null,d||'');})('${browseType.replace(/'/g,"\\'")}','${id}')">浏览</button></div></div>`;
+        <button class="btn btn-normal btn-sm" onclick="(function(t,i){var v=document.getElementById(i).value.trim(),d=v.substring(0,v.lastIndexOf('\\\\'));if(!d)d=v;if(t==='file')browseFile(i,d||'');else browseDir(i,null,d||'');})('${browseType.replace(/'/g,"\\'")}','${id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>`;
     const m = {
       export_text: `
         ${_fb("主文件路径","input_file","wf_m_input_file","file")}
@@ -2527,14 +2530,16 @@ function buildTranslateTab(panel) {
             <label>文件路径</label>
             <div class="flex-row">
               <input type="text" id="tr_src" placeholder="选择要翻译的 Excel 文件" style="flex:1" autocomplete="off">
-              <button class="btn btn-normal" data-action="browse-tr-src">浏览</button>
+              <button class="btn btn-normal" data-action="browse-tr-src"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
+              <button class="btn btn-normal" data-action="open-tr-src" title="打开文件所在目录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
             </div>
           </div>
           <div class="form-group">
             <label>参考文件</label>
             <div class="flex-row">
               <input type="text" id="tr_ref" placeholder="参考翻译文件（可选）" style="flex:1" autocomplete="off">
-              <button class="btn btn-normal" data-action="browse-tr-ref">浏览</button>
+              <button class="btn btn-normal" data-action="browse-tr-ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
+              <button class="btn btn-normal" data-action="open-tr-ref" title="打开文件所在目录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
             </div>
           </div>
         </div>
@@ -2578,7 +2583,8 @@ function buildTranslateTab(panel) {
             <label>输出目录</label>
             <div class="flex-row">
               <input type="text" id="tr_out" value="${escapeHtml(out)}" style="flex:1">
-              <button class="btn btn-normal" data-action="browse-tr-out">浏览</button>
+              <button class="btn btn-normal" data-action="browse-tr-out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
+              <button class="btn btn-normal" data-action="open-tr-out" title="打开输出目录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
             </div>
           </div>
           <div class="form-group">
@@ -3277,11 +3283,19 @@ function buildMergeTab(panel) {
           <div class="card-title">SVN 地址</div>
           <div class="form-group">
             <label>源SVN地址（读取版本、变更文件）</label>
-            <input type="text" id="merge_source" placeholder="输入源SVN仓库URL，如 http://svn/repo/branches/xxx" autocomplete="off">
+            <div class="flex-row">
+              <input type="text" id="merge_source" placeholder="输入源SVN仓库URL，如 http://svn/repo/branches/xxx" autocomplete="off" style="flex:1">
+              <button class="btn btn-normal" data-action="browse-merge-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
+              <button class="btn btn-normal" data-action="open-merge-source" title="打开文件夹"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
+            </div>
           </div>
           <div class="form-group">
             <label>目标路径（合并落地的本地工作副本路径）</label>
-            <input type="text" id="merge_target" placeholder="输入本地SVN工作副本路径，如 D:/workspace/project" autocomplete="off">
+            <div class="flex-row">
+              <input type="text" id="merge_target" placeholder="输入本地SVN工作副本路径，如 D:/workspace/project" autocomplete="off" style="flex:1">
+              <button class="btn btn-normal" data-action="browse-merge-target"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
+              <button class="btn btn-normal" data-action="open-merge-target" title="打开文件夹"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
+            </div>
           </div>
         </div>
       </div>
@@ -3905,7 +3919,11 @@ document.addEventListener("click",e=>{
     case "tr-lang-adv-settings": openTrLangAdvSettings(); break;
     case "tr-lang-close-adv": closeTrLangAdvSettings(); break;
     case "tr-lang-save-adv": saveTrLangAdvSettings(); break;
-    case "browse-svn-output": browseDir("svn_output"); break;
+    case "browse-svn-output": {
+      const _so = document.getElementById("svn_output").value.trim();
+      browseDir("svn_output", null, _so || "");
+      break;
+    }
     case "browse-svn-url": {
       const v = document.getElementById("svn_url").value.trim();
       if (v.startsWith("http")) {
@@ -3935,14 +3953,79 @@ document.addEventListener("click",e=>{
       if (_p) _openFolder(_p);
       break;
     }
-    case "browse-upload-src": browseDir("upload_src", refreshFiles); break;
-    case "browse-upload-tgt": browseDir("upload_tgt"); break;
+    case "browse-upload-src": {
+      const _us = document.getElementById("upload_src").value.trim();
+      browseDir("upload_src", refreshFiles, _us || "");
+      break;
+    }
+    case "browse-merge-source": {
+      const _ms0 = document.getElementById("merge_source").value.trim();
+      const _msDir = _ms0 ? (_ms0.substring(0, Math.max(_ms0.lastIndexOf("\\"), _ms0.lastIndexOf("/"))) || _ms0) : "";
+      browseDir("merge_source", null, _msDir);
+      break;
+    }
+    case "open-merge-source": {
+      const _ms = document.getElementById("merge_source").value.trim();
+      if (!_ms) break;
+      if (_ms.startsWith("http")) {
+        fetch("/api/svn/open-wc", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:_ms})})
+          .then(r=>r.json()).then(d=>{if(!d.ok) _showToast(d.error||"未找到本地副本");});
+      } else {
+        _openFolder(_ms);
+      }
+      break;
+    }
+    case "browse-merge-target": {
+      const _mt0 = document.getElementById("merge_target").value.trim();
+      const _mtDir = _mt0 ? (_mt0.substring(0, Math.max(_mt0.lastIndexOf("\\"), _mt0.lastIndexOf("/"))) || _mt0) : "";
+      browseDir("merge_target", null, _mtDir);
+      break;
+    }
+    case "open-merge-target": {
+      const _mt = document.getElementById("merge_target").value.trim();
+      if (_mt) _openFolder(_mt);
+      break;
+    }
+    case "browse-upload-tgt": {
+      const _ut = document.getElementById("upload_tgt").value.trim();
+      browseDir("upload_tgt", null, _ut || "");
+      break;
+    }
     case "refresh-files": refreshFiles(); break;
     case "select-all": selectAllFiles(true); break;
     case "select-none": selectAllFiles(false); break;
-    case "browse-tr-src": browseFile("tr_src"); break;
-    case "browse-tr-ref": browseFile("tr_ref"); break;
-    case "browse-tr-out": browseDir("tr_out"); break;
+    case "browse-tr-src": {
+      const _ts = document.getElementById("tr_src").value.trim();
+      const _tsDir = _ts ? (_ts.substring(0, Math.max(_ts.lastIndexOf("\\"), _ts.lastIndexOf("/"))) || _ts) : "";
+      browseFile("tr_src", _tsDir);
+      break;
+    }
+    case "open-tr-src": {
+      const _s = document.getElementById("tr_src").value.trim();
+      if (_s) _openFolder(_s);
+      break;
+    }
+    case "open-tr-ref": {
+      const _r = document.getElementById("tr_ref").value.trim();
+      if (_r) _openFolder(_r);
+      break;
+    }
+    case "browse-tr-ref": {
+      const _tr = document.getElementById("tr_ref").value.trim();
+      const _trDir = _tr ? (_tr.substring(0, Math.max(_tr.lastIndexOf("\\"), _tr.lastIndexOf("/"))) || _tr) : "";
+      browseFile("tr_ref", _trDir);
+      break;
+    }
+    case "browse-tr-out": {
+      const _to = document.getElementById("tr_out").value.trim();
+      browseDir("tr_out", null, _to || "");
+      break;
+    }
+    case "open-tr-out": {
+      const _o = document.getElementById("tr_out").value.trim();
+      if (_o) _openFolder(_o);
+      break;
+    }
     case "close-dir-modal": closeDirModal(); break;
     case "confirm-dir": confirmDir(); break;
     case "dismiss-zoom-warn": {

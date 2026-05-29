@@ -104,6 +104,18 @@
 - **解决方案**：新流程压缩为 `cleanup → status（1 次全量）→ 备份排除文件 → svn revert -R（1 次全量回退所有修改+属性）→ 恢复排除文件 → revert --depth empty 清根属性`。`svn revert -R` 一次性处理所有内容修改和属性修改（包括 mergeinfo/mime-type），不需要额外 propdel。排除文件用文件系统备份/恢复保护，不依赖 status 过滤。删掉了 6 个废弃函数（~200 行死代码）
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
+### SVG 图标按钮点击穿透问题
+- **场景**：2026-05-28 将浏览/打开按钮从文字改为 SVG 图标后，点击无反应
+- **根因**：`event.target` 是 `<svg>` 或 `<path>` 元素，不是 `<button>`，`closest("[data-action]")` 无法匹配到按钮的 `data-action` 属性；点击事件进入全局委托分支但找不到 action，不做任何处理
+- **解决方案**：在 `.btn` CSS 规则后添加 `.btn svg { pointer-events: none }`，让 SVG 不捕获鼠标事件，点击直接穿透到 `<button>` 本身
+- **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
+### 浏览按钮需传输入框当前值作为默认目录
+- **场景**：2026-05-28 浏览按钮改为 SVG 图标后，用户反馈点击浏览没有定位到输入框中的地址
+- **根因**：`browseFile("tr_src")` / `browseDir("svn_output")` 等调用只传了 inputId，没传 `initialDir` 参数，文件对话框每次都从默认位置打开
+- **解决方案**：所有浏览按钮的事件分支都先读取输入框当前值，提取目录部分作为 `initialDir` 传入。文件路径用 `substring(0, lastIndexOf("\\"或"/"))` 取目录，目录路径直接用
+- **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/templates/index.html)
+
 ### Web 版工作流日志加时间戳
 - **场景**：2026-05-28 工作流执行时日志没有时间显示，无法判断每个步骤的耗时
 - **根因**：`_run_wf_task` 的 `_put` 直接 `q.put(msg)` 不加时间戳，而桌面版 `_wlog` 已有 `[{ts}]` 前缀

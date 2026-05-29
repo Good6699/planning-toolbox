@@ -575,7 +575,10 @@ class ResizeApi:
     def open_folder(self, path):
         try:
             import subprocess
-            subprocess.Popen(f'explorer "{path}"', shell=True)
+            if os.path.isfile(path):
+                subprocess.Popen(f'explorer /select,"{path}"', shell=True)
+            else:
+                subprocess.Popen(f'explorer "{path}"', shell=True)
             return True
         except Exception as e:
             print("[open_folder]", e)

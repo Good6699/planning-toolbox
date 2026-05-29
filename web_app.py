@@ -1916,8 +1916,11 @@ def api_open_folder():
     if not path:
         return jsonify({"error": "路径为空"}), 400
     path = os.path.normpath(path)
+    if os.path.isfile(path):
+        subprocess.Popen(f'explorer /select,"{path}"', shell=True)
+        return jsonify({"ok": True, "path": path})
     if os.path.isdir(path):
-        subprocess.Popen(f'start "" "{path}"', shell=True)
+        subprocess.Popen(f'explorer "{path}"', shell=True)
         return jsonify({"ok": True, "path": path})
     return jsonify({"error": f"路径不是目录: {path}"}), 400
 
@@ -2292,6 +2295,12 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
         q.put(f"目标路径: {target_path}\n")
         q.put(f"涉及版本: {len(revisions)} 个, 文件: {len(files)} 个\n")
         q.put(f"{'='*50}\n")
+
+        q.put("🔄 更新目标工作副本至最新...\n")
+        from toolbox_merge import svn_update_target
+        svn_update_target(target_path, svn_user=svn_user, svn_pass=svn_pass,
+                          log_callback=_log)
+        q.put("\n")
 
         from urllib.parse import urlparse
         parsed = urlparse(source_url)

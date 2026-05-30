@@ -144,6 +144,7 @@ _byte_cache_hits: int = 0
 _byte_cache_misses: int = 0
 _ss_values_cache: Dict[str, list] = {}  # SS XML hash → 值列表
 _ss_values_lock = threading.Lock()
+_MAX_SS_VALUES_CACHE_SIZE = 10
 
 _running_subprocesses: list = []  # atexit 清理：运行中的子进程
 _pending_tempfiles: list = []  # atexit 清理：待删除的临时文件
@@ -212,6 +213,7 @@ def _cleanup_on_exit():
         except OSError:
             pass
     _parsed_cache.clear()
+    _ss_values_cache.clear()
     gc.collect()
 
 atexit.register(_cleanup_on_exit)
@@ -1027,6 +1029,7 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
             if ss_info.file_size > MAX_SS_SIZE:
                 if LOG_LEVEL <= LOG_LEVELS['WARNING']:
                     _log(f"r{rev} sharedStrings.xml 过大 ({ss_info.file_size/1024/1024:.1f}MB)，跳过解析", level='WARNING')
+                zf.close()
                 return None
 
             ss_crc = ss_info.CRC
@@ -1044,6 +1047,7 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                     if count >= MAX_SHARED_STRINGS:
                         if LOG_LEVEL <= LOG_LEVELS['WARNING']:
                             _log(f"r{rev} 共享字符串数量超过限制，跳过解析", level='WARNING')
+                        zf.close()
                         return None
                     t_els = si.findall(".//{%s}t" % _XML_NS)
                     shared_strings.append("".join(t.text or "" for t in t_els))
@@ -1058,6 +1062,7 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
         except MemoryError:
             if LOG_LEVEL <= LOG_LEVELS['WARNING']:
                 _log(f"r{rev} 解析 sharedStrings.xml 内存不足", level='WARNING')
+            zf.close()
             return None
 
     # ── workbook.xml → sheet id → rId → filename（lxml）────────────────────────
@@ -1360,6 +1365,7 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                 "\n".join(parts).encode()).hexdigest()
 
     result["_sheet_order"] = list(result["sheets"].keys())
+    zf.close()
     return result
 
 
@@ -2034,6 +2040,9 @@ def _parse_ss_values(zf) -> list:
             t_els = si.findall(".//{%s}t" % _XML_NS)
             result.append("".join(t.text or "" for t in t_els))
         _ss_values_cache[ss_hash] = result
+        if len(_ss_values_cache) > _MAX_SS_VALUES_CACHE_SIZE:
+            for k in list(_ss_values_cache)[:-_MAX_SS_VALUES_CACHE_SIZE]:
+                del _ss_values_cache[k]
         return result
 
 
@@ -2822,6 +2831,7 @@ def write_excel(results: List[dict], output_path: str,
         ws.title = "对比结果"
         ws.append(["无差异内容"])
         wb.save(output_path)
+        wb.close()
         return
 
     # 排序：按sheet分组（如果有），每组内按文本前缀分组再按数值排序，删除行排到最后
@@ -3057,6 +3067,8 @@ def write_excel(results: List[dict], output_path: str,
     except PermissionError:
         _log(f"[错误] 无法写入 {os.path.basename(output_path)}，文件正在被 Excel 打开，请关闭后重试")
         raise
+    finally:
+        wb.close()
 
 
 def _write_excel_fallback(results: List[dict], output_path: str,
@@ -3148,11 +3160,13 @@ _download_workers, _parse_workers = _get_optimal_workers()
 def main():
     # 重置全局缓存和统计变量，避免多次执行时的状态残留
     global _parsed_cache, _cache_hits, _cache_misses, _byte_cache_hits, _byte_cache_misses
+    global _ss_values_cache
     _parsed_cache = {}
     _cache_hits = 0
     _cache_misses = 0
     _byte_cache_hits = 0
     _byte_cache_misses = 0
+    _ss_values_cache = {}
 
     parser = argparse.ArgumentParser(description="SVN 一键对比工具")
     parser.add_argument("-u", "--url", required=True, help="SVN 文件地址")

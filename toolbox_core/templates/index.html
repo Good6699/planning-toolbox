@@ -4479,12 +4479,10 @@ function checkZoom() {
     warn.classList.remove("visible");
   }
 }
-let _zoomPollTimer = null;
 window.addEventListener("DOMContentLoaded", async () => {
   await loadConfig();
   switchTab("svn");
   setTimeout(checkZoom, 300);
-  _zoomPollTimer = setInterval(checkZoom, 1500);
   try {
     if (window.pywebview && window.pywebview.api && window.pywebview.api.app_ready) {
       await window.pywebview.api.app_ready();

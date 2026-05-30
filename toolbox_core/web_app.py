@@ -1980,6 +1980,7 @@ def api_translate_run():  # noqa: C901
             src_col, src_match = _match_col(src_lang, headers)
             if src_col is None:
                 q.put(f"未找到源语言列 '{src_lang}'\n")
+                wb.close()
                 _notify_task_done("翻译")
                 q.put(None)
                 return
@@ -1994,6 +1995,7 @@ def api_translate_run():  # noqa: C901
 
             if not tgt_col_map:
                 q.put("未找到任何有效的目标语言列\n")
+                wb.close()
                 _notify_task_done("翻译")
                 q.put(None)
                 return
@@ -2093,8 +2095,16 @@ def api_translate_run():  # noqa: C901
             q.put(f"[输出路径] {out_dir}\n")
             q.put(f"翻译完成! 输出文件: {out_path}\n")
         except PermissionError:
+            try:
+                wb.close()
+            except Exception:
+                pass
             q.put("翻译过程出错: 输出文件被占用，请关闭 Excel 中已打开的文件后重试\n")
         except Exception as e:
+            try:
+                wb.close()
+            except Exception:
+                pass
             import traceback
             q.put(f"翻译过程出错: {e}\n")
             q.put(traceback.format_exc() + "\n")

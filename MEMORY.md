@@ -1074,6 +1074,20 @@ while (true):
 - **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### 全功能模块内存泄漏审计与修复（8项）
+- **场景**：2026-05-30 审计策划工具箱所有功能模块的内存溢出/资源未释放/运行久后卡顿问题，修复了 `_ss_values_cache` 无上限膨胀、ZipFile/openpyxl 文件句柄未释放、前端 `setInterval` 无限轮询等共 8 个泄漏点
+- **根因**：三个层面：
+  1. **缓存无上限**：`_ss_values_cache`（SS XML hash → 值列表）无大小限制，每次 SVN 对比写入新条目，累积几十 MB 常驻内存。`_parsed_cache`（30条）、`_NORM_CACHE`（10000条）、`_shared_strings_cache`（5条）均有上限，唯独此缓存遗漏
+  2. **异常路径漏 close**：`_parse_excel_lxml()` 的 4 处 early return 前均未调用 `zf.close()`（ZipFile）；`write_excel()` 的 empty-results 路径 `wb.save()` 后无 `wb.close()`；翻译 API 的 2 个 early return 和 2 个 except 分支均未释放 `wb`（openpyxl）
+  3. **前端定时器永不停止**：`_zoomPollTimer` 用 `setInterval(checkZoom, 1500)` 从启动到关闭无限轮询（8 小时 = 19,200 次），而 checkZoom 只需在 DOMContentLoaded 后执行一次
+- **解决方案**：
+  1. `_ss_values_cache`：新增 `_MAX_SS_VALUES_CACHE_SIZE = 10` 常量，写入时淘汰旧条目；`main()` 和 `_cleanup_on_exit()` 中重置
+  2. `_parse_excel_lxml`：4 处 `return None` / `return result` 前加 `zf.close()`
+  3. `write_excel`：empty-results 路径和主输出路径的 `wb.save()` 后补 `wb.close()`（主输出用 `try/finally` 确保异常路径也关闭）
+  4. 翻译 API `_run()`：2 个 early return 前加 `wb.close()`；`except PermissionError` 和 `except Exception` 中用 `try: wb.close() except: pass` 安全关闭
+  5. 前端 index.html：删除 `_zoomPollTimer` 变量和 `setInterval` 调用，只保留 `setTimeout(checkZoom, 300)` 执行一次
+- **涉及文件**：[svn_oneclick_compare.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/svn_oneclick_compare.py)，[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)，[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
 ### 工作流完成后桌面弹窗提醒 + 点击调起窗口
 - **场景**：2026-05-30 工作流/SVN对比/上传/翻译等后台任务完成时，如果窗口已最小化或隐藏（贴边），用户无法及时感知
 - **根因**：缺少任务完成通知机制，用户需要反复切回窗口查看状态

@@ -865,15 +865,24 @@ def _exec_export_text(step, put, task_id=None):
     put(f"使用 {len(tools)} 个工具并行执行...\n")
 
     def _run_one(tool_path):
+        put(f"  正在执行: {os.path.basename(tool_path)}\n")
         proc = subprocess.Popen(
             ["cmd.exe", "/c", tool_path],
             cwd=os.path.dirname(tool_path) if os.path.isdir(os.path.dirname(tool_path)) else None,
             stdin=subprocess.PIPE,
-            creationflags=subprocess.CREATE_NEW_CONSOLE)
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            creationflags=subprocess.CREATE_NO_WINDOW)
         _register_proc(proc, task_id)
         try:
-            proc.communicate(input=b"\n", timeout=3600)
-            put(f"  {os.path.basename(tool_path)} 已完成\n")
+            stdout_bytes, _ = proc.communicate(input=b"\n", timeout=3600)
+            out_text = stdout_bytes.decode("gbk", errors="replace") if stdout_bytes else ""
+            for line in out_text.splitlines():
+                put(f"    {line}\n")
+            if proc.returncode == 0:
+                put(f"  {os.path.basename(tool_path)} 已完成\n")
+            else:
+                put(f"  {os.path.basename(tool_path)} 退出代码: {proc.returncode}\n")
         except subprocess.TimeoutExpired:
             try:
                 proc.kill()

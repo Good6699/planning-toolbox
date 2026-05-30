@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import hashlib
 import zipfile
+import time
 from datetime import datetime
 
 WORKSPACE = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
@@ -156,6 +157,68 @@ def _get_path_args():
     ]
 
 
+def _deploy_to_appdata(dist_app):
+    """部署到 %APPDATA%/planning-toolbox/ 固定路径，使托盘设置不丢失"""
+    appdata_dir = os.environ.get("APPDATA", os.path.expanduser("~"))
+    deploy_root = os.path.join(appdata_dir, "planning-toolbox")
+    deploy_dir = os.path.join(deploy_root, APP_NAME)
+    deploy_exe = os.path.join(deploy_dir, f"{APP_NAME}.exe")
+
+    print(f"\n{'='*60}")
+    print("  Step 9: 部署到 APPDATA")
+    print(f"{'='*60}")
+
+    # ── 检测旧实例并杀掉 ──
+    old_pid = None
+    try:
+        result = subprocess.run(
+            ["netstat", "-ano"],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.splitlines():
+            if "18124" in line and "LISTENING" in line:
+                parts = line.strip().split()
+                if parts and parts[-1].isdigit():
+                    old_pid = int(parts[-1])
+                    break
+    except Exception as e:
+        print(f"  [清理] 检测端口失败: {e}")
+
+    if old_pid:
+        try:
+            subprocess.run(
+                ["taskkill", "/f", "/pid", str(old_pid)],
+                capture_output=True, timeout=5
+            )
+            print(f"  [清理] 已终止旧进程 (PID={old_pid})")
+            time.sleep(1.5)
+        except Exception as e:
+            print(f"  [清理] 终止进程失败: {e}")
+
+    # ── 删除旧部署目录 ──
+    if os.path.exists(deploy_dir):
+        shutil.rmtree(deploy_dir)
+        print(f"  [清理] 已删除旧部署: {deploy_dir}")
+
+    # ── 复制到 APPDATA ──
+    os.makedirs(deploy_root, exist_ok=True)
+    print(f"  [部署] 复制到 {deploy_dir} ...")
+    shutil.copytree(dist_app, deploy_dir)
+
+    deploy_size = 0
+    for dirpath, _, filenames in os.walk(deploy_dir):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            deploy_size += os.path.getsize(fp)
+    deploy_mb = deploy_size / (1024 * 1024)
+
+    print("  [部署] 完成! 已部署到:")
+    print(f"          {deploy_exe}")
+    print(f"          大小: {deploy_mb:.1f} MB")
+    print("          路径固定 → 托盘图标设置不再丢失")
+    print()
+
+
 def build():
     print(f"\n{'='*60}")
     print(f"  策划工具箱 — PyInstaller 打包")
@@ -279,6 +342,9 @@ def build():
     print(f"  文件: {file_count} 个")
     print(f"  大小: {size_mb:.1f} MB")
     print(f"{'='*60}")
+
+    # ── Step 9: 部署到 APPDATA（固定路径，托盘设置不丢失）──
+    _deploy_to_appdata(dist_app)
 
     return dist_app
 

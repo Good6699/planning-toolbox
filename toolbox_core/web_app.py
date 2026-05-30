@@ -742,15 +742,30 @@ def _notify_task_done(name):
     if _is_window_visible():
         return
     try:
-        icon_path = os.path.join(_script_dir, "assets", "app_icon.ico")
-        if not os.path.isfile(icon_path):
-            icon_path = None
+        ico_path = os.path.join(_script_dir, "assets", "app_icon.ico")
+        if os.path.isfile(ico_path):
+            toast_icon = os.path.join(
+                os.environ.get("APPDATA", os.path.expanduser("~")),
+                "planning-toolbox", "toast_icon.png"
+            )
+            if not os.path.isfile(toast_icon):
+                try:
+                    from PIL import Image
+                    img = Image.open(ico_path)
+                    img = img.resize((48, 48), Image.LANCZOS)
+                    os.makedirs(os.path.dirname(toast_icon), exist_ok=True)
+                    img.save(toast_icon, "PNG")
+                except Exception:
+                    toast_icon = None
+        else:
+            toast_icon = None
+
         from win11toast import toast
         toast(
             body=f"「{name}」任务已完成，点击查看结果",
             on_click=lambda args: _focus_app_window(),
             app_id="策划工具箱",
-            icon=icon_path,
+            icon=toast_icon,
         )
     except ImportError:
         pass

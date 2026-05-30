@@ -13,10 +13,10 @@
   "merge_file_filter_exclude_text": "Assets\\StreamingAssets\\SkillConfig,Assets\\StreamingAssets\\BinData,Assets\\StreamingAssets\\GenerateData,Assets\\StreamingAssets\\Language,Assets\\Code,Assets\\Code_Lua,gameData\\UpLoadBackup,gameData\\老D3废弃表,gameData\\配置描述文档,gameData\\.ExcelTool2,gameData\\.svn,gameData\\config,gameData\\config_temp,gameData\\ErlangExportCopy,gameData\\ExportTxt,gameData\\macro,gameData\\old,gameData\\oldGameData,gameData\\protobuf,Assets\\StreamingAssets\\GenerateMsg",
   "merge_file_filter_include_text": "gameData\\Text\\Texts.xlsm,gameData\\Data2,gameData\\Language",
   "svn_keyword_history": [
+    "腐败秘境",
     "裂隙",
     "专武,腐败秘境,职业,海渊",
     "专武,腐败秘境,职业",
-    "腐败秘境",
     "海渊,腐败",
     "神器",
     "专武",
@@ -27,8 +27,8 @@
     "zhaowei"
   ],
   "merge_target_history": [
-    "H:\\D3_EA\\Client",
     "F:\\D3_KR2_DEV\\Client",
+    "H:\\D3_EA\\Client",
     "F:\\D3_KR2_DEV\\gameData",
     "F:\\D3_KR2_DEV\\gameData",
     "G:\\D3_KR2\\gameData",

@@ -84,6 +84,18 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 
 ## 经验与决策
 
+### 打包部署到 APPDATA 固定路径（托盘设置不丢失）
+- **场景**：每次 `python build.py` 生成带时间戳的新目录 `策划工具箱_v1.0_20260530_1722/`，exe 路径变化 → Windows 通知区域图标显示设置丢失，需重新设置"显示图标和通知"
+- **根因**：Windows 通知区域图标设置按 exe 完整路径记忆，路径每次打包都变，旧设置不适用于新路径
+- **解决方案**：`build.py` 新增 `_deploy_to_appdata()` 函数，打包完成后自动：① `netstat -ano` 检测端口 18124 旧实例并 `taskkill /f` 杀掉；② 删除 `%APPDATA%/planning-toolbox/策划工具箱/` 旧目录；③ `shutil.copytree` 复制新包到 APPDATA 固定路径。用户从固定路径启动 → 路径不变 → 托盘设置持久保留
+- **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
+
+### Windows 通知图标异常放大修复
+- **场景**：任务完成后弹出 Windows 系统通知，右侧的策划工具箱图标显示得异常大
+- **根因**：`_notify_task_done()` 直接把 `app_icon.ico` 路径传给 `win11toast.toast()`，Windows 渲染 `.ico` 大尺寸版本时在 48×48 区域中显示异常
+- **解决方案**：首次通知时用 PIL 将 `app_icon.ico` 缩放为 48×48 PNG，缓存到 `%APPDATA%/planning-toolbox/toast_icon.png`；后续通知直接复用此 PNG。PIL 已是项目依赖，不新增任何额外引入
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
 - svn cat 替代 svn export 可直接读入内存，提升SVN导出速度
 - svn diff --summarize 可先判断版本间文件差异，避免对无变化文件做完整export
 - **多进程解析Excel**：openpyxl read_only模式 + ProcessPoolExecutor 并行解析，比串行pandas快30倍

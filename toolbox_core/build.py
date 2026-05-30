@@ -154,6 +154,13 @@ def _get_hidden_imports():
     ]
 
 
+def _get_path_args():
+    """添加 PyInstaller 模块搜索路径（main.py 中 sys.path.insert 出来的路径）"""
+    return [
+        "--paths", CORE_DIR,
+    ]
+
+
 def build():
     print(f"\n{'='*60}")
     print(f"  策划工具箱 — PyInstaller 打包")
@@ -189,6 +196,7 @@ def build():
     icon = os.path.join(CORE_DIR, "assets", "app_icon.ico")
     data_args = _get_data_args()
     hidden_imports = _get_hidden_imports()
+    path_args = _get_path_args()
 
     # ── Step 5: 执行 PyInstaller ──
     cmd = [
@@ -205,6 +213,7 @@ def build():
         cmd += ["--icon", icon]
     cmd += data_args
     cmd += hidden_imports
+    cmd += path_args
     cmd.append(entry)
 
     print(f"\n[执行] PyInstaller 打包中...")

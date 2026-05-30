@@ -107,6 +107,12 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 - **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
 
+### SVG Logo 多边形替换为一笔画路径（解决放大粗糙问题）
+- **场景**：Splash 闪屏 Logo 在原多边形方案（缺角盒子+两条白色线条）下放大后线条末端明显粗糙且越界，多次调整改用 clipPath 后仍不自然
+- **根因**：多边形路径结构先天不稳定，白色线条的 round 端点一定会超出多边形边界；自己手绘 PIL 多边形在 32×32 托盘图标上也难以保证清晰
+- **解决方案**：采用"一笔画"路径方案——用连续单线折返轨迹 M30 28→H70→...→H58 代替多边形 + 对角线 + 横线的组合；蓝紫渐变（#8BE9FF→#4F8CFF→#6A4CFF）代替纯色填充；路径拐点处加圆点作为识别标记。viewBox 从 0 0 100 100 收紧到 25 25 50 50 使其撑满容器
+- **涉及文件**：[logo.svg](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/assets/logo.svg), [splash.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/splash/splash.html), [desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py), [index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
 ### merge 前全量 propdel --depth infinity 导致大型WC卡死
 - **场景**：2026-05-28 精准合并 301 版本 381 个文件时，F:\D3_KR2_DEV\Client（大型游戏客户端项目）在 banner 后无任何日志输出，用户以为卡死
 - **根因**：合并前的 `svn propdel svn:mergeinfo --depth infinity` 是对整个 WC 的递归全量操作，遍历数万文件且无进度日志。超时后的 cleanup + 重试形成死循环。`svn merge --ignore-ancestry` 已保证 mergeinfo 不参与合并，前置清理是冗余的

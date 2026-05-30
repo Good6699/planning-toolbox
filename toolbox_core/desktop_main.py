@@ -36,8 +36,8 @@ body{background:radial-gradient(circle at top,#1c2540 0%,#0f1115 45%)}
 .f{position:absolute;inset:-10%;background:radial-gradient(circle at 30% 20%,rgba(94,162,255,.08),transparent 40%);filter:blur(80px);animation:f 14s ease-in-out infinite alternate}
 .r{position:relative;width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center}
 .lw{display:flex;flex-direction:column;align-items:center;animation:r2 .9s cubic-bezier(.2,.8,.2,1) forwards}
-.lb{width:84px;height:84px;border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center}
-.lb svg{width:58px;height:58px}
+.lb{width:100px;height:100px;border-radius:22px;background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center}
+.lb svg{width:84px;height:84px}
 .t{margin-top:20px;font-size:30px;font-weight:700;letter-spacing:1px;color:#fff}
 .st{margin-top:8px;font-size:13px;color:#8b96ad;letter-spacing:3px}
 .p{position:absolute;bottom:64px;width:800px;text-align:center}
@@ -52,7 +52,7 @@ body{background:radial-gradient(circle at top,#1c2540 0%,#0f1115 45%)}
 <body>
 <div class="f"></div>
 <div class="r">
-<div class="lw"><div class="lb"><svg viewBox="0 0 24 24"><path d="M22.5,3 L18,1.5 L12,4.5 L6,10.5 L3,16.5 L3,22.5 L12,22.5 L18,16.5 Z" fill="#5ea2ff"/><line x1="3" y1="22.5" x2="22.5" y2="3" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><line x1="18" y1="16.5" x2="6" y2="16.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg></div><div class="t">策划工具箱</div><div class="st">Game Pipeline Toolkit</div></div>
+<div class="lw"><div class="lb"><svg viewBox="25 25 50 50" fill="none"><defs><linearGradient id="cg" x1="25" y1="25" x2="75" y2="75" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#8BE9FF"/><stop offset="50" stop-color="#4F8CFF"/><stop offset="100" stop-color="#6A4CFF"/></linearGradient></defs><path d="M30 28 H70 L70 40 H42 L42 60 H70 L70 72 H30 L30 50 H58" stroke="url(#cg)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="58" cy="50" r="6" fill="url(#cg)"/></svg></div><div class="t">策划工具箱</div><div class="st">Game Pipeline Toolkit</div></div>
 <div class="p"><div class="pt" id="stxt">初始化中...</div><div class="pw"><div class="pb" id="sbar"></div></div><div class="pn" id="spct">0%</div></div>
 </div>
 </body>
@@ -441,21 +441,10 @@ def _wait_for_flask(timeout=10):
 def _make_tray_image():
     img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle([0, 0, 31, 31], radius=6, outline="#3a5580", width=1)
-    blue = "#5ea2ff"
-    body = [
-        (30, 4),
-        (24, 2),
-        (16, 6),
-        (8, 14),
-        (4, 22),
-        (4, 30),
-        (16, 30),
-        (24, 22),
-    ]
-    draw.polygon(body, fill=blue)
-    draw.line([(4, 30), (30, 4)], fill="#ffffff", width=2)
-    draw.line([(24, 22), (8, 22)], fill="#ffffff", width=2)
+    draw.rounded_rectangle([0, 0, 31, 31], radius=6, outline="#4F8CFF", width=1)
+    pts = [(6, 6), (26, 6), (26, 12), (12, 12), (12, 22), (26, 22), (26, 28), (6, 28), (6, 17), (20, 17)]
+    draw.line(pts, fill="#4F8CFF", width=3, joint="curve")
+    draw.ellipse([17, 14, 23, 20], fill="#4F8CFF")
     return img
 
 

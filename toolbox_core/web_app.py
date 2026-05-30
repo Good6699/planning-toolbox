@@ -708,6 +708,60 @@ def api_workflow_save():
     return jsonify({"ok": True})
 
 
+# ── 桌面任务完成通知 ──────────────────────────────
+
+
+def _focus_app_window():
+    try:
+        import ctypes
+        hwnd = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 9)
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+            ctypes.windll.user32.BringWindowToTop(hwnd)
+            # 如果窗口是贴边隐藏状态，恢复任务栏图标
+            ex = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
+            if ex & 0x8:
+                ctypes.windll.user32.SetWindowLongW(hwnd, -20, ex & ~0x8)
+                SWP_NOMOVE = 0x0002
+                SWP_NOSIZE = 0x0001
+                SWP_NOZORDER = 0x0004
+                SWP_FRAMECHANGED = 0x0020
+                flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED
+                ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, flags)
+    except Exception:
+        pass
+
+
+def _is_window_visible():
+    try:
+        import ctypes
+        hwnd = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
+        if not hwnd:
+            return True
+        if not ctypes.windll.user32.IsWindowVisible(hwnd):
+            return False
+        return ctypes.windll.user32.IsIconic(hwnd) == 0
+    except Exception:
+        return True
+
+
+def _notify_wf_done(wf_name):
+    if _is_window_visible():
+        return
+    try:
+        from win11toast import toast
+        toast(
+            "策划工具箱",
+            f"「{wf_name}」任务已完成，点击查看结果",
+            on_click=lambda args: _focus_app_window(),
+        )
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+
 def _run_wf_task(q, wf, steps, task_id):
     prefix = {"error": "❌ ", "ok": "✓ ", "warn": "⚠ ", "head": ""}
 
@@ -766,6 +820,7 @@ def _run_wf_task(q, wf, steps, task_id):
             blocked = True
     _put(f"\n{'='*50}\n")
     _put("工作流执行完成\n" if not blocked else "工作流执行完成（有失败步骤）\n")
+    _notify_wf_done(wf.get('name', '未命名'))
     _cancelled_tasks.discard(task_id)
     _put(None)
     _log_queues.pop(task_id, None)
@@ -2184,11 +2239,12 @@ def api_svn_clear_changelist():
         return jsonify({"ok": False, "error": "无效目录"}), 400
     svn_exe = _get_svn_path()
     try:
-        subprocess.run(
-            [svn_exe, "changelist", "--remove", target_dir, "--depth", "infinity"],
-            capture_output=True, timeout=60, **_get_subprocess_kwargs()
-        )
-        return jsonify({"ok": True, "message": "所有 changelist 已清理"})
+        for cl in ("语义合并", "本次修改"):
+            subprocess.run(
+                [svn_exe, "changelist", "--remove", "--changelist", cl, target_dir, "--depth", "infinity"],
+                capture_output=True, timeout=60, **_get_subprocess_kwargs()
+            )
+        return jsonify({"ok": True, "message": "工具 changelist 已清理"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

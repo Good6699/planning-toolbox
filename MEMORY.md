@@ -1074,6 +1074,17 @@ while (true):
 - **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### 工作流完成后桌面弹窗提醒 + 点击调起窗口
+- **场景**：2026-05-30 工作流执行完成后，如果窗口已最小化或隐藏（贴边），用户无法及时感知任务完成
+- **根因**：缺少任务完成通知机制，用户需要反复切回窗口查看状态
+- **解决方案**：在 [web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py) 新增三个函数：
+  - `_notify_wf_done()` — 使用 `win11toast.toast()` 发送 Windows 原生 Toast 通知
+  - `_is_window_visible()` — 判断窗口是否可见/已最小化，可见时不弹通知避免干扰
+  - `_focus_app_window()` — 点击通知后通过 Win32 API 将窗口带到前台并解除贴边隐藏
+  - 在 `_run_wf_task()` 执行完所有步骤后调用 `_notify_wf_done()`
+  - 安装依赖：`pip install win11toast`（WinRT 原生 Toast API，支持 `on_click` 回调）
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
 ### ExcelTool2.exe 完整调用链追溯（KR2 导出错误码）
 - **场景**：2026-05-29 需求是将工作流 `export_error_code` 步骤改为纯 subprocess 调用源工具路径下的脚本，100% 走 D3_KR2 项目自带的工具链，项目中不留任何自实现的兜底逻辑
 - **EXE 身份**：`G:\D3_KR2\gameData\Language\ZH_CN\ExcelTool2.exe`

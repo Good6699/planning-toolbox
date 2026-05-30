@@ -870,10 +870,18 @@ def _exec_export_text(step, put, task_id=None):
             ["cmd.exe", "/c", tool_path],
             cwd=os.path.dirname(tool_path) if os.path.isdir(os.path.dirname(tool_path)) else None,
             stdin=subprocess.PIPE,
-            creationflags=subprocess.CREATE_NEW_CONSOLE)
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            creationflags=subprocess.CREATE_NO_WINDOW)
+        proc.stdin.close()
         _register_proc(proc, task_id)
         try:
-            proc.communicate(input=b"\n", timeout=3600)
+            for line in iter(proc.stdout.readline, b""):
+                try:
+                    put(f"    {line.decode('gbk', errors='replace').rstrip()}\n")
+                except Exception:
+                    pass
+            proc.wait(timeout=3600)
             if proc.returncode == 0:
                 put(f"  {os.path.basename(tool_path)} 已完成\n")
             else:

@@ -1083,6 +1083,15 @@ while (true):
   3. PyInstaller 输出被 `--name` 固定为 `策划工具箱/`，打包完成后用 `os.rename()` 改为时间戳目录
 - **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
 
+### 打包优化：无控制台/保留窗口尺寸/不修改本地工程/去掉假进度
+- **场景**：2026-05-30 exe 启动仍有 CMD 弹窗、窗口大小与本地不一致、启动慢 3 秒、打包会复制文件到 `toolbox_core/` 影响本地工程
+- **根因与解决方案**：
+  1. **CMD 弹窗**：`build.py` 缺 `--noconsole` 参数 → 加 `--noconsole`，PyInstaller 用 `runw.exe`（窗口模式）
+  2. **窗口大小不一致**：Exe 首次读 `%APPDATA%` 下空配置，默认 1100×700，而本地配置存的是 1349×841 → 打包时从本地 `svn_gui_config.json` 读取 `window_w/h` 字段写入 dist 配置，exe 首次启动用打包时的尺寸
+  3. **启动慢 3 秒**：`_boot_app()` 中 `for i in range(6): time.sleep(0.4)` 是假进度动画（不加载任何东西） → 去掉循环和缩短前后 sleep，启动快约 3 秒
+  4. **打包影响本地工程**：`_ensure_worker_scripts()` 复制 worker 脚本到 `toolbox_core/` 会导致本地残留 → 改为只检查不复制，`_get_data_args()` 直接从 `WORKSPACE` 根目录引用
+- **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)，[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
+
 ### .gitignore _*.py 规则误排除生产脚本 + _export_error_code_erl.py 重建
 - **场景**：2026-05-30 PyInstaller 打包时发现 `_cmp_worker.py`、`_merge_analyzer.py`、`_merge_analyze_worker.py`、`_export_error_code_erl.py` 等 4 个被子进程调用的生产脚本（subprocess 而非 import）被 `.gitignore` 的 `_*.py` 规则排除，打包时不存在。其中 `_export_error_code_erl.py` 还在此前的 flake8 清理中被彻底误删（从未被 git 跟踪过，无法恢复）。
 - **根因**：

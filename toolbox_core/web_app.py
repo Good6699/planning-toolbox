@@ -262,6 +262,10 @@ def _run_svn_task(q, svn_url, mode, start_date, end_date, keyword, author, outpu
     except Exception as e:
         q.put(f"\n❌ 执行失败: {e}\n")
     q.put(f"[输出路径] {output}\n")
+    if task_id not in _cancelled_tasks:
+        mode_names = {"compare": "SVN 对比", "export": "SVN 导出", "summary": "SVN 摘要"}
+        _notify_task_done(mode_names.get(mode, f"SVN {mode}"))
+    _cancelled_tasks.discard(task_id)
     q.put(None)
 
 
@@ -655,6 +659,7 @@ def _run_upload_copy(src, tgt, files, q, task_id):
     if success > 0:
         _run_svn_after_upload(q, tgt, copied_files)
 
+    _notify_task_done("上传SVN")
     q.put(None)
     _log_queues.pop(task_id, None)
 
@@ -746,15 +751,16 @@ def _is_window_visible():
         return True
 
 
-def _notify_wf_done(wf_name):
+def _notify_task_done(name):
     if _is_window_visible():
         return
     try:
         from win11toast import toast
         toast(
             "策划工具箱",
-            f"「{wf_name}」任务已完成，点击查看结果",
+            f"「{name}」任务已完成，点击查看结果",
             on_click=lambda args: _focus_app_window(),
+            app_id="策划工具箱",
         )
     except ImportError:
         pass
@@ -820,7 +826,7 @@ def _run_wf_task(q, wf, steps, task_id):
             blocked = True
     _put(f"\n{'='*50}\n")
     _put("工作流执行完成\n" if not blocked else "工作流执行完成（有失败步骤）\n")
-    _notify_wf_done(wf.get('name', '未命名'))
+    _notify_task_done(wf.get('name', '未命名'))
     _cancelled_tasks.discard(task_id)
     _put(None)
     _log_queues.pop(task_id, None)
@@ -1984,6 +1990,7 @@ def api_translate_run():  # noqa: C901
             src_col, src_match = _match_col(src_lang, headers)
             if src_col is None:
                 q.put(f"未找到源语言列 '{src_lang}'\n")
+                _notify_task_done("翻译")
                 q.put(None)
                 return
 
@@ -1997,6 +2004,7 @@ def api_translate_run():  # noqa: C901
 
             if not tgt_col_map:
                 q.put("未找到任何有效的目标语言列\n")
+                _notify_task_done("翻译")
                 q.put(None)
                 return
 
@@ -2044,6 +2052,7 @@ def api_translate_run():  # noqa: C901
                 wb.save(out_path)
                 wb.close()
                 q.put(f"已保存: {out_path}\n")
+                _notify_task_done("翻译")
                 q.put(None)
                 return
 
@@ -2099,6 +2108,7 @@ def api_translate_run():  # noqa: C901
             import traceback
             q.put(f"翻译过程出错: {e}\n")
             q.put(traceback.format_exc() + "\n")
+        _notify_task_done("翻译")
         q.put(None)
 
     threading.Thread(target=_run, daemon=True).start()
@@ -2466,6 +2476,7 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
         err = json.dumps({"ok": False, "error": f"查询失败: {e}"})
         q.put(f"[RESULT]{err}\n")
     finally:
+        _notify_task_done("语义合并查询")
         q.put(None)
         _log_queues.pop(task_id, None)
 
@@ -2625,6 +2636,7 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
     except Exception as e:
         q.put(f"\n❌ 合并任务异常终止: {e}\n")
     finally:
+        _notify_task_done("语义合并")
         q.put(None)
         _log_queues.pop(task_id, None)
 
@@ -2724,6 +2736,7 @@ def _merge_analyze_worker(task_id, source_url, target_path, revisions,
         _log(f"语义分析失败: {e}", "error")
         _log(traceback.format_exc(), "error")
     finally:
+        _notify_task_done("语义分析")
         q.put(None)
         _log_queues.pop(task_id, None)
 

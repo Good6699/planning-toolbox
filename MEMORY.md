@@ -1075,14 +1075,16 @@ while (true):
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
 ### 工作流完成后桌面弹窗提醒 + 点击调起窗口
-- **场景**：2026-05-30 工作流执行完成后，如果窗口已最小化或隐藏（贴边），用户无法及时感知任务完成
+- **场景**：2026-05-30 工作流/SVN对比/上传/翻译等后台任务完成时，如果窗口已最小化或隐藏（贴边），用户无法及时感知
 - **根因**：缺少任务完成通知机制，用户需要反复切回窗口查看状态
 - **解决方案**：在 [web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py) 新增三个函数：
-  - `_notify_wf_done()` — 使用 `win11toast.toast()` 发送 Windows 原生 Toast 通知
-  - `_is_window_visible()` — 判断窗口是否可见/已最小化，可见时不弹通知避免干扰
+  - `_notify_task_done()` — 使用 `win11toast.toast()` 发送 Windows 原生 Toast 通知
+  - `_is_window_visible()` — `IsWindowVisible` + `IsIconic` 双检查，窗口可见/最小化时不弹通知
   - `_focus_app_window()` — 点击通知后通过 Win32 API 将窗口带到前台并解除贴边隐藏
-  - 在 `_run_wf_task()` 执行完所有步骤后调用 `_notify_wf_done()`
+  - 全部 7 个后台任务均接入通知：`_run_svn_task`（SVN记录三模式）、`_run_upload_copy`（上传SVN）、`_run_wf_task`（工作流）、`_run`（翻译）、`_merge_query_worker/_merge_worker/_merge_analyze_worker`（语义合并）
+  - 取消的任务跳过通知（`task_id not in _cancelled_tasks` 判断）
   - 安装依赖：`pip install win11toast`（WinRT 原生 Toast API，支持 `on_click` 回调）
+- **注意事项**：`win11toast.toast()` 默认 `app_id='Python'`，不传参则通知标题显示"Python"。必须显式传 `app_id="策划工具箱"` 才能显示正确应用名
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
 
 ### ExcelTool2.exe 完整调用链追溯（KR2 导出错误码）

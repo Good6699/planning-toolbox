@@ -16,6 +16,8 @@ description: "一键完成知识图谱增量更新 + 记录经验到 MEMORY.md +
 - 解决复杂问题后需要记录经验并提交时
 - 用户说 `记下来` / `提交` / `保存` / `commit` / `save` 时
 - 修改了 `.py` / `.html` / `.js` / `.ts` / `.md` 等正式文件后
+- 修改了打包相关文件（`build.py` / `update_version.py` / `_updater.bat` / `build-dist` / `push-update` skill）后
+- 修改了 `.gitignore` / `.flake8` / `project_rules.md` 等配置文件后
 
 ## 执行步骤
 
@@ -59,9 +61,17 @@ git commit --no-verify -m "<type>: <中文描述>"
 - 描述用中文、祈使句
 - 提交前先确认变更文件列表
 
+**打包相关文件的特殊处理**：
+- `toolbox_core/build.py`、`toolbox_core/update_version.py`、`toolbox_core/update_version.py` 需要显式 `git add`
+- `update-server/version.json` 和 `update-server/*.zip` 需要显式 `git add -f`（被 `.gitignore` 排除）
+- `toolbox_core/_updater.bat` 需要 `git add -f`（`.gitignore` 排除了 `*.bat`）
+- 子进程生产脚本 `_cmp_worker.py`、`_merge_analyzer.py`、`_merge_analyze_worker.py`、`_export_error_code_erl.py` 需要 `git add -f`（被 `_*.py` 规则排除，但已加 `.gitignore` 例外）
+- `.trae/skills/build-dist/` 和 `.trae/skills/push-update/` 两个 skill 目录需要显式 `git add`
+- `dist/`、`build/`、`*.spec` 不要提交（已被 `.gitignore` 排除）
+
 ### Step 4: 告知用户
 
-一句话告知完成：图谱更新结果 + 记录/提交情况。
+一句话告知完成：图谱更新结果 + 记录/提交情况。若打包相关文件有变更，额外告知用户打包脚本已更新。如果需要重新打包，告知用户执行 `cd toolbox_core && python build.py --zip`。
 
 ## 注意事项
 

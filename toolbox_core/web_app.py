@@ -717,25 +717,12 @@ def api_workflow_save():
 
 
 def _focus_app_window():
-    try:
-        import ctypes
-        hwnd = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
-        if hwnd:
-            ctypes.windll.user32.ShowWindow(hwnd, 9)
-            ctypes.windll.user32.SetForegroundWindow(hwnd)
-            ctypes.windll.user32.BringWindowToTop(hwnd)
-            # 如果窗口是贴边隐藏状态，恢复任务栏图标
-            ex = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
-            if ex & 0x8:
-                ctypes.windll.user32.SetWindowLongW(hwnd, -20, ex & ~0x8)
-                SWP_NOMOVE = 0x0002
-                SWP_NOSIZE = 0x0001
-                SWP_NOZORDER = 0x0004
-                SWP_FRAMECHANGED = 0x0020
-                flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED
-                ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, flags)
-    except Exception:
-        pass
+    fn = getattr(sys.modules.get(__name__), '_on_notification_click', None)
+    if fn:
+        try:
+            fn()
+        except Exception:
+            pass
 
 
 def _is_window_visible():
@@ -757,8 +744,7 @@ def _notify_task_done(name):
     try:
         from win11toast import toast
         toast(
-            "策划工具箱",
-            f"「{name}」任务已完成，点击查看结果",
+            body=f"「{name}」任务已完成，点击查看结果",
             on_click=lambda args: _focus_app_window(),
             app_id="策划工具箱",
         )

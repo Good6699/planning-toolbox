@@ -1080,12 +1080,13 @@ while (true):
 - **解决方案**：在 [web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py) 新增三个函数：
   - `_notify_task_done()` — 使用 `win11toast.toast()` 发送 Windows 原生 Toast 通知
   - `_is_window_visible()` — `IsWindowVisible` + `IsIconic` 双检查，窗口可见/最小化时不弹通知
-  - `_focus_app_window()` — 点击通知后通过 Win32 API 将窗口带到前台并解除贴边隐藏
-  - 全部 7 个后台任务均接入通知：`_run_svn_task`（SVN记录三模式）、`_run_upload_copy`（上传SVN）、`_run_wf_task`（工作流）、`_run`（翻译）、`_merge_query_worker/_merge_worker/_merge_analyze_worker`（语义合并）
+  - `_focus_app_window()` — 通过依赖注入调用 `desktop_main._show_window`（与托盘图标点击同一条链路），由 `_start_flask()` 中注入 `_wa._on_notification_click = lambda: _show_window(None, None)`
+  - 全部 7 个后台任务均接入通知
   - 取消的任务跳过通知（`task_id not in _cancelled_tasks` 判断）
+  - 无边框窗口拖拽 resize 后保存尺寸：在 [desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py) 的 `ResizeApi.stop_resize()` 末尾加 `_save_window_rect()`，解决 `resized` 事件因 ctypes 直接调 `SetWindowPos` 而永不触发的问题
   - 安装依赖：`pip install win11toast`（WinRT 原生 Toast API，支持 `on_click` 回调）
-- **注意事项**：`win11toast.toast()` 默认 `app_id='Python'`，不传参则通知标题显示"Python"。必须显式传 `app_id="策划工具箱"` 才能显示正确应用名
-- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+- **注意事项**：`win11toast.toast()` 默认 `app_id='Python'`，必须显式传 `app_id="策划工具箱"`；`import __main__` 在子线程不可靠，必须用依赖注入
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)，[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
 
 ### ExcelTool2.exe 完整调用链追溯（KR2 导出错误码）
 - **场景**：2026-05-29 需求是将工作流 `export_error_code` 步骤改为纯 subprocess 调用源工具路径下的脚本，100% 走 D3_KR2 项目自带的工具链，项目中不留任何自实现的兜底逻辑

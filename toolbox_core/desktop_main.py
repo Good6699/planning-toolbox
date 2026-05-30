@@ -421,6 +421,8 @@ def _start_flask():
     if os.path.isdir(pm) and pm not in sys.path:
         sys.path.insert(0, pm)
     from web_app import app
+    import web_app as _wa
+    _wa._on_notification_click = lambda: _show_window(None, None)
     from werkzeug.serving import make_server
     _flask_server = make_server("127.0.0.1", 18123, app, threaded=True)
     _flask_server.serve_forever()
@@ -560,6 +562,7 @@ class ResizeApi:
         global _is_dragging
         _is_dragging = False
         self._active = False
+        _save_window_rect()
 
     def app_ready(self):
         pass

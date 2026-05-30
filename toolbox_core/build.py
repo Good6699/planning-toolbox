@@ -178,13 +178,15 @@ def build():
     # ── Step 2: 准备 worker 脚本 ──
     copied_workers = _ensure_worker_scripts()
 
-    # ── Step 3: 清理旧构建 ──
-    dist_app = os.path.join(DIST_DIR, APP_NAME)
+    # ── Step 3: 生成时间戳和输出目录名 ──
+    ts = datetime.now().strftime("%Y%m%d_%H%M")
+    dist_name = f"{APP_NAME}_{APP_VERSION}_{ts}"
+    dist_app = os.path.join(DIST_DIR, dist_name)
     build_dir = os.path.join(WORKSPACE, "build")
-    for d in [dist_app, build_dir]:
-        if os.path.exists(d):
-            shutil.rmtree(d)
-            print(f"  [清理] {os.path.relpath(d, WORKSPACE)}/")
+
+    # 清理 build 临时目录（不是输出目录，不影响旧包）
+    if os.path.exists(build_dir):
+        shutil.rmtree(build_dir)
     spec_file = os.path.join(WORKSPACE, f"{APP_NAME}.spec")
     if os.path.isfile(spec_file):
         os.remove(spec_file)
@@ -228,6 +230,14 @@ def build():
         sys.exit(1)
 
     _cleanup_copied_workers(copied_workers)
+
+    # ── PyInstaller 输出被 --name 固定为 APP_NAME，重命名为带时间戳的目录 ──
+    pyi_out = os.path.join(DIST_DIR, APP_NAME)
+    if os.path.isdir(pyi_out) and pyi_out != dist_app:
+        if os.path.exists(dist_app):
+            shutil.rmtree(dist_app)
+        os.rename(pyi_out, dist_app)
+        print(f"  [重命名] {os.path.basename(pyi_out)} → {os.path.basename(dist_app)}")
 
     if not os.path.isdir(dist_app):
         print(f"\n[错误] 输出目录未生成: {dist_app}")

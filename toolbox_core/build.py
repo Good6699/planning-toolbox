@@ -144,6 +144,8 @@ def _get_hidden_imports():
     """解决 PyInstaller 自动检测不到的依赖"""
     return [
         "--hidden-import=win32timezone",
+        "--hidden-import=cffi",
+        "--hidden-import=pycparser",
     ]
 
 

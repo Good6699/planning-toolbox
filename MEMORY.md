@@ -1099,6 +1099,25 @@ while (true):
 - **关键教训**：Python.NET 相关依赖（`cffi`、`pycparser`）在 PyInstaller 打包时很容易遗漏。所有通过 `clr_loader` 间接加载的 FFI 模块都需要手动 `--hidden-import`。打包后应先在命令行跑 exe 捕获完整错误，而不是直接双击看闪退
 - **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
 
+### export_text 工作流：stdin 回车吞掉 pause + 编码检测 + 后台执行方案
+- **场景**：2026-05-30 exe 打包后工作流中的 `export_text` 步骤无法正常执行导出工具。工具 bat 调用 `call config.bat` → `chcp 65001` → `call Server_Texts_ReplaceRef.bat` → `pause`。问题表现为 CMD 窗口一闪而过，工具根本没跑完
+- **根因**：
+  1. `CREATE_NEW_CONSOLE` 启动工具 CMD 窗口，但 `communicate(input=b"\n")` 在 bat 启动后立即发送回车到 stdin，此时 bat 还没跑到 `pause`，回车被缓存。等 bat 到达 `pause` 时，缓冲中的回车直接消费掉，CMD 窗口一闪而关。工具实际可能报错，但用户看不到任何输出
+  2. `chcp 65001` 后工具输出 UTF-8 中文，但代码写死 `gbk` 解码，日志乱码
+  3. 工具执行完全不显示输出，用户无法判断是否成功
+- **解决方案**：
+  1. 去掉 `CREATE_NEW_CONSOLE`，改为 `CREATE_NO_WINDOW` + `stdout=PIPE`，后台静默执行。关闭 stdin（`proc.stdin.close()`）让 `pause` 收到 EOF 自然结束，工具跑完才自动关闭
+  2. 优先 `utf-8` 解码，失败回退 `gbk`：`raw.decode("utf-8") except UnicodeDecodeError: raw.decode("gbk")`
+  3. 逐行读取 stdout 并实时打印到工作流日志，用户能追踪每一步
+- **后续保留方案**：但用户要求工具 CMD 窗口需要可见（看到导出进度），所以改回 `CREATE_NEW_CONSOLE` + 不截取 stdout。最终使用方案 A（后台执行+日志输出）
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
+### 任务栏图标默认隐藏：pywebview frameless 窗口 + 启动时未调用 _show_taskbar_icon
+- **场景**：2026-05-30 每次新包启动后任务栏图标默认隐藏，需手动点窗口才出现
+- **根因**：pywebview 创建 frameless 窗口时默认 WS_EX_TOOLWINDOW 标志位，隐藏任务栏图标。`_boot_app()` 中启动完成（Flask 就绪、URL 加载）后从未调用 `_show_taskbar_icon()` 强制显示
+- **解决方案**：在 `_boot_app()` 的 `load_url()` 之后，调用 `_find_window_hwnd()` 获取窗口句柄，然后执行 `_show_taskbar_icon(hwnd)`，确保启动时默认显示
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
+
 ### .gitignore _*.py 规则误排除生产脚本 + _export_error_code_erl.py 重建
 - **场景**：2026-05-30 PyInstaller 打包时发现 `_cmp_worker.py`、`_merge_analyzer.py`、`_merge_analyze_worker.py`、`_export_error_code_erl.py` 等 4 个被子进程调用的生产脚本（subprocess 而非 import）被 `.gitignore` 的 `_*.py` 规则排除，打包时不存在。其中 `_export_error_code_erl.py` 还在此前的 flake8 清理中被彻底误删（从未被 git 跟踪过，无法恢复）。
 - **根因**：

@@ -1074,6 +1074,18 @@ while (true):
 - **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### .gitignore _*.py 规则误排除生产脚本 + _export_error_code_erl.py 重建
+- **场景**：2026-05-30 PyInstaller 打包时发现 `_cmp_worker.py`、`_merge_analyzer.py`、`_merge_analyze_worker.py`、`_export_error_code_erl.py` 等 4 个被子进程调用的生产脚本（subprocess 而非 import）被 `.gitignore` 的 `_*.py` 规则排除，打包时不存在。其中 `_export_error_code_erl.py` 还在此前的 flake8 清理中被彻底误删（从未被 git 跟踪过，无法恢复）。
+- **根因**：
+  1. `.gitignore` 中 `_*.py` 规则匹配所有 `_` 开头的 `.py` 文件，但其中有 4 个是通过 `subprocess.Popen` 调用的生产脚本，不是临时脚本。PyInstaller 无法自动追踪 subprocess 调用的脚本
+  2. `_export_error_code_erl.py` 从未被 git 跟踪（被 `_*.py` 挡住），flake8 清理时误删后无法从 git 恢复
+- **解决方案**：
+  1. `.gitignore`：在 `_*.py` 规则后加 `!_xxx.py` 否定模式显式例外，git 的 `!` 否定优先级高于通配规则
+  2. 参照 MEMORY.md 中记录的 erl 导出格式规范 + `export_error_code.py` 中已有的 `_write_erl()` 函数，完全重建 `_export_error_code_erl.py`：用 openpyxl 读 xlsm，生成 `.erl`（module cfg_errorMessage，含 row/first_row/last_row/rows/keys_length/getRow/getKeyList 导出函数）和 `.hrl`（record errorMessageCfg），换行符用 `\r\n` 与 ExcelTool2.exe 输出一致
+  3. 将 `build.py` 的 `WORKER_SCRIPTS` 和 `web_app.py` 的 `erl_script` 引用指向正确的路径
+  4. `git add -f` 强制跟踪 4 个生产脚本，确保它们下次不被忽略
+- **涉及文件**：[.gitignore](file:///c:/Users/admin/.qclaw/workspace/.gitignore)，[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)，[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)，[_export_error_code_erl.py](file:///c:/Users/admin/.qclaw/workspace/_export_error_code_erl.py)
+
 ### 策划工具箱 PyInstaller 打包 + 局域网自动更新
 - **场景**：2026-05-30 需要将策划工具箱打包为 exe 分发给团队使用，支持局域网 HTTP 服务器一键自动更新
 - **架构设计**：

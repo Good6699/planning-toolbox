@@ -14,6 +14,7 @@ import stat
 import tempfile
 import concurrent.futures
 from datetime import datetime
+import locale
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _pm = os.path.join(_script_dir, "py_modules")
@@ -1255,35 +1256,112 @@ def _exec_export_error_code(step, put):
 
     import subprocess as _sp
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    et2_path = os.path.join(script_dir, "ExcelTool2.py")
-    et2_python = sys.executable
+    erl_script = os.path.join(script_dir, "_export_error_code_erl.py")
+    py_exe = sys.executable
 
     results = []
 
     for code in codes:
         lang_path = os.path.join(lang_dir, code)
-        xlsm_file = os.path.join(lang_path, "Data2", "ErrorMessage.xlsm")
+        put("  [" + code + "] " + lang_path + "\n")
 
+        xlsm_file = os.path.join(lang_path, "Data2", "ErrorMessage.xlsm")
         if not os.path.isfile(xlsm_file):
-            results.append((code, False, "ErrorMessage.xlsm 未找到"))
-            put("  [" + code + "] SKIP: xlsm 未找到\n")
+            put("  [" + code + "] 缺少: Data2\\ErrorMessage.xlsm\n")
+            results.append((code, False, "xlsm 未找到"))
             continue
 
-        cmd = [et2_python, et2_path, "ErrorMessage", "--lang-dir", lang_path]
+        batch_file = os.path.join(lang_path, "客户端单个导出2.bat")
+        config_bat = os.path.join(lang_path, "config.bat")
+        make_exe = os.path.join(lang_path, "protobuf", "make_gamedata_exe.bat")
+        make_ready = os.path.join(lang_path, "protobuf", "make_ready.bat")
+
+        checks = [
+            (batch_file, "客户端单个导出2.bat"),
+            (config_bat, "config.bat"),
+            (make_exe, "protobuf\\make_gamedata_exe.bat"),
+            (make_ready, "protobuf\\make_ready.bat"),
+        ]
+
+        if os.path.isfile(make_exe):
+            exe_content = open(make_exe, "r", encoding="utf-8", errors="replace").read()
+            if "ExportXlsmToPB.py" in exe_content:
+                export_py = os.path.join(lang_path, "protobuf", "ExportXlsmToPB.py")
+                protoc = os.path.join(lang_path, "protobuf", "proto", "protoc.exe")
+                proto_init = os.path.join(lang_path, "protobuf", "proto", "__init__.py")
+                checks += [
+                    (export_py, "protobuf\\ExportXlsmToPB.py"),
+                    (protoc, "protobuf\\proto\\protoc.exe"),
+                    (proto_init, "protobuf\\proto\\__init__.py"),
+                    (r"C:\Python27\python.exe", "Python 2.7 (C:\\Python27\\python.exe)"),
+                ]
+                base_pb = os.path.join(lang_path, "protobuf", "proto", "Base.pb")
+                base_pb2 = os.path.join(lang_path, "protobuf", "proto", "Base_pb2.py")
+                if not os.path.isfile(base_pb) and not os.path.isfile(base_pb2):
+                    checks.append((base_pb, "protobuf\\proto\\Base.pb 或 Base_pb2.py"))
+            elif "CompressExport.exe" in exe_content:
+                compress_exe = os.path.join(lang_path, "protobuf", "CompressExport.exe")
+                checks.append((compress_exe, "protobuf\\CompressExport.exe"))
+
+        missing = [name for path, name in checks if not os.path.exists(path)]
+        if missing:
+            put("  [" + code + "] 缺少源工具文件: " + ", ".join(missing) + "\n")
+            results.append((code, False, "缺少源工具文件"))
+            continue
+
+        ok = True
+
+        put("  [" + code + "] 客户端导出(批处理链)...\n")
         try:
-            r = _sp.run(cmd, capture_output=True, encoding="utf-8", errors="replace", timeout=120,
-                        **_get_subprocess_kwargs())
+            r = _sp.run(
+                ["cmd", "/c", batch_file, "GameData", "ErrorMessage.xlsm"],
+                cwd=lang_path,
+                capture_output=True,
+                encoding=locale.getpreferredencoding(), errors="replace",
+                timeout=300,
+                **_get_subprocess_kwargs()
+            )
             if r.returncode == 0:
-                last_line = r.stdout.strip().split("\n")[-1]
-                put("  [" + code + "] " + last_line + "\n")
-                results.append((code, True, "导出成功"))
+                std_out = (r.stdout or "").strip()
+                if std_out:
+                    for line in std_out.split("\n")[-5:]:
+                        put("    " + line.strip() + "\n")
+                put("  [" + code + "] 客户端导出成功\n")
             else:
-                err = (r.stderr or r.stdout or "").strip()[:200]
-                put("  [" + code + "] FAIL: " + err + "\n")
-                results.append((code, False, err))
+                err = (r.stderr or r.stdout or "").strip()[:300]
+                put("  [" + code + "] 客户端导出失败: " + err + "\n")
+                ok = False
         except Exception as e:
-            put("  [" + code + "] ERROR: " + str(e) + "\n")
-            results.append((code, False, str(e)))
+            put("  [" + code + "] 客户端导出异常: " + str(e) + "\n")
+            ok = False
+
+        if ok:
+            put("  [" + code + "] 服务端导出(erlang)...\n")
+            try:
+                r = _sp.run(
+                    [py_exe, erl_script, "--xlsm", xlsm_file, "--lang-dir", lang_path],
+                    capture_output=True,
+                    encoding=locale.getpreferredencoding(), errors="replace",
+                    timeout=60,
+                    **_get_subprocess_kwargs()
+                )
+                if r.returncode == 0:
+                    for line in (r.stdout or "").strip().split("\n"):
+                        put("    " + line.strip() + "\n")
+                    put("  [" + code + "] erlang 导出成功\n")
+                else:
+                    err = (r.stderr or r.stdout or "").strip()[:200]
+                    put("  [" + code + "] erlang 导出失败: " + err + "\n")
+                    ok = False
+            except Exception as e:
+                put("  [" + code + "] erlang 导出异常: " + str(e) + "\n")
+                ok = False
+
+        results.append((code, ok, "成功" if ok else "失败"))
+        if ok:
+            put("  [" + code + "] 全部导出成功\n")
+        else:
+            put("  [" + code + "] 导出失败\n")
 
     ok_count = sum(1 for _, ok, _ in results if ok)
     put("导出错误码完成: " + str(ok_count) + "/" + str(len(codes)) + "\n")

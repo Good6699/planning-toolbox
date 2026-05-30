@@ -1061,6 +1061,298 @@ while (true):
 - **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### ExcelTool2.exe 完整调用链追溯（KR2 导出错误码）
+- **场景**：2026-05-29 需求是将工作流 `export_error_code` 步骤改为纯 subprocess 调用源工具路径下的脚本，100% 走 D3_KR2 项目自带的工具链，项目中不留任何自实现的兜底逻辑
+- **EXE 身份**：`G:\D3_KR2\gameData\Language\ZH_CN\ExcelTool2.exe`
+- **运行时行为**：把 `ErrorMessage.xlsm` 拖入窗口（必须在 Data2 目录下），点击「导出所选」按钮，会执行两条并行的导出路径：
+
+#### 路径一：Server 导出 — EXE 内部 C++ 代码（无外部脚本可调）
+
+```
+FileManager::exportAddedFiles()                               [FileManager.cpp]
+  └─ exportServerFiles(fileTitles)                              [FileManager.cpp]
+       └─ DataManager::exportSheet("ErrorMessage")              [DataManager.cpp]
+            └─ ErlangService::writeFiles(tables, serverPath_)   [Erlang.cpp]
+                 ├─ writeHeaderFile(table, fileName)   → config\cfg_errorMessage.hrl
+                 └─ writeSourceFile(table, fileName)   → config\cfg_errorMessage.erl
+```
+
+- **C++ 源码位置**：`G:\D3_KR2\tools\ExcelTool\ExcelTool\`
+  - `ExcelToolDlg.cpp` — MFC 对话框，OnInitDialog、拖拽事件 OnDropFiles、按钮事件
+  - `FileManager.cpp/.h` — 文件列表管理，addFiles/exportAddedFiles/exportAllFiles/exportDefine
+  - `DataManager.cpp/.h` — 核心数据管理，checkSheet/exportSheet/exportDefine，含 MD5 hash 缓存（.ExcelTool2\ 目录）
+  - `Excel.cpp/.h` — 通过 `xlnt` C++ 库读取 xlsm
+  - `Erlang.cpp/.h` — **Server 导出核心**，SheetParser 模板类解析每一行每一列数据，生成 .erl + .hrl 文件
+  - `Logger.cpp/.h` — 日志系统
+- **关键事实**：Server 导出**没有外部脚本**，是 C++ 代码编译在 exe 内的。但 exe 支持命令行模式（`ExcelTool2.exe <excelTitle> <erlangName>`），不过那是在 xlsm 中新增 define 行，不是导出 erlang 文件
+
+#### 路径二：Client 导出 — 批处理 → Python 2 脚本链（可 subprocess 调用）
+
+```
+C++ 内部: ShellExecute("客户端单个导出2.bat", "GameData ErrorMessage.xlsm")
+                                                                                   [FileManager.cpp]
+  └─ 客户端单个导出2.bat  (G:\D3_KR2\gameData\Language\ZH_CN\)
+       ├─ call config.bat                              ← 设置环境变量（PYTHON_PATH、MASTER_DATA、TOOLS_PATH 等）
+       │    └─ config.bat  (ZH_CN\)
+       │       PYTHON_PATH=C:\Python27
+       │       MASTER_DATA=ZH_CN 目录（%~dp0）
+       │       TOOLS_PATH=<project_root>\tools
+       │       PB_GENERATE_PATH_BIN = Client\Assets\StreamingAssets\Language\ZH_CN\BinData\bin\
+       │       PB_GENERATE_PATH_PB  = Client\Assets\StreamingAssets\Language\ZH_CN\BinData\pb\
+       │       Export_Txt_PATH      = MASTER_DATA\ExportTxt
+       │
+       ├─ cd %MASTER_DATA%\protobuf
+       │
+       └─ call make_gamedata_exe.bat %MASTER_DATA%\Data2\ErrorMessage.xlsm
+                                                                                   [make_gamedata_exe.bat]
+            ├─ call make_ready.bat                                                [make_ready.bat]
+            │    ├─ del proto\out\*.* /f/s/q/a         ← 清空输出目录
+            │    └─ xcopy proto\*.py proto\out\         ← 拷贝 __init__.py、Base_pb2.py 到 out
+            │    └─ xcopy proto\*.pb proto\out\         ← 拷贝 Base.pb 到 out
+            │
+            ├─ "%PYTHON_PATH%\python.exe" "ExportXlsmToPB.py" <xlsm_path>
+                                                                                   [ExportXlsmToPB.py]
+            │    ├─ xlrd.open_workbook(xlsm_path)                       ← 读 xlsm
+            │    ├─ GetSheetData(xlsm)                                   ← 解析 sheet 名，处理分表
+            │    ├─ 对每个 sheet:
+            │    │    ├─ WriteProtoFile(key, firstTable, isInt)
+            │    │    │    └─ 生成 proto\out\ErrorMessage.proto
+            │    │    ├─ protoc.exe → ErrorMessage.pb + ErrorMessage_pb2.py
+            │    │    │   proto\protoc.exe --descriptor_set_out=proto\out\%s.pb proto\out\%s.proto
+            │    │    │   proto\protoc.exe --python_out=. proto\out\%s.proto
+            │    │    ├─ CreateWriteDataPYFile(key, firstTable, isInt)
+            │    │    │    └─ 生成 proto\out\ErrorMessage_write.py       ← 包含 write_test() + read_test()
+            │    │    ├─ importlib.import_module("proto.out.ErrorMessage_write")
+            │    │    ├─ write_test("proto\\out\\ErrorMessage.bin", table)  ← 序列化 bin
+            │    │    │    ├─ struct.pack("i", len(entries))
+            │    │    │    ├─ struct.pack("b", 1)  (isInt)
+            │    │    │    ├─ 每个 entry: pack("i", ID) + pack("i", offset) + pack("i", end_offset)
+            │    │    │    ├─ 每个 entry: SerializeToString() 写入
+            │    │    │    └─ 如果是分表: 追加 pack('i', len(子表)-1)
+            │    │    └─ read_test(binName)                              ← 验证读取
+            │    │         ├─ 读 bin 打印到控制台
+            │    │         └─ 生成 ErrorMessage.txt（replace('.bin','.txt')）
+            │    └─ 清理: 删除 proto\*.pyc
+            │
+            └─ xcopy /y proto\out\*.bin %PB_GENERATE_PATH_BIN%          ← 复制到 StreamingAssets
+            └─ xcopy /y proto\out\*.pb  %PB_GENERATE_PATH_PB%           ← 复制到 StreamingAssets
+            └─ xcopy /y proto\out\*.txt %Export_Txt_PATH%               ← 复制到 ExportTxt
+```
+
+#### ExportXlsmToPB.py 的 Python 2 依赖
+
+| 依赖 | 位置 | 说明 |
+|------|------|------|
+| `xlrd` | `C:\Python27\Lib\site-packages\xlrd` | 读 xlsm（非 openpyxl，是 xlrd） |
+| `google.protobuf` | `C:\Python27\Lib\site-packages\google` | protobuf Python 绑定 |
+| `protoc.exe` | `protobuf\proto\protoc.exe` | proto 编译器 |
+| `__init__.py` | `protobuf\proto\__init__.py` | 辅助函数 getdata() / filldata() |
+| `Base_pb2.py` | `protobuf\proto\Base_pb2.py` | Base 类型定义 |
+| `Base.pb` | `protobuf\proto\Base.pb` | Base proto 描述 |
+
+**注意**：`__init__.py` 和 `__init__.pyc` 在 `proto\out\` 下也有，`make_ready.bat` 从 `proto\` 拷贝到 `proto\out\`。`ExportXlsmToPB.py` 运行时生成的 `ErrorMessage_write.py` 中 `import __init__` 引用的是 `proto\out\__init__.py`，其中的 `getdata()` 函数逻辑：
+
+```python
+def getdata(var, rowtype):
+    if rowtype == "float" or "double": return float(var)
+    if rowtype in ("short","byte","int","uint","uint64"): return int(float(var))
+    if rowtype in ("str","str_utf"):
+        if type(var) == float and float(var) == 0.0: return ""
+        return str(var).replace('.0','')
+    return var
+```
+
+#### 当前工作流调用方式（2026-05-29 重构后）
+
+文件：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py) 函数 `_exec_export_error_code` (L1221)
+
+```
+_exec_export_error_code(step, put)                             # 遍历每个语言代码
+  │
+  ├── [文件检查] 检查 9 个源工具文件（见 CHECKLIST），缺少任何一个就日志报错、跳过该语言
+  │     → 不兜底、不 fallback、不自实现
+  │
+  ├── [客户端导出] subprocess: cmd /c "客户端单个导出2.bat" "GameData" "ErrorMessage.xlsm"
+  │     cwd = lang_path (语言目录)
+  │     走完整的批处理链: config.bat → make_gamedata_exe.bat → make_ready.bat → ExportXlsmToPB.py → xcopy
+  │
+  ├── [服务端导出] subprocess: python _export_error_code_erl.py --xlsm <path> --lang-dir <path>
+  │     走独立脚本 _export_error_code_erl.py 读取 ErrorMessage.xlsm 生成 erlang 文件
+  │
+  └── [日志] 每个步骤的输出最后 5 行显示到日志。失败则阻断后续步骤
+```
+
+#### 文件检查清单（CHECKLIST）
+
+| # | 文件 | 相对于语言目录 | 说明 |
+|---|------|---------------|------|
+| 1 | `客户端单个导出2.bat` | `./` | 批处理入口，EXE 内部调用 `ShellExecute` |
+| 2 | `config.bat` | `./` | 设置 PYTHON_PATH、MASTER_DATA、TOOLS_PATH 等环境变量 |
+| 3 | `make_gamedata_exe.bat` | `./protobuf/` | 执行完整导出流程 |
+| 4 | `make_ready.bat` | `./protobuf/` | 清空 proto\out\，拷贝 __init__.py 和 Base 文件 |
+| 5 | `ExportXlsmToPB.py` | `./protobuf/` | **核心脚本**（Python 2），读取 xlsm、生成 proto、调用 protoc、序列化 bin |
+| 6 | `protoc.exe` | `./protobuf/proto/` | protobuf 编译器 |
+| 7 | `__init__.py` | `./protobuf/proto/` | Python 辅助函数 getdata/filldata |
+| 8 | `Base.pb` 或 `Base_pb2.py` | `./protobuf/proto/` | Base 类型定义（至少一个存在即可） |
+| 9 | `ErrorMessage.xlsm` | `./Data2/` | 源数据文件 |
+| — | `C:\Python27\python.exe` | 系统路径 | Python 2.7 解释器，批处理链依赖 |
+
+#### _export_error_code_erl.py（独立 erlang 导出脚本）
+
+文件：[toolbox_core/_export_error_code_erl.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/_export_error_code_erl.py)
+
+- 通过 subprocess 被 `_exec_export_error_code` 调用，不 import 到 web_app.py
+- 用 openpyxl（Python 3）读 xlsm（替代 C++ xlnt 库）
+- 生成 config/cfg_errorMessage.erl + cfg_errorMessage.hrl
+- erlang 文件格式与 C++ ErlangService::writeFiles 输出一致：
+  - `.erl`: module cfg_errorMessage，含 row/first_row/last_row/rows/keys_length/getRow/getKeyList 导出函数
+  - `.hrl`: record errorMessageCfg { iD, errorString }
+- .erl 和 .hrl 都使用 `\r\n` 换行符（与 ExcelTool2.exe 输出一致）
+
+#### 涉及的源工具文件完整路径
+
+| 项目 | 路径 |
+|------|------|
+| EXE 源码 | `G:\D3_KR2\tools\ExcelTool\ExcelTool\` |
+| 导出脚本 | `G:\D3_KR2\tools\ExportScripts\` |
+| ExportXlsmToPB.py | `G:\D3_KR2\tools\ExportScripts\ExportXlsm\ExportXlsmToPB.py` |
+| 语言工具链 | `G:\D3_KR2\gameData\Language\ZH_CN\`（其他语言类似） |
+| 错误码定义 | `G:\D3_KR2\gameData\Data2\ErrorMessage.xlsm` |
+| protobuf 输出 | `G:\D3_KR2\gameData\Language\ZH_CN\protobuf\proto\out\` |
+| Server 配置输出 | `G:\D3_KR2\gameData\Language\ZH_CN\config\cfg_errorMessage.erl/.hrl` |
+| Client 输出 | `G:\D3_KR2\Client\Assets\StreamingAssets\Language\ZH_CN\BinData\bin\` |
+| ExportTxt 输出 | `G:\D3_KR2\gameData\Language\ZH_CN\ExportTxt\` |
+| Monolith 工具 | `G:\D3_KR2\tools\Monolith\bin\`（EXE 内部有使用但 ExportXlsmToPB 不涉及） |
+
+#### 已知坑点
+
+1. **Python 2 vs Python 3**：`ExportXlsmToPB.py` 是 Python 2 脚本，依赖 `C:\Python27\python.exe`。其 `reload(sys); sys.setdefaultencoding('utf-8')` 等语法在 Python 3 中不存在，不能直接用 `sys.executable` 运行
+2. **make_ready.bat 清空输出**：每次执行会 `del proto\out\*.* /f/s/q/a`，所以所有之前生成的文件都会被清空后重新生成
+3. **批处理编码问题**：`config.bat` 里也有中文注释/路径，`cmd /c` 调用时需确保当前代码页能处理中文（默认 GBK 即可）
+4. **多个语言共享 Data2**：`ErrorMessage.xlsm` 在 `gameData\Data2\` 下，不在语言目录内。但批处理链中 `config.bat` 设定 `MASTER_DATA` 为语言目录，`make_gamedata_exe.bat` 的参数是完整 xlsm 路径，所以每个语言都能找到同一个 xlsm
+5. **ExportXlsmToPB.py 中的 os.system 调用 protoc**：`os.system(r".\proto\protoc.exe ...")`，依赖 CWD 是 `protobuf/` 目录。所以 subprocess 时必须设 `cwd=lang_path`（即语言目录），脚本内部 `cd protobuf` 后 `os.system` 路径才正确
+6. **xlrd 读取限制**：Python 2 的 xlrd 不能读取受保护/加密的 xlsm。但 ErrorMessage.xlsm 是简单的定义表，无此问题
+
+### EA 项目与 KR2 项目的导出链路差异
+- **场景**：D3_EA 项目（`H:\D3_EA`）与 D3_KR2 项目（`G:\D3_KR2`）都包含导出错误码功能，但各自的 `make_gamedata_exe.bat` 调用不同的核心工具
+
+#### `make_gamedata_exe.bat` 对比
+
+| 对比项 | KR2 (`G:\D3_KR2`) | EA (`H:\D3_EA`) |
+|--------|-------------------|-----------------|
+| 文件位置 | `{lang_dir}\protobuf\make_gamedata_exe.bat` | 同左 |
+| 核心工具 | `ExportXlsmToPB.py` (Python 2) | `CompressExport.exe` (编译后 exe) |
+| 外部依赖 | Python 2.7 + xlrd + google.protobuf + protoc.exe | 无（exe 自带） |
+| 输出文件 | `.bin` `.pb` `.txt` | `.bin` `.hd` `.pb` `.txt` |
+| .txt 输出路径 | `%Export_TXT_PATH%` | `%MASTER_DATA%\ExportTxt` |
+| .hd 头文件 | 不生成 | 生成 `.hd` 头文件（varint 编码的索引） |
+
+**KR2 的 `make_gamedata_exe.bat`：**
+```bat
+@echo on
+call make_ready.bat
+call "%PYTHON_PATH%\python.exe"  "ExportXlsmToPB.py" %1%
+xcopy /y "proto\out\*.bin" %PB_GENERATE_PATH_BIN%
+xcopy /y "proto\out\*.pb" %PB_GENERATE_PATH_PB%
+xcopy /y "proto\out\*.txt" %Export_TXT_PATH%
+```
+
+**EA 的 `make_gamedata_exe.bat`：**
+```bat
+@echo on
+call make_ready.bat
+CompressExport.exe %1%
+xcopy /y "proto\out\*.bin" %PB_GENERATE_PATH_BIN%
+xcopy /y "proto\out\*.hd" %PB_GENERATE_PATH_BIN%
+xcopy /y "proto\out\*.pb" %PB_GENERATE_PATH_PB%
+xcopy /y "proto\out\*.txt" %MASTER_DATA%\ExportTxt
+```
+
+#### CompressExport.exe 与 ExportXlsmToPB.py 对比
+
+| 维度 | ExportXlsmToPB.py (KR2) | CompressExport.exe (EA) |
+|------|------------------------|------------------------|
+| 语言 | Python 2 | C++ (编译) |
+| 读取 xlsm | xlrd 库 | 内置 xlnt 或类似 C++ 库 |
+| 生成 .proto | 调用 WriteProtoFile() | 内部生成 |
+| 编译 .pb | 调用 protoc.exe | 内部通过 protobuf 库 |
+| 生成 _write.py | 调用 CreateWriteDataPYFile() | 不需要（编译在前端） |
+| 序列化 bin | 导入 _write.py 调用 write_test() | 内部序列化 |
+| 生成 .hd | 不生成 | 生成 varint 编码的 hd 头文件 |
+| similars 去重 | 无 | 有（FindBaseLine 合并相同字符串） |
+| python 导入 | 运行时 import proto.out.ErrorMessage_write | 无（exe 内置） |
+
+#### EA 的 ErrorMessage_write.py 签名差异
+
+EA 项目的 `ErrorMessage_write.py`（位于 `{lang_dir}\protobuf\proto\out\`）有 **4 个参数**，与 KR2 的 **2 个参数**不同：
+
+```python
+# EA (4 params, 生成 .hd + .bin)
+def write_test(binName, tableData, similars, headFile):
+    # similars: 相似行去重列表（由 CompressExport.AnalyseSimilarData 生成）
+    # headFile: 打开的 .hd 文件句柄
+    # 写入 .hd: varint.encode(ID) + varint.encode(offset) + varint.encode(length) + varint.encode(baseLine)
+    # 写入 .bin: 只存 protobuf 序列化数据（不含 ID，ID 在 .hd 中）
+
+# KR2 (2 params, 只生成 .bin)
+def write_test(binName, tableData):
+    # 写入 .bin: struct.pack("i", ID) + pack("i", offset) + pack("i", end_offset) + SerializeToString()
+```
+
+**关键区别**：EA 用 `.hd` 头文件分离索引和内容，ID 和偏移量存在 `.hd` 中，`.bin` 只存纯 protobuf 序列化数据。KR2 把 ID+偏移量+序列化数据全存一个 `.bin` 文件中。
+
+#### 项目感知的文件检查（2026-05-29 自适应实现）
+
+在 `_exec_export_error_code` 中，通过**读取 `make_gamedata_exe.bat` 内容**自动判断项目类型：
+
+```python
+exe_content = open(make_exe, "r", encoding="utf-8").read()
+if "ExportXlsmToPB.py" in exe_content:
+    # KR2 风格：检查 ExportXlsmToPB.py + protoc.exe + __init__.py + Base.pb + Python27
+elif "CompressExport.exe" in exe_content:
+    # EA 风格：检查 CompressExport.exe
+```
+
+两种项目共享的检查项：
+- `客户端单个导出2.bat` — 批处理入口
+- `config.bat` — 环境变量
+- `protobuf\make_gamedata_exe.bat` — 导出执行脚本
+- `protobuf\make_ready.bat` — 输出目录清理
+- `Data2\ErrorMessage.xlsm` — 源数据
+
+批处理链最后的 `xcopy` 差异（KR2 不复制 .hd，EA 复制 .hd）由 batch 自身处理，代码不需要关心。
+
+#### EA 额外工具体系
+
+EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出错误码工具集：
+
+| 文件 | 说明 |
+|------|------|
+| `src/main.py` | Python 主入口 |
+| `src/collector.py` | 数据收集 |
+| `src/excel_processor.py` | Excel 处理 |
+| `src/export_runner.py` | 导出执行器 |
+| `src/merge_error_codes.py` | 错误码合并 |
+| `src/config.py` | 配置 |
+| `dist/ExportErrorMessage.exe` | 编译后的导出 exe |
+| `dist/ErrorCodeMerger.exe` | 错误码合并 exe |
+| `Protobuf/CompressExport.exe` | **make_gamedata_exe.bat 实际调用的工具** |
+| `Protobuf/make_gamedata_exe.bat` | 和语言目录下功能一致但路径不同 |
+| `out/MergedErrorMessage.xlsx` | 合并后的错误码（用于验证） |
+
+但这个独立工具集是**冗余的**，因为语言目录下的 `protobuf\make_gamedata_exe.bat` + `CompressExport.exe` 已经完成了导出。`ExportScripts-ErrorMessage` 里的可能是开发期的源码备份。
+
+#### EA 项目路径要点
+
+| 路径 | 说明 |
+|------|------|
+| `H:\D3_EA\gameData\Language\ZH_CN\` | 语言目录（与其他语言类似） |
+| `H:\D3_EA\gameData\Data2\ErrorMessage.xlsm` | 源数据（所有语言共享） |
+| `H:\D3_EA\gameData\Language\ZH_CN\protobuf\CompressExport.exe` | 核心导出工具 |
+| `H:\D3_EA\tools\ExportScripts-ErrorMessage\` | 独立工具集（开发期源码） |
+| `H:\D3_EA\Client\Assets\StreamingAssets\Language\ZH_CN\BinData\bin\` | Client 输出（含 .bin + .hd） |
+| `H:\D3_EA\gameData\Language\ZH_CN\config\cfg_errorMessage.erl/.hrl` | Server 输出（与 KR2 相同） |
+
 ### SVN XML 日期为 UTC，需转本地时区
 - **场景**：2026-05-29 版本列表显示的时间为 13:05，实际 SVN 日志显示 21:05（北京时间）
 - **根因**：`svn log --xml` 返回的 `<date>` 是 UTC 格式（`2026-05-29T13:05:56.123456Z`），后端直接 `.text[:19]` 截取未做时区转换，前端直接显示 UTC 时间

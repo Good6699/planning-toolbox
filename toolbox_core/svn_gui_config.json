@@ -13,11 +13,11 @@
   "merge_file_filter_exclude_text": "Assets\\StreamingAssets\\SkillConfig,Assets\\StreamingAssets\\BinData,Assets\\StreamingAssets\\GenerateData,Assets\\StreamingAssets\\Language,Assets\\Code,Assets\\Code_Lua,gameData\\UpLoadBackup,gameData\\老D3废弃表,gameData\\配置描述文档,gameData\\.ExcelTool2,gameData\\.svn,gameData\\config,gameData\\config_temp,gameData\\ErlangExportCopy,gameData\\ExportTxt,gameData\\macro,gameData\\old,gameData\\oldGameData,gameData\\protobuf,Assets\\StreamingAssets\\GenerateMsg",
   "merge_file_filter_include_text": "gameData\\Text\\Texts.xlsm,gameData\\Data2,gameData\\Language",
   "svn_keyword_history": [
-    "海渊,腐败",
     "腐败秘境",
-    "专武,腐败秘境,职业",
+    "海渊,腐败",
     "神器",
     "裂隙",
+    "专武,腐败秘境,职业",
     "专武",
     "腐败"
   ],
@@ -27,6 +27,7 @@
   ],
   "merge_target_history": [
     "F:\\D3_KR2_DEV\\Client",
+    "H:\\D3_EA\\Client",
     "F:\\D3_KR2_DEV\\gameData",
     "F:\\D3_KR2_DEV\\gameData",
     "G:\\D3_KR2\\gameData",
@@ -150,9 +151,10 @@
     "C:\\Users\\admin\\.qclaw\\workspace\\输出"
   ],
   "tgt_dir_history": [
-    "F:\\D3_KR2_DEV\\Client",
-    "F:\\D3_KR2_DEV\\gameData\\Text",
     "G:\\D3_KR2\\Client",
+    "F:\\D3_KR2_DEV\\Client",
+    "H:\\D3_EA\\Client",
+    "F:\\D3_KR2_DEV\\gameData\\Text",
     "G:\\D3_KR2\\gameData\\Text",
     "G:/D3_JP/Client"
   ],
@@ -160,16 +162,6 @@
     {
       "name": "KR2导出文字表",
       "steps": [
-        {
-          "lock_msg": "",
-          "name": "Texts.xlsm",
-          "target_path": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
-          "type": "lock_svn",
-          "update_dirs": [
-            "G:\\D3_KR2\\Client\\Assets\\StreamingAssets",
-            "G:\\D3_KR2\\gameData"
-          ]
-        },
         {
           "input_file": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
           "lang_codes": "",
@@ -307,6 +299,53 @@
             "G:\\D3_KR2\\Client\\Assets\\StreamingAssets"
           ],
           "name": "gameData,StreamingAssets",
+          "type": "upload_svn"
+        }
+      ]
+    },
+    {
+      "name": "EA单独操作",
+      "steps": [
+        {
+          "lock_msg": "",
+          "name": "Texts.xlsm",
+          "target_path": "H:\\D3_EA\\gameData\\Text\\Texts.xlsm",
+          "type": "lock_svn",
+          "update_dirs": [
+            "H:\\D3_EA\\Client\\Assets\\StreamingAssets",
+            "H:\\D3_EA\\gameData"
+          ]
+        },
+        {
+          "file_paths": [
+            "H:\\D3_EA\\gameData\\Text\\Texts.xlsm"
+          ],
+          "name": "Texts.xlsm",
+          "type": "open_tables"
+        },
+        {
+          "lock_msg": "",
+          "name": "Texts.xlsm",
+          "target_path": "H:\\D3_EA\\gameData\\Text\\Texts.xlsm",
+          "type": "unlock_svn",
+          "update_dirs": []
+        },
+        {
+          "delete_unversioned": true,
+          "exclude_paths": [
+            "Assets/Code_Lua/test/test.lua",
+            "Assets/StreamingAssets/LocalVersion.xml",
+            "InstallClient.bat"
+          ],
+          "name": "Client",
+          "target_path": "H:\\D3_EA\\Client",
+          "type": "revert_svn"
+        },
+        {
+          "dirs": [
+            "H:\\D3_EA\\Client"
+          ],
+          "name": "Client",
           "type": "upload_svn"
         }
       ]
@@ -450,7 +489,7 @@
   ],
   "tr_api_url": "https://api.deepseek.com/v1/chat/completions",
   "tr_model": "deepseek-v4-flash",
-  "tr_out_dir": "C:\\Users\\admin\\.qclaw\\workspace\\输出",
+  "tr_out_dir": "C:\\Users\\admin\\.qclaw\\workspace\\翻译",
   "tr_prompt": "你是一个游戏翻译专家。请将以下文本从{src_lang}翻译为{tgt_lang}。只返回翻译结果，不要有任何额外内容。\n如果参考文件中有对应条目，请优先使用参考翻译。",
   "tr_batch_size": 300,
   "tr_saved_src_lang": "::SC::",
@@ -465,6 +504,10 @@
     "ExportTxt"
   ],
   "_wf_history_texts": [
+    "ZH_CN,KO_KR",
+    "H:\\D3_EA\\Client",
+    "H:\\D3_EA\\gameData\\Text\\Texts.xlsm",
+    "H:\\D3_EA\\Client\\Assets\\StreamingAssets, H:\\D3_EA\\gameData",
     "G:\\D3_KR2\\Client\\Assets\\StreamingAssets, G:\\D3_KR2\\gameData",
     "F:\\D3_KR2_DEV\\Client",
     "Assets/Code_Lua/test/test.lua, Assets/StreamingAssets/LocalVersion.xml, InstallClient.bat",
@@ -478,6 +521,9 @@
     "G:\\D3_KR2\\Client\\Assets\\StreamingAssets,"
   ],
   "_wf_history_paths": [
+    "G:\\D3_KR2\\gameData",
+    "H:\\D3_EA\\Client",
+    "H:\\D3_EA\\gameData\\Text\\Texts.xlsm",
     "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
     "F:\\D3_KR2_DEV\\Client",
     "F:\\D3_KR2_DEV\\gameData\\Text\\Texts.xlsm",

@@ -84,6 +84,12 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 
 ## 经验与决策
 
+### SSE 错误日志不滚动：DocumentFragment children 在 append 后变空
+- **场景**：工作流执行报错（翻译文件不存在），后端已推送 `❌ 步骤执行失败` 错误日志，但前端不滚动到日志区域，用户看不到错误
+- **根因**：`_logFlush()` 中用 `DocumentFragment` 收集日志行，`frag.appendChild(div)` 后 `frag.children` 有内容，但调用 `_logAppend(logEl, frag)` 后 **frag 的 children 被移入 DOM 变为空**，紧接着的 `for (const c of frag.children)` 循环永远执行 0 次，`_focusAppOnError()` 永不触发。以下所有修复均因此失效：① ❌ 字符检测 + ② block:end + ③ .content 滚动
+- **解决方案**：在 `_logAppend` 之前用 `Array.from(frag.children).some()` 检测错误，保存到 `hasError` 变量，append 后根据变量决定是否调用 `_focusAppOnError()`。同时，后端 `_run_wf_task` 中的 `_line()` 函数嵌入 `[error]` 标签以便前端正则识别；前端 `evtSrc.onerror` 加 `_focusAppOnError()` 调用
+- **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)，[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
 ### 打包部署到 APPDATA 固定路径（托盘设置不丢失）
 - **场景**：每次 `python build.py` 生成带时间戳的新目录 `策划工具箱_v1.0_20260530_1722/`，exe 路径变化 → Windows 通知区域图标显示设置丢失，需重新设置"显示图标和通知"
 - **根因**：Windows 通知区域图标设置按 exe 完整路径记忆，路径每次打包都变，旧设置不适用于新路径

@@ -2986,7 +2986,13 @@ function _focusAppOnError(tabKey, logEl) {
     window.pywebview.api.focusWindow();
   }
   switchTab(tabKey);
-  setTimeout(() => logEl?.scrollIntoView({behavior:"smooth", block:"nearest"}), 200);
+  setTimeout(() => {
+    logEl?.scrollIntoView({behavior:"smooth", block:"end"});
+    const logContainer = document.getElementById("wf_log");
+    if (logContainer) logContainer.scrollTop = logContainer.scrollHeight;
+    const mainContent = document.querySelector(".content");
+    if (mainContent) mainContent.scrollTop = mainContent.scrollHeight;
+  }, 200);
 }
 async function runTask(url, body, btn, logId, label, onDone) {
   const logEl = document.getElementById(logId);
@@ -3011,7 +3017,8 @@ async function runTask(url, body, btn, logId, label, onDone) {
       if (label) {
         msg = `<span style="color:var(--accent);font-weight:600">[${escapeHtml(label)}]</span> ${msg}`;
       }
-      const cls = {"error":"error","warn":"warn","ok":"success","success":"success","info":"info"}[tag] || "";
+      const isError = tag === "error" || raw.includes("❌");
+      const cls = isError ? "error" : ({"warn":"warn","ok":"success","success":"success","info":"info"}[tag] || "");
       const div = document.createElement("div");
       div.className = cls;
       div.innerHTML = msg;
@@ -3021,10 +3028,9 @@ async function runTask(url, body, btn, logId, label, onDone) {
       if (_pm) _outputPath = _pm[1].trim();
       frag.appendChild(div);
     }
+    const hasError = Array.from(frag.children).some(c => c.className === "error");
     _logAppend(logEl, frag);
-    for (const c of frag.children) {
-      if (c.className === "error") { _focusAppOnError(tabKey, logEl); break; }
-    }
+    if (hasError) _focusAppOnError(tabKey, logEl);
   }
   function _logStartTimer() {
     if (_logTimer) return;
@@ -3103,6 +3109,7 @@ async function runTask(url, body, btn, logId, label, onDone) {
     _esMap[url] = null;
     _done();
     logEl.innerHTML += "\n⚠ 日志连接中断\n";
+    _focusAppOnError(tabKey, logEl);
   };
 }
 function _openFolder(path) {

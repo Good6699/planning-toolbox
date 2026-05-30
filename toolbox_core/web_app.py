@@ -784,7 +784,10 @@ def _run_wf_task(q, wf, steps, task_id):
         q.put(f"[{ts}] {msg}")
 
     def _line(msg, tag=""):
-        _put(f"{prefix.get(tag, '')}{msg}\n")
+        if tag:
+            _put(f"[{tag}] {prefix.get(tag, '')}{msg}\n")
+        else:
+            _put(f"{prefix.get(tag, '')}{msg}\n")
 
     _put(f"{'='*50}\n")
     _put(f"执行工作流: {wf.get('name', '未命名')}\n")
@@ -834,6 +837,7 @@ def _run_wf_task(q, wf, steps, task_id):
     _notify_task_done(wf.get('name', '未命名'))
     _cancelled_tasks.discard(task_id)
     _put(None)
+    time.sleep(10)
     _log_queues.pop(task_id, None)
 
 
@@ -2780,7 +2784,7 @@ def _merge_analyze_worker(task_id, source_url, target_path, revisions,
 def api_log_stream(task_id):
     q = _log_queues.get(task_id)
     if not q:
-        return Response("data: 任务不存在\n\n", mimetype="text/event-stream")
+        return Response("data: 任务已结束\n\n", mimetype="text/event-stream")
 
     def _stream():
         try:

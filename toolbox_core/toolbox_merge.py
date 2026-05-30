@@ -43,13 +43,19 @@ def _run_svn(cmd, timeout=120):
     result = subprocess.run(
         full_cmd,
         capture_output=True,
-        encoding="utf-8", errors="replace",
         timeout=timeout,
         **_get_subprocess_kwargs()
     )
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or f"svn 返回码 {result.returncode}")
-    return result.stdout
+        try:
+            err = result.stderr.decode("gbk")
+        except UnicodeDecodeError:
+            err = result.stderr.decode("utf-8", errors="replace")
+        raise RuntimeError(err.strip() or f"svn 返回码 {result.returncode}")
+    try:
+        return result.stdout.decode("gbk")
+    except UnicodeDecodeError:
+        return result.stdout.decode("utf-8", errors="replace")
 
 
 def _parse_svn_date(text):
@@ -145,12 +151,15 @@ def find_wc_root(target_path):
         cmd = [_get_svn_path(), "info", "--show-item", "wc-root", target_path]
         cmd += _get_subprocess_kwargs().get("startupinfo", [])
         result = subprocess.run(
-            cmd, capture_output=True,
-            encoding="utf-8", errors="replace",
-            timeout=15
+            cmd, capture_output=True, timeout=15
         )
-        wc_root = result.stdout.strip()
-        if wc_root and result.returncode == 0:
+        if result.returncode != 0:
+            wc_root = ""
+        else:
+            try:
+                wc_root = result.stdout.decode("gbk").strip()
+            except UnicodeDecodeError:
+                wc_root = result.stdout.decode("utf-8", errors="replace").strip()
             return wc_root
     except Exception:
         pass
@@ -174,9 +183,7 @@ def _svn_export_add(svn_exe, source_url, revision, file_path, local_file, auth_a
         return False
     add_cmd = [svn_exe, "add", "--parents", "--force", "--quiet", local_file] + auth_args
     try:
-        r = subprocess.run(add_cmd, capture_output=True,
-                           encoding="utf-8", errors="replace",
-                           timeout=30, **_get_subprocess_kwargs())
+        r = subprocess.run(add_cmd, capture_output=True, timeout=30, **_get_subprocess_kwargs())
         if r.returncode != 0:
             log_callback(f"  ⚠ svn add 失败: {file_path}", "warn")
             return False
@@ -202,9 +209,9 @@ def _svn_try_export(svn_exe, file_url, revision, local_file, auth_args):
             )
             stdout_bytes, _ = proc.communicate(timeout=120)
             try:
-                out_text = stdout_bytes.decode("utf-8")
+                out_text = stdout_bytes.decode("gbk")
             except UnicodeDecodeError:
-                out_text = stdout_bytes.decode("gbk", errors="replace")
+                out_text = stdout_bytes.decode("utf-8", errors="replace")
             if proc.returncode == 0:
                 return True, ""
             if attempt == 0:
@@ -254,9 +261,9 @@ def _svn_delete_file(svn_exe, local_file, auth_args):
             )
             stdout_bytes, _ = proc.communicate(timeout=60)
             try:
-                out_text = stdout_bytes.decode("utf-8")
+                out_text = stdout_bytes.decode("gbk")
             except UnicodeDecodeError:
-                out_text = stdout_bytes.decode("gbk", errors="replace")
+                out_text = stdout_bytes.decode("utf-8", errors="replace")
             if proc.returncode == 0:
                 return True, ""
             if attempt == 0:
@@ -373,9 +380,9 @@ def _svn_merge_single_file(svn_exe, cmd, log_callback):
         )
         stdout_bytes, _ = proc.communicate(timeout=120)
         try:
-            stdout = stdout_bytes.decode("utf-8")
+            stdout = stdout_bytes.decode("gbk")
         except UnicodeDecodeError:
-            stdout = stdout_bytes.decode("gbk", errors="replace")
+            stdout = stdout_bytes.decode("utf-8", errors="replace")
         if proc.returncode != 0:
             if "E155010" in stdout:
                 return "e155010", stdout
@@ -550,14 +557,19 @@ def svn_update_target(target_path, svn_user=None, svn_pass=None, log_callback=No
     _log("  → 执行: svn update --accept theirs-full --force", "info")
     try:
         result = subprocess.run(
-            cmd, capture_output=True,
-            encoding="utf-8", errors="replace",
-            timeout=300,
-            **_get_subprocess_kwargs()
+            cmd, capture_output=True, timeout=300, **_get_subprocess_kwargs()
         )
         if result.returncode != 0:
+            try:
+                err = result.stderr.decode("gbk")
+            except UnicodeDecodeError:
+                err = result.stderr.decode("utf-8", errors="replace")
+            try:
+                out = result.stdout.decode("gbk")
+            except UnicodeDecodeError:
+                out = result.stdout.decode("utf-8", errors="replace")
             _log(f"  ⚠ svn update 返回码 {result.returncode}: "
-                 f"{result.stderr.strip() or result.stdout.strip()}", "warn")
+                 f"{err.strip() or out.strip()}", "warn")
         else:
             _log("  ✅ svn update 完成", "ok")
     except subprocess.TimeoutExpired:

@@ -113,6 +113,13 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 - **解决方案**：采用"一笔画"路径方案——用连续单线折返轨迹 M30 28→H70→...→H58 代替多边形 + 对角线 + 横线的组合；蓝紫渐变（#8BE9FF→#4F8CFF→#6A4CFF）代替纯色填充；路径拐点处加圆点作为识别标记。viewBox 从 0 0 100 100 收紧到 25 25 50 50 使其撑满容器
 - **涉及文件**：[logo.svg](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/assets/logo.svg), [splash.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/splash/splash.html), [desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py), [index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### 全局修复 SVN subprocess 编码：先 GBK 再 UTF-8
+- **场景**：工作流 lock_svn 步骤的 svn update/svn lock 输出日志显示乱码（"正在更新"显示为"��������"），排查后发现整个项目大量 SVN subprocess 调用都有同样问题
+- **根因**：中文 Windows 下 SVN 输出编码是 GBK，但代码中所有 subprocess.Popen/run 都用了 `encoding="utf-8", errors="replace"`。GBK 中文字节有一部分恰好是合法 UTF-8 序列（如"正"=D5E2），UTF-8 解码"成功"但产生错字，`errors="replace"` 掩盖了问题
+- **解决方案**：改为 bytes 模式（不设 encoding 参数）+ 手动先试 GBK.decode()→except→UTF-8。涉及 3 个文件 24 处调用，覆盖工作流（lock/unlock/revert）、上传 SVN（add/status/changelist）、合并（export/delete/merge/update/resolve）、语义分析（cat/diff）
+- **关键教训**：不要用 `encoding="utf-8", errors="replace"` 处理可能有 GBK 编码的 subprocess 输出。错误的解码顺序（先 UTF-8 后 GBK）是 bug 诱因，因为 GBK 字节可能无报错地被 UTF-8 误解码
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py), [toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/toolbox_merge.py), [_merge_analyzer.py](file:///c:/Users/admin/.qclaw/workspace/_merge_analyzer.py)
+
 ### merge 前全量 propdel --depth infinity 导致大型WC卡死
 - **场景**：2026-05-28 精准合并 301 版本 381 个文件时，F:\D3_KR2_DEV\Client（大型游戏客户端项目）在 banner 后无任何日志输出，用户以为卡死
 - **根因**：合并前的 `svn propdel svn:mergeinfo --depth infinity` 是对整个 WC 的递归全量操作，遍历数万文件且无进度日志。超时后的 cleanup + 重试形成死循环。`svn merge --ignore-ancestry` 已保证 mergeinfo 不参与合并，前置清理是冗余的

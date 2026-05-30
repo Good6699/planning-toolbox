@@ -182,14 +182,20 @@ def _run_svn(cmd, timeout=120):
     full_cmd = [svn_exe] + cmd
     result = subprocess.run(
         full_cmd,
-        capture_output=True, text=True,
-        encoding="utf-8", errors="replace",
+        capture_output=True,
         timeout=timeout,
         **_get_subprocess_kwargs()
     )
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or f"svn 返回码 {result.returncode}")
-    return result.stdout
+        try:
+            err = result.stderr.decode("gbk")
+        except UnicodeDecodeError:
+            err = result.stderr.decode("utf-8", errors="replace")
+        raise RuntimeError(err.strip() or f"svn 返回码 {result.returncode}")
+    try:
+        return result.stdout.decode("gbk")
+    except UnicodeDecodeError:
+        return result.stdout.decode("utf-8", errors="replace")
 
 
 # ═══════════════════════════════════════════════════════════

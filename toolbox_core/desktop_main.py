@@ -925,6 +925,9 @@ def main():
             time.sleep(0.5)
         except Exception as e:
             print(f"[load_url] {e}", file=sys.stderr)
+        hwnd = _find_window_hwnd(timeout=0.5)
+        if hwnd:
+            _show_taskbar_icon(hwnd)
 
     try:
         webview.start(_boot_app, window, debug=False)

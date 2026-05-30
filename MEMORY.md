@@ -1074,6 +1074,15 @@ while (true):
 - **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### exe 闪退根因：PyInstaller 缺少 --paths 参数 + 打包输出时间戳命名
+- **场景**：2026-05-30 PyInstaller 打包后 `策划工具箱.exe` 启动立即闪退，报 `ModuleNotFoundError: No module named 'desktop_main'`。修复后改进了打包命名方式。
+- **根因**：`main.py` 通过 `sys.path.insert(0, "toolbox_core")` 在运行时添加模块搜索路径，但 PyInstaller 静态分析不会执行代码，不知道从 `toolbox_core/` 找模块。`build.py` 缺了 `--paths toolbox_core` 参数
+- **解决方案**：
+  1. 在 `build.py` 新增 `_get_path_args()` 返回 `["--paths", CORE_DIR]`，加入 PyInstaller 命令
+  2. 输出目录改用时间戳命名 `策划工具箱_{版本}_{时间}/`，不再清空 `dist/` 目录，每次打包独立目录互不覆盖
+  3. PyInstaller 输出被 `--name` 固定为 `策划工具箱/`，打包完成后用 `os.rename()` 改为时间戳目录
+- **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
+
 ### .gitignore _*.py 规则误排除生产脚本 + _export_error_code_erl.py 重建
 - **场景**：2026-05-30 PyInstaller 打包时发现 `_cmp_worker.py`、`_merge_analyzer.py`、`_merge_analyze_worker.py`、`_export_error_code_erl.py` 等 4 个被子进程调用的生产脚本（subprocess 而非 import）被 `.gitignore` 的 `_*.py` 规则排除，打包时不存在。其中 `_export_error_code_erl.py` 还在此前的 flake8 清理中被彻底误删（从未被 git 跟踪过，无法恢复）。
 - **根因**：

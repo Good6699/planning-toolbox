@@ -74,6 +74,7 @@ _VSCREEN_B = _vy + win32api.GetSystemMetrics(79)
 
 _instance_socket = None
 _tray_icon = None
+_flask_server = None
 _tray_stop = threading.Event()
 _window_visible = True
 _docker = None
@@ -517,7 +518,18 @@ def _show_window(icon, item=None):
 
 def _quit_app(icon, item=None):
     _save_window_rect()
+    _stop_flask()
     icon.stop()
+
+
+def _stop_flask():
+    global _flask_server
+    if _flask_server is not None:
+        try:
+            _flask_server.shutdown()
+        except Exception:
+            pass
+        _flask_server = None
 
 
 class ResizeApi:
@@ -915,6 +927,7 @@ def main():
     try:
         webview.start(_boot_app, window, debug=False)
     finally:
+        _stop_flask()
         if not _tray_stop.is_set():
             _tray_stop.set()
             if _tray_icon:

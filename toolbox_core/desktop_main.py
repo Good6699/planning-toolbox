@@ -21,7 +21,7 @@ import win32con
 import win32api
 import pystray
 from PIL import Image, ImageDraw
-from toolbox_config import load_config, save_config
+from toolbox_config import load_config, save_config, _ensure_frozen_config
 
 WINDOW_W = 1100
 WINDOW_H = 700
@@ -845,6 +845,7 @@ def _set_progress(window, pct, text):
 def main():
     _acquire_instance_lock()
     _ensure_app_id()
+    _ensure_frozen_config()
 
     flask_thread = threading.Thread(target=_start_flask, daemon=True)
     flask_thread.start()
@@ -921,6 +922,7 @@ def main():
 
         try:
             window.load_url("http://127.0.0.1:18123")
+            time.sleep(0.5)
         except Exception as e:
             print(f"[load_url] {e}", file=sys.stderr)
 

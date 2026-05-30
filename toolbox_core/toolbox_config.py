@@ -19,6 +19,37 @@ def _get_config_dir():
         return d
     return SCRIPT_DIR
 
+
+def _ensure_frozen_config():
+    """用打包内置的完整配置覆盖 APPDATA 配置，仅保留 API Key（如有）"""
+    if not getattr(sys, 'frozen', False):
+        return
+    cfg_path = CONFIG_FILE
+    internal_cfg = os.path.join(SCRIPT_DIR, "toolbox_core", "svn_gui_config.json")
+    alt_internal = os.path.join(os.path.dirname(SCRIPT_DIR), "toolbox_core", "svn_gui_config.json")
+    src = None
+    for p in (internal_cfg, alt_internal):
+        if os.path.isfile(p):
+            src = p
+            break
+    if not src:
+        return
+    with open(src, "r", encoding="utf-8") as f:
+        src_cfg = json.load(f)
+    src_cfg.pop("tr_api_key", None)
+    src_cfg.pop("tr_api_key_enc", None)
+    if not os.path.isfile(cfg_path):
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            json.dump(src_cfg, f, ensure_ascii=False, indent=2)
+        return
+    with open(cfg_path, "r", encoding="utf-8") as f:
+        dst_cfg = json.load(f)
+    for k, v in src_cfg.items():
+        if k not in dst_cfg:
+            dst_cfg[k] = v
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        json.dump(dst_cfg, f, ensure_ascii=False, indent=2)
+
 MAIN_SCRIPT = os.path.join(SCRIPT_DIR, "svn_oneclick_compare.py")
 CONFIG_FILE = os.path.join(_get_config_dir(), "svn_gui_config.json")
 DEFAULT_OUTPUT_DIR = os.path.join(SCRIPT_DIR, "输出")  # GUI 同级输出文件夹

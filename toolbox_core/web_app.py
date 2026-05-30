@@ -2772,6 +2772,81 @@ def api_log_stream(task_id):
     return response
 
 # ═══════════════════════════════════════════════════════════
+# 更新检查 API
+# ═══════════════════════════════════════════════════════════
+
+@app.route("/api/update/check")
+def api_update_check():
+    from update_version import APP_VERSION, UPDATE_URL
+    import urllib.request
+    import json as _json
+
+    result = {
+        "current": APP_VERSION,
+        "latest": None,
+        "available": False,
+        "force": False,
+        "notes": "",
+        "url": "",
+        "error": None,
+    }
+    try:
+        ver_url = UPDATE_URL.rstrip("/") + "/version.json"
+        resp = urllib.request.urlopen(ver_url, timeout=5)
+        remote = _json.loads(resp.read().decode("utf-8"))
+        remote_ver = remote.get("version", "")
+        result["latest"] = remote_ver
+        result["notes"] = remote.get("notes", "")
+        result["url"] = remote.get("url", "")
+        result["force"] = remote.get("force", False)
+
+        def _parse_ver(v):
+            v = v.lstrip("vV")
+            parts = v.split(".")
+            return tuple(int(p) if p.isdigit() else 0 for p in parts)
+
+        if remote_ver and _parse_ver(remote_ver) > _parse_ver(APP_VERSION):
+            result["available"] = True
+    except Exception as e:
+        result["error"] = str(e)
+
+    return jsonify(result)
+
+
+@app.route("/api/update/apply", methods=["POST"])
+def api_update_apply():
+    from update_version import APP_VERSION, UPDATE_URL
+    import urllib.request
+    import json as _json
+    import tempfile
+
+    try:
+        ver_url = UPDATE_URL.rstrip("/") + "/version.json"
+        resp = urllib.request.urlopen(ver_url, timeout=5)
+        remote = _json.loads(resp.read().decode("utf-8"))
+        zip_name = remote.get("url", "")
+        if not zip_name:
+            return jsonify({"ok": False, "error": "version.json 缺少 url 字段"}), 400
+
+        zip_url = UPDATE_URL.rstrip("/") + "/" + zip_name
+        tmp_dir = tempfile.mkdtemp(prefix="toolbox_update_")
+        zip_path = os.path.join(tmp_dir, zip_name)
+
+        import urllib.request as _req
+        _req.urlretrieve(zip_url, zip_path)
+
+        updater = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_updater.bat")
+        if not os.path.isfile(updater):
+            return jsonify({"ok": False, "error": "未找到更新器脚本 _updater.bat"}), 500
+
+        subprocess.Popen([updater, zip_path, tmp_dir], shell=True)
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════
 # 静态文件
 # ═══════════════════════════════════════════════════════════
 

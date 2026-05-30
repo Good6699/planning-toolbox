@@ -1,0 +1,314 @@
+#!/usr/bin/env python3
+"""
+策划工具箱 — PyInstaller 打包脚本 + 更新服务器文件生成
+
+用法:
+  cd toolbox_core
+  python build.py
+
+输出:
+  dist/策划工具箱/          ← 可分发目录
+  update-server/version.json  ← 版本信息（供客户端检查更新）
+  update-server/策划工具箱_v1.0.zip  ← 更新包（可选，加 --zip）
+
+参数:
+  --zip  同时生成 update-server 下的更新 zip 包
+
+环境:
+  需要先 pip install pyinstaller
+  当前电脑上运行一次后得到 dist/，即可整个目录分发给用户
+"""
+import os
+import sys
+import json
+import shutil
+import subprocess
+import hashlib
+import zipfile
+from datetime import datetime
+
+WORKSPACE = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+CORE_DIR = os.path.join(WORKSPACE, "toolbox_core")
+DIST_DIR = os.path.join(WORKSPACE, "dist")
+UPDATE_DIR = os.path.join(WORKSPACE, "update-server")
+APP_NAME = "策划工具箱"
+APP_VERSION = "v1.0"
+
+# PV_HOST = "192.168.1.41"  # 你的开发机 IP，发给用户前改成实际地址
+# UPDATE_URL 在 update_version.py 中配置，打包时自动读取
+
+# ── 需要打包的核心 Python 文件 ──
+CORE_SCRIPTS = [
+    "desktop_main.py",
+    "web_app.py",
+    "svn_oneclick_compare.py",
+    "toolbox_config.py",
+    "toolbox_platform.py",
+    "toolbox_merge.py",
+    "xlsm_zipper.py",
+    "export_error_code.py",
+    "update_version.py",
+    "lang_map.txt",
+]
+
+# ── 子进程调用的 worker 脚本（PyInstaller 不会自动追踪，需手动加入）──
+WORKER_SCRIPTS = [
+    "_cmp_worker.py",
+    "_merge_analyzer.py",
+    "_export_error_code_erl.py",
+    "_merge_analyze_worker.py",
+]
+
+# ── Flask 模板/静态文件 ──
+DATA_DIRS = [
+    ("templates", "templates"),
+    ("assets", "assets"),
+    ("splash", "splash"),
+]
+
+# ── 更新器辅助脚本 ──
+UPDATER_SCRIPT = "_updater.bat"
+
+
+def _get_pyinstaller():
+    pyi = shutil.which("pyinstaller")
+    if pyi:
+        return pyi
+    candidates = [
+        os.path.join(os.path.dirname(sys.executable), "pyinstaller.exe"),
+        os.path.join(os.path.dirname(sys.executable), "Scripts", "pyinstaller.exe"),
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+def _ensure_worker_scripts():
+    """确保 worker 脚本在 toolbox_core/ 下存在（打包时需要）"""
+    copied = []
+    for name in WORKER_SCRIPTS:
+        src = os.path.join(WORKSPACE, name)
+        dst = os.path.join(CORE_DIR, name)
+        if os.path.isfile(src) and not os.path.isfile(dst):
+            shutil.copy2(src, dst)
+            copied.append(name)
+        elif not os.path.isfile(src):
+            print(f"  [跳过] worker 脚本不存在: {name}")
+    if copied:
+        print(f"  [复制] worker 脚本: {', '.join(copied)}")
+    return copied
+
+
+def _cleanup_copied_workers(copied):
+    for name in copied:
+        dst = os.path.join(CORE_DIR, name)
+        if os.path.isfile(dst):
+            os.remove(dst)
+
+
+def _strip_api_key():
+    """读取配置，去掉 API Key"""
+    config_path = os.path.join(CORE_DIR, "svn_gui_config.json")
+    if not os.path.isfile(config_path):
+        print("  [跳过] config 文件不存在")
+        return None
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+    removed = []
+    if "tr_api_key_enc" in cfg:
+        del cfg["tr_api_key_enc"]
+        removed.append("tr_api_key_enc")
+    if "tr_api_key" in cfg:
+        del cfg["tr_api_key"]
+        removed.append("tr_api_key")
+    if removed:
+        print(f"  [清理] 已移除 API Key 字段: {', '.join(removed)}")
+    return cfg
+
+
+def _get_data_args():
+    """生成 PyInstaller --add-data 参数列表"""
+    args = []
+    for src_rel, dst_rel in DATA_DIRS:
+        src = os.path.join(CORE_DIR, src_rel)
+        if os.path.exists(src):
+            args.append(f"--add-data={src};{dst_rel}")
+            print(f"  [数据] {src_rel}/ → {dst_rel}/")
+    for name in WORKER_SCRIPTS:
+        src = os.path.join(CORE_DIR, name)
+        if os.path.isfile(src):
+            args.append(f"--add-data={src};.")
+            print(f"  [数据] {name} → ./")
+    updater = os.path.join(CORE_DIR, UPDATER_SCRIPT)
+    if os.path.isfile(updater):
+        args.append(f"--add-data={updater};.")
+        print(f"  [数据] {UPDATER_SCRIPT} → ./")
+    return args
+
+
+def _get_hidden_imports():
+    """解决 PyInstaller 自动检测不到的依赖"""
+    return [
+        "--hidden-import=win32timezone",
+    ]
+
+
+def build():
+    print(f"\n{'='*60}")
+    print(f"  策划工具箱 — PyInstaller 打包")
+    print(f"  版本: {APP_VERSION}")
+    print(f"  工作区: {WORKSPACE}")
+    print(f"{'='*60}\n")
+
+    # ── Step 1: 检查 PyInstaller ──
+    pyi = _get_pyinstaller()
+    if not pyi:
+        print("[错误] 未找到 PyInstaller。请先安装：pip install pyinstaller")
+        sys.exit(1)
+    print(f"[PyInstaller] {pyi}")
+
+    # ── Step 2: 准备 worker 脚本 ──
+    copied_workers = _ensure_worker_scripts()
+
+    # ── Step 3: 清理旧构建 ──
+    dist_app = os.path.join(DIST_DIR, APP_NAME)
+    build_dir = os.path.join(WORKSPACE, "build")
+    for d in [dist_app, build_dir]:
+        if os.path.exists(d):
+            shutil.rmtree(d)
+            print(f"  [清理] {os.path.relpath(d, WORKSPACE)}/")
+    spec_file = os.path.join(WORKSPACE, f"{APP_NAME}.spec")
+    if os.path.isfile(spec_file):
+        os.remove(spec_file)
+
+    # ── Step 4: 准备打包配置 ──
+    cfg_safe = _strip_api_key()
+
+    entry = os.path.join(WORKSPACE, "main.py")
+    icon = os.path.join(CORE_DIR, "assets", "app_icon.ico")
+    data_args = _get_data_args()
+    hidden_imports = _get_hidden_imports()
+
+    # ── Step 5: 执行 PyInstaller ──
+    cmd = [
+        pyi,
+        "--onedir",
+        "--noconfirm",
+        "--clean",
+        "--distpath", DIST_DIR,
+        "--workpath", build_dir,
+        "--name", APP_NAME,
+        "--specpath", WORKSPACE,
+    ]
+    if os.path.isfile(icon):
+        cmd += ["--icon", icon]
+    cmd += data_args
+    cmd += hidden_imports
+    cmd.append(entry)
+
+    print(f"\n[执行] PyInstaller 打包中...")
+    print(f"  Entry: {os.path.basename(entry)}")
+    print(f"  Output: {dist_app}\\")
+    sys.stdout.flush()
+
+    result = subprocess.run(cmd, cwd=WORKSPACE, shell=True)
+    if result.returncode != 0:
+        _cleanup_copied_workers(copied_workers)
+        print(f"\n[错误] PyInstaller 打包失败 (exit={result.returncode})")
+        sys.exit(1)
+
+    _cleanup_copied_workers(copied_workers)
+
+    if not os.path.isdir(dist_app):
+        print(f"\n[错误] 输出目录未生成: {dist_app}")
+        sys.exit(1)
+
+    print(f"\n[完成] PyInstaller 打包成功！")
+
+    # ── Step 6: 复制配置文件（无 API Key）──
+    if cfg_safe is not None:
+        cfg_name = "svn_gui_config.json"
+        dst = os.path.join(dist_app, "_internal", CORE_DIR.split("\\")[-1], cfg_name)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, "w", encoding="utf-8") as f:
+            json.dump(cfg_safe, f, ensure_ascii=False, indent=2)
+        print(f"  [配置] (无 API Key) → _internal/toolbox_core/{cfg_name}")
+
+    # ── Step 7: 复制 update_version.py 到 dist ──
+    ver_src = os.path.join(CORE_DIR, "update_version.py")
+    ver_dst = os.path.join(dist_app, "_internal", CORE_DIR.split("\\")[-1], "update_version.py")
+    if os.path.isfile(ver_src):
+        shutil.copy2(ver_src, ver_dst)
+        print(f"  [版本] update_version.py → _internal/toolbox_core/")
+
+    # ── Step 8: 统计 ──
+    total_size = 0
+    for dirpath, _, filenames in os.walk(dist_app):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            total_size += os.path.getsize(fp)
+    file_count = sum(len(files) for _, _, files in os.walk(dist_app))
+    size_mb = total_size / (1024 * 1024)
+
+    print(f"\n{'='*60}")
+    print(f"  打包完成！")
+    print(f"  输出: {dist_app}\\")
+    print(f"  文件: {file_count} 个")
+    print(f"  大小: {size_mb:.1f} MB")
+    print(f"{'='*60}")
+
+    return dist_app
+
+
+def make_update_zip(dist_app):
+    """将 dist 目录压缩为更新 zip 包，放入 update-server/"""
+    os.makedirs(UPDATE_DIR, exist_ok=True)
+    zip_name = f"{APP_NAME}_{APP_VERSION}.zip"
+    zip_path = os.path.join(UPDATE_DIR, zip_name)
+
+    print(f"\n[压缩] 生成更新包...")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for dirpath, _, filenames in os.walk(dist_app):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                rel = os.path.relpath(fp, os.path.dirname(dist_app))
+                zf.write(fp, rel)
+    zip_size = os.path.getsize(zip_path) / (1024 * 1024)
+    print(f"  {zip_name} ({zip_size:.1f} MB)")
+
+    # ── 计算 MD5 ──
+    md5 = hashlib.md5()
+    with open(zip_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            md5.update(chunk)
+    md5_hex = md5.hexdigest()
+
+    # ── 生成 version.json ──
+    ver_path = os.path.join(UPDATE_DIR, "version.json")
+    ver_info = {
+        "version": APP_VERSION,
+        "url": zip_name,
+        "md5": md5_hex,
+        "notes": "请更新后查看变更日志",
+        "force": False,
+    }
+    with open(ver_path, "w", encoding="utf-8") as f:
+        json.dump(ver_info, f, ensure_ascii=False, indent=2)
+    print(f"  version.json → {UPDATE_DIR}\\")
+
+    print(f"\n[更新服务器就绪]")
+    print(f"  cd {UPDATE_DIR}")
+    print(f"  python -m http.server 8080")
+    print(f"  客户端地址: http://你的IP:8080/update/")
+
+    return zip_path
+
+
+if __name__ == "__main__":
+    make_zip = "--zip" in sys.argv
+    dist_app = build()
+    if make_zip:
+        make_update_zip(dist_app)
+    else:
+        print(f"\n提示: 加 --zip 参数可同时生成 update-server 下的更新包")

@@ -1074,6 +1074,22 @@ while (true):
 - **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### 策划工具箱 PyInstaller 打包 + 局域网自动更新
+- **场景**：2026-05-30 需要将策划工具箱打包为 exe 分发给团队使用，支持局域网 HTTP 服务器一键自动更新
+- **架构设计**：
+  1. **版本号**：`update_version.py` 中硬编码 `APP_VERSION = "v1.0"`，`UPDATE_URL = "http://192.168.1.41:8080/update/"` 指向局域网服务器
+  2. **服务器**：`update-server/` 目录放 `version.json` + 压缩包，用 `python -m http.server 8080` 一行命令启动
+  3. **更新检查**：Web 前端启动 2 秒后调 `/api/update/check` 检查 `version.json`，发现新版本时显示蓝色横幅「📦 新版本 v1.1 可用」+「一键更新」按钮
+  4. **一键更新**：后端 `/api/update/apply` 下载 zip → 启动 `_updater.bat` → 主进程退出 → bat 解压覆盖 → 启动新版 exe
+  5. **强制/非强制**：`version.json` 的 `force` 字段控制：`true` 时不可关闭横幅（必须更新），`false` 时可点 ✕ 推迟
+  6. **打包脚本**：`build.py` 使用 PyInstaller `--onedir` 模式，打包前自动清理 API Key，保留所有配置
+- **关键教训**：
+  - PyInstaller `--onedir` 比 `--onefile` 更适合：启动快（解压内容已就绪）、更新方便（只需替换目录）、调试容易（能看到内部文件）
+  - 子进程 work 脚本（`_cmp_worker.py` 等）PyInstaller 不会自动追踪，必须用 `--add-data` 加入，且路径要匹配 `os.path.dirname(__file__)` 的解析逻辑
+  - 更新器需要 `.bat` 而非 `.exe`：Windows 不允许正在运行的 exe 覆盖自己，bat 脚本不受此限制
+  - 更新检查在服务端不可达时应静默失败（不弹错误提示），仅在 `version.json` 返回 `version > APP_VERSION` 时才显示 UI
+- **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)，[update_version.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/update_version.py)，[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)，[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)，[update-server/version.json](file:///c:/Users/admin/.qclaw/workspace/update-server/version.json)
+
 ### 全功能模块内存泄漏审计与修复（8项）
 - **场景**：2026-05-30 审计策划工具箱所有功能模块的内存溢出/资源未释放/运行久后卡顿问题，修复了 `_ss_values_cache` 无上限膨胀、ZipFile/openpyxl 文件句柄未释放、前端 `setInterval` 无限轮询等共 8 个泄漏点
 - **根因**：三个层面：

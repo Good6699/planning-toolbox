@@ -1182,6 +1182,54 @@ input::placeholder,textarea::placeholder{
 .zoom-warning .zw-dismiss:hover{
   background:rgba(255,255,255,.12);
 }
+.update-bar{
+  display:none;
+  align-items:center;
+  gap:8px;
+  padding:4px 10px;
+  border-radius:8px;
+  background:linear-gradient(135deg,rgba(94,162,255,.15),rgba(74,122,255,.08));
+  border:1px solid rgba(94,162,255,.25);
+  font-size:11px;
+  color:#7cb8ff;
+  white-space:nowrap;
+}
+.update-bar.visible{
+  display:flex;
+}
+.update-bar .ub-btn{
+  height:24px;
+  padding:0 10px;
+  border-radius:6px;
+  border:none;
+  background:#4f8cff;
+  color:#fff;
+  cursor:pointer;
+  font-size:11px;
+  white-space:nowrap;
+  transition:.15s;
+}
+.update-bar .ub-btn:hover{
+  background:#3a7aff;
+}
+.update-bar .ub-dismiss{
+  height:24px;
+  width:24px;
+  border-radius:6px;
+  border:none;
+  background:transparent;
+  color:rgba(255,255,255,.35);
+  cursor:pointer;
+  font-size:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:.15s;
+}
+.update-bar .ub-dismiss:hover{
+  background:rgba(255,255,255,.08);
+  color:rgba(255,255,255,.6);
+}
 @keyframes spin{to{transform:rotate(360deg);}}
 ::-webkit-scrollbar{width:6px;height:6px;}
 ::-webkit-scrollbar-track{background:transparent;}
@@ -1527,6 +1575,11 @@ input::placeholder,textarea::placeholder{
         <div class="zoom-warning" id="zoom_warning">
           <span>⚠ 浏览器缩放异常，请按 <b>Ctrl+0</b> 恢复 100%</span>
           <button class="zw-dismiss" data-action="dismiss-zoom-warn">知道了</button>
+        </div>
+        <div class="update-bar" id="update_bar">
+          <span id="update_text">📦 发现新版本</span>
+          <button class="ub-btn" id="update_btn">一键更新</button>
+          <button class="ub-dismiss" id="update_dismiss">✕</button>
         </div>
         <button class="close-btn" id="close_btn" title="关闭到托盘">✕</button>
       </div>
@@ -4479,10 +4532,47 @@ function checkZoom() {
     warn.classList.remove("visible");
   }
 }
+function checkUpdate() {
+  const bar = document.getElementById("update_bar");
+  const text = document.getElementById("update_text");
+  const btn = document.getElementById("update_btn");
+  const dismiss = document.getElementById("update_dismiss");
+  if (!bar) return;
+  fetch("/api/update/check").then(r=>r.json()).then(data=>{
+    if (data.available) {
+      text.textContent = `📦 新版本 ${data.latest} 可用`;
+      if (data.force) {
+        dismiss.style.display = "none";
+      }
+      bar.classList.add("visible");
+    }
+  }).catch(()=>{});
+  btn.onclick = ()=>{
+    btn.disabled = true;
+    btn.textContent = "更新中...";
+    fetch("/api/update/apply", {method:"POST"}).then(r=>r.json()).then(data=>{
+      if (data.ok) {
+        text.textContent = "更新已启动，正在重启...";
+      } else {
+        btn.disabled = false;
+        btn.textContent = "一键更新";
+        text.textContent = "更新失败: " + (data.error || "未知错误");
+      }
+    }).catch(()=>{
+      btn.disabled = false;
+      btn.textContent = "一键更新";
+      text.textContent = "网络错误，请稍后重试";
+    });
+  };
+  dismiss.onclick = ()=>{
+    bar.classList.remove("visible");
+  };
+}
 window.addEventListener("DOMContentLoaded", async () => {
   await loadConfig();
   switchTab("svn");
   setTimeout(checkZoom, 300);
+  setTimeout(checkUpdate, 2000);
   try {
     if (window.pywebview && window.pywebview.api && window.pywebview.api.app_ready) {
       await window.pywebview.api.app_ready();

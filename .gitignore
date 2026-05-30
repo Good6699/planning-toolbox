@@ -45,6 +45,9 @@ svn_out_test.txt
 
 # Scratch / temp scripts
 _*.py
+!_cmp_worker.py
+!_merge_analyzer.py
+!_merge_analyze_worker.py
 _*.ps1
 _install_log.txt
 _push_result.txt

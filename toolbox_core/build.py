@@ -55,7 +55,6 @@ CORE_SCRIPTS = [
 WORKER_SCRIPTS = [
     "_cmp_worker.py",
     "_merge_analyzer.py",
-    "_export_error_code_erl.py",
     "_merge_analyze_worker.py",
 ]
 

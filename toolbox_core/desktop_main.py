@@ -26,6 +26,9 @@ from toolbox_config import load_config, save_config
 WINDOW_W = 1100
 WINDOW_H = 700
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ICON_PATH = os.path.join(SCRIPT_DIR, "assets", "app_icon.ico")
+
 SPLASH_HTML = """<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><title>策划工具箱</title>
@@ -88,6 +91,48 @@ def _hide_from_taskbar(hwnd):
         ctypes.windll.user32.SetWindowLongW(hwnd, -20, ex)
         win32gui.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
                               win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE | win32con.SWP_FRAMECHANGED)
+    except Exception:
+        pass
+
+
+def _set_window_icon():
+    if not os.path.isfile(ICON_PATH):
+        return
+    try:
+        hwnd = _find_window_hwnd(timeout=5)
+        if not hwnd:
+            return
+        hicon = win32gui.LoadImage(0, ICON_PATH, win32con.IMAGE_ICON, 0, 0,
+                                   win32con.LR_LOADFROMFILE | win32con.LR_DEFAULTSIZE)
+        if hicon:
+            win32gui.SendMessage(hwnd, win32con.WM_SETICON, win32con.ICON_SMALL, hicon)
+            win32gui.SendMessage(hwnd, win32con.WM_SETICON, win32con.ICON_BIG, hicon)
+    except Exception:
+        pass
+
+
+def _ensure_app_id():
+    APP_ID = "PlanningToolbox.PlanningToolbox"
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+    except Exception:
+        pass
+    shortcut_name = "策划工具箱.lnk"
+    shortcut_dir = os.path.join(os.environ.get("APPDATA", ""),
+                                "Microsoft", "Windows", "Start Menu", "Programs")
+    shortcut_path = os.path.join(shortcut_dir, shortcut_name)
+    if os.path.isfile(shortcut_path):
+        return
+    try:
+        import win32com.client
+        shell = win32com.client.Dispatch("WScript.Shell")
+        shortcut = shell.CreateShortCut(shortcut_path)
+        shortcut.TargetPath = sys.executable
+        shortcut.Arguments = '"' + os.path.join(SCRIPT_DIR, "..", "main.py") + '"'
+        shortcut.WorkingDirectory = SCRIPT_DIR
+        if os.path.isfile(ICON_PATH):
+            shortcut.IconLocation = ICON_PATH
+        shortcut.Save()
     except Exception:
         pass
 
@@ -787,6 +832,7 @@ def _set_progress(window, pct, text):
 
 def main():
     _acquire_instance_lock()
+    _ensure_app_id()
 
     flask_thread = threading.Thread(target=_start_flask, daemon=True)
     flask_thread.start()
@@ -844,6 +890,7 @@ def main():
     def _boot_app(window):
         window.events.loaded.wait(timeout=30)
         _set_progress(window, 15, "界面就绪")
+        _set_window_icon()
 
         global _docker
         docker = EdgeDocker(window)

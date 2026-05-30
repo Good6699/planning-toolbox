@@ -1084,8 +1084,9 @@ while (true):
   - 全部 7 个后台任务均接入通知
   - 取消的任务跳过通知（`task_id not in _cancelled_tasks` 判断）
   - 无边框窗口拖拽 resize 后保存尺寸：在 [desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py) 的 `ResizeApi.stop_resize()` 末尾加 `_save_window_rect()`，解决 `resized` 事件因 ctypes 直接调 `SetWindowPos` 而永不触发的问题
+  - 自定义应用图标：在线 SVG→ICO 转换生成（[svg2ico.com](https://svg2ico.com/zh)），`_set_window_icon()` 通过 `WM_SETICON` 设置任务栏图标，`_ensure_app_id()` 注册 AppUserModelID + Start Menu 快捷方式让 toast 通知图标生效。进程名始终 `python.exe`，必须 PyInstaller 打包才能改为"策划工具箱.exe"
   - 安装依赖：`pip install win11toast`（WinRT 原生 Toast API，支持 `on_click` 回调）
-- **注意事项**：`win11toast.toast()` 默认 `app_id='Python'`，必须显式传 `app_id="策划工具箱"`；`import __main__` 在子线程不可靠，必须用依赖注入
+- **注意事项**：`win11toast.toast()` 默认 `app_id='Python'`，必须显式传 `app_id="策划工具箱"`；`import __main__` 在子线程不可靠，必须用依赖注入；`_set_window_icon` 的 `FindWindow` timeout 需 ≥5s 等待 WebView2 窗口就绪
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)，[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
 
 ### ExcelTool2.exe 完整调用链追溯（KR2 导出错误码）

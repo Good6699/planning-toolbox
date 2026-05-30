@@ -742,11 +742,15 @@ def _notify_task_done(name):
     if _is_window_visible():
         return
     try:
+        icon_path = os.path.join(_script_dir, "assets", "app_icon.ico")
+        if not os.path.isfile(icon_path):
+            icon_path = None
         from win11toast import toast
         toast(
             body=f"「{name}」任务已完成，点击查看结果",
             on_click=lambda args: _focus_app_window(),
             app_id="策划工具箱",
+            icon=icon_path,
         )
     except ImportError:
         pass

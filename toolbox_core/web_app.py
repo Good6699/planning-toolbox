@@ -878,7 +878,12 @@ def _exec_export_text(step, put, task_id=None):
         try:
             for line in iter(proc.stdout.readline, b""):
                 try:
-                    put(f"    {line.decode('gbk', errors='replace').rstrip()}\n")
+                    raw = line.rstrip()
+                    try:
+                        text = raw.decode("utf-8")
+                    except UnicodeDecodeError:
+                        text = raw.decode("gbk", errors="replace")
+                    put(f"    {text}\n")
                 except Exception:
                     pass
             proc.wait(timeout=3600)

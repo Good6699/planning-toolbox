@@ -1092,6 +1092,13 @@ while (true):
   4. **打包影响本地工程**：`_ensure_worker_scripts()` 复制 worker 脚本到 `toolbox_core/` 会导致本地残留 → 改为只检查不复制，`_get_data_args()` 直接从 `WORKSPACE` 根目录引用
 - **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)，[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
 
+### exe 打包依赖缺失：cffi — Python.NET → clr_loader 链未被 PyInstaller 追踪
+- **场景**：2026-05-30 打完包后 exe 启动报 `ModuleNotFoundError: No module named 'cffi'`，导致 Python.NET 无法加载 .NET 运行时，pywebview 的 WinForms 后端初始化失败
+- **根因**：PyWebView 的 WinForms 模式依赖链：`pywebview.winforms` → `pythonnet` → `clr_loader` → `cffi`。PyInstaller 静态分析能追踪到 `pythonnet` 和 `clr_loader`，但 `cffi` 是动态加载的（`clr_loader/ffi/__init__.py` 中 `import cffi`），未被自动发现。同时 `cffi` 不在 `py_modules/` 下，在系统 site-packages 中
+- **解决方案**：`build.py` 的 `_get_hidden_imports()` 加 `"--hidden-import=cffi"` 和 `"--hidden-import=pycparser"`（pycparser 是 cffi 的依赖，也需显式声明）；同时 `pip install cffi` 确保本地有安装
+- **关键教训**：Python.NET 相关依赖（`cffi`、`pycparser`）在 PyInstaller 打包时很容易遗漏。所有通过 `clr_loader` 间接加载的 FFI 模块都需要手动 `--hidden-import`。打包后应先在命令行跑 exe 捕获完整错误，而不是直接双击看闪退
+- **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
+
 ### .gitignore _*.py 规则误排除生产脚本 + _export_error_code_erl.py 重建
 - **场景**：2026-05-30 PyInstaller 打包时发现 `_cmp_worker.py`、`_merge_analyzer.py`、`_merge_analyze_worker.py`、`_export_error_code_erl.py` 等 4 个被子进程调用的生产脚本（subprocess 而非 import）被 `.gitignore` 的 `_*.py` 规则排除，打包时不存在。其中 `_export_error_code_erl.py` 还在此前的 flake8 清理中被彻底误删（从未被 git 跟踪过，无法恢复）。
 - **根因**：

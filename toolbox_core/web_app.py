@@ -1311,7 +1311,7 @@ def _exec_export_error_code(step, put):
 
     import subprocess as _sp
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    erl_script = os.path.join(script_dir, "_export_error_code_erl.py")
+    erl_script = os.path.join(script_dir, "..", "_export_error_code_erl.py")
     py_exe = sys.executable
 
     results = []
@@ -1392,29 +1392,25 @@ def _exec_export_error_code(step, put):
 
         if ok:
             put("  [" + code + "] 服务端导出(erlang)...\n")
-            if not os.path.isfile(erl_script):
-                put("  [" + code + "] 缺少服务端导出脚本: " + erl_script + "\n")
-                ok = False
-            else:
-                try:
-                    r = _sp.run(
-                        [py_exe, erl_script, "--xlsm", xlsm_file, "--lang-dir", lang_path],
-                        capture_output=True,
-                        encoding=locale.getpreferredencoding(), errors="replace",
-                        timeout=60,
-                        **_get_subprocess_kwargs()
-                    )
-                    if r.returncode == 0:
-                        for line in (r.stdout or "").strip().split("\n"):
-                            put("    " + line.strip() + "\n")
-                        put("  [" + code + "] erlang 导出成功\n")
-                    else:
-                        err = (r.stderr or r.stdout or "").strip()[:200]
-                        put("  [" + code + "] erlang 导出失败: " + err + "\n")
-                        ok = False
-                except Exception as e:
-                    put("  [" + code + "] erlang 导出异常: " + str(e) + "\n")
+            try:
+                r = _sp.run(
+                    [py_exe, erl_script, "--xlsm", xlsm_file, "--lang-dir", lang_path],
+                    capture_output=True,
+                    encoding=locale.getpreferredencoding(), errors="replace",
+                    timeout=60,
+                    **_get_subprocess_kwargs()
+                )
+                if r.returncode == 0:
+                    for line in (r.stdout or "").strip().split("\n"):
+                        put("    " + line.strip() + "\n")
+                    put("  [" + code + "] erlang 导出成功\n")
+                else:
+                    err = (r.stderr or r.stdout or "").strip()[:200]
+                    put("  [" + code + "] erlang 导出失败: " + err + "\n")
                     ok = False
+            except Exception as e:
+                put("  [" + code + "] erlang 导出异常: " + str(e) + "\n")
+                ok = False
 
         results.append((code, ok, "成功" if ok else "失败"))
         if ok:

@@ -56,6 +56,7 @@ WORKER_SCRIPTS = [
     "_cmp_worker.py",
     "_merge_analyzer.py",
     "_merge_analyze_worker.py",
+    "_export_error_code_erl.py",
 ]
 
 # ── Flask 模板/静态文件 ──

@@ -902,15 +902,10 @@ def main():
             print("[错误] Flask 未能在 15 秒内就绪", file=sys.stderr)
             return
         _set_progress(window, 55, "后端就绪")
-
-        for i in range(6):
-            time.sleep(0.4)
-            _set_progress(window, 55 + i * 5, "加载模块中")
-
         _set_progress(window, 90, "准备就绪")
-        time.sleep(0.4)
-        _set_progress(window, 100, "启动中")
         time.sleep(0.2)
+        _set_progress(window, 100, "启动中")
+        time.sleep(0.1)
 
         try:
             window.load_url("http://127.0.0.1:18123")

@@ -85,26 +85,19 @@ def _get_pyinstaller():
 
 
 def _ensure_worker_scripts():
-    """确保 worker 脚本在 toolbox_core/ 下存在（打包时需要）"""
-    copied = []
+    """检查 worker 脚本是否存在（只报错不复制，不影响本地工程）"""
+    missing = []
     for name in WORKER_SCRIPTS:
         src = os.path.join(WORKSPACE, name)
-        dst = os.path.join(CORE_DIR, name)
-        if os.path.isfile(src) and not os.path.isfile(dst):
-            shutil.copy2(src, dst)
-            copied.append(name)
-        elif not os.path.isfile(src):
-            print(f"  [跳过] worker 脚本不存在: {name}")
-    if copied:
-        print(f"  [复制] worker 脚本: {', '.join(copied)}")
-    return copied
+        if not os.path.isfile(src):
+            missing.append(name)
+    if missing:
+        print(f"  [警告] worker 脚本不存在: {', '.join(missing)}")
+    return []
 
 
 def _cleanup_copied_workers(copied):
-    for name in copied:
-        dst = os.path.join(CORE_DIR, name)
-        if os.path.isfile(dst):
-            os.remove(dst)
+    pass
 
 
 def _strip_api_key():
@@ -136,7 +129,7 @@ def _get_data_args():
             args.append(f"--add-data={src};{dst_rel}")
             print(f"  [数据] {src_rel}/ → {dst_rel}/")
     for name in WORKER_SCRIPTS:
-        src = os.path.join(CORE_DIR, name)
+        src = os.path.join(WORKSPACE, name)
         if os.path.isfile(src):
             args.append(f"--add-data={src};.")
             print(f"  [数据] {name} → ./")
@@ -205,6 +198,7 @@ def build():
         pyi,
         "--onedir",
         "--noconfirm",
+        "--noconsole",
         "--clean",
         "--distpath", DIST_DIR,
         "--workpath", build_dir,
@@ -245,14 +239,21 @@ def build():
 
     print(f"\n[完成] PyInstaller 打包成功！")
 
-    # ── Step 6: 复制配置文件（无 API Key）──
+    # ── Step 6: 复制配置文件（无 API Key + 保留窗口尺寸）──
     if cfg_safe is not None:
         cfg_name = "svn_gui_config.json"
         dst = os.path.join(dist_app, "_internal", CORE_DIR.split("\\")[-1], cfg_name)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(os.path.join(CORE_DIR, cfg_name), "r", encoding="utf-8") as f:
+            orig_cfg = json.load(f)
+        for key in ("window_w", "window_h"):
+            if key in orig_cfg:
+                cfg_safe[key] = orig_cfg[key]
         with open(dst, "w", encoding="utf-8") as f:
             json.dump(cfg_safe, f, ensure_ascii=False, indent=2)
         print(f"  [配置] (无 API Key) → _internal/toolbox_core/{cfg_name}")
+        if "window_w" in cfg_safe:
+            print(f"  [尺寸] {cfg_safe['window_w']}x{cfg_safe['window_h']}")
 
     # ── Step 7: 复制 update_version.py 到 dist ──
     ver_src = os.path.join(CORE_DIR, "update_version.py")

@@ -1,5 +1,7 @@
 [flake8]
 max-line-length = 120
 extend-ignore = E203, W503, E501
-exclude = .git,__pycache__,build,dist,venv,.venv,__byte_cache__,临时辅助文件
+exclude = .git,__pycache__,build,dist,venv,.venv,__byte_cache__,临时辅助文件,
+         _cmp_worker.py,_merge_analyzer.py,_merge_analyze_worker.py,
+         _export_error_code_erl.py
 max-complexity = 15

@@ -80,6 +80,13 @@
 
 5. **禁止从 GitHub 下载文件覆盖本地文件** — 任何时候都不得自行从 GitHub 或其他远程仓库下载文件来覆盖项目中的本地文件。任何文件恢复、回退、获取历史版本等操作，都必须先经过用户明确同意后才能执行。
 
+6. **禁止删除/误删 subprocess 调用的 `_*.py` 生产脚本** — 以下 4 个文件虽以 `_` 开头，但属于生产脚本（通过 `subprocess.Popen` 调用，不是 `import`）。flake8 的 F401/F841 规则无法检测到它们的被使用情况，自动化清理工具严禁删除它们：
+   - `_cmp_worker.py` — SVN 对比子进程 worker
+   - `_merge_analyzer.py` — Unity YAML 语义分析引擎
+   - `_merge_analyze_worker.py` — 语义分析子进程
+   - `_export_error_code_erl.py` — 错误码 erlang 导出
+   已加入 `.flake8` exclude 列表和 `.gitignore` 例外规则（`!` 否定模式），任何清理工具和 AI agent 不得将其删除。
+
 ### ✅ 当前正确架构（2026-05）
 
 ```

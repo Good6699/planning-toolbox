@@ -5,7 +5,7 @@ description: "Builds 策划工具箱 into a distributable exe directory using Py
 
 # Build Dist — 策划工具箱 PyInstaller 打包
 
-一键将策划工具箱打包为可分发目录 `dist/策划工具箱_v1.0_时间戳/`。
+一键将策划工具箱打包为可分发目录 `dist/策划工具箱/`（同时创建 `dist/策划工具箱_v1.0_时间戳/` 归档）。
 
 ## 前置条件
 
@@ -56,9 +56,10 @@ python build.py
 过程：
 1. `build.py` 自动清理旧构建缓存（删除 `build/`、`.spec` 文件）
 2. 去掉 API Key 后复制 `svn_gui_config.json`
-3. 运行 PyInstaller（`--onedir` 模式），直接输出到 `dist/策划工具箱_版本_时间戳/`
-4. 复制 `update_version.py` 到打包目录的 `_internal/toolbox_core/` 下
-5. 自动部署到 `%APPDATA%/planning-toolbox/策划工具箱/`
+3. 运行 PyInstaller（`--onedir` 模式），固定输出到 `dist/策划工具箱/`（exe 文件名始终不变）
+4. 用 copytree 创建 `dist/策划工具箱_v1.0_时间戳/` 归档
+5. 复制 `update_version.py` 到打包目录的 `_internal/toolbox_core/` 下
+6. 自动部署到 `%APPDATA%/planning-toolbox/策划工具箱/`
 
 ### Step 5: 验证打包结果
 

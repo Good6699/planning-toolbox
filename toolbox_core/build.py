@@ -208,17 +208,6 @@ def _deploy_to_appdata(dist_app):
     print(f"  [部署] 复制到 {deploy_dir} ...")
     shutil.copytree(dist_app, deploy_dir)
 
-    # ── 重命名 exe 为固定名（--name 带时间戳导致 exe 名变化）──
-    for f in os.listdir(deploy_dir):
-        if f.lower().endswith(".exe") and f != f"{APP_NAME}.exe":
-            src_exe = os.path.join(deploy_dir, f)
-            dst_exe = os.path.join(deploy_dir, f"{APP_NAME}.exe")
-            if os.path.exists(dst_exe):
-                os.remove(dst_exe)
-            os.rename(src_exe, dst_exe)
-            print(f"  [重命名] {f} → {APP_NAME}.exe")
-            break
-
     deploy_size = 0
     for dirpath, _, filenames in os.walk(deploy_dir):
         for f in filenames:
@@ -250,16 +239,22 @@ def build():
     # ── Step 2: 准备 worker 脚本 ──
     copied_workers = _ensure_worker_scripts()
 
-    # ── Step 3: 生成时间戳和输出目录名 ──
+    # ── Step 3: 生成时间戳 ──
     ts = datetime.now().strftime("%Y%m%d_%H%M")
-    dist_name = f"{APP_NAME}_{APP_VERSION}_{ts}"
-    dist_app = os.path.join(DIST_DIR, dist_name)
+    ts_name = f"{APP_NAME}_{APP_VERSION}_{ts}"
+    ts_app = os.path.join(DIST_DIR, ts_name)
+
+    # PyInstaller 输出固定到 dist/策划工具箱/（--name APP_NAME），
+    # 打包完成后用 copytree 创建时间戳归档（不 rename，避免权限问题）
+    pyi_out = os.path.join(DIST_DIR, APP_NAME)
+    dist_app = pyi_out
+
     build_dir = os.path.join(WORKSPACE, "build")
 
     # 清理 build 临时目录（不是输出目录，不影响旧包）
     if os.path.exists(build_dir):
         shutil.rmtree(build_dir)
-    spec_file = os.path.join(WORKSPACE, f"{dist_name}.spec")
+    spec_file = os.path.join(WORKSPACE, f"{APP_NAME}.spec")
     if os.path.isfile(spec_file):
         os.remove(spec_file)
 
@@ -281,7 +276,7 @@ def build():
         "--clean",
         "--distpath", DIST_DIR,
         "--workpath", build_dir,
-        "--name", dist_name,
+        "--name", APP_NAME,
         "--specpath", WORKSPACE,
     ]
     if os.path.isfile(icon):
@@ -307,6 +302,12 @@ def build():
     if not os.path.isdir(dist_app):
         print(f"\n[错误] 输出目录未生成: {dist_app}")
         sys.exit(1)
+
+    # ── 创建时间戳归档（copytree，不改 exe 文件名）──
+    if os.path.exists(ts_app):
+        shutil.rmtree(ts_app)
+    shutil.copytree(dist_app, ts_app)
+    print(f"  [归档] {APP_NAME}/ → {os.path.basename(ts_app)}/")
 
     print(f"\n[完成] PyInstaller 打包成功！")
 

@@ -75,6 +75,7 @@ _instance_socket = None
 _tray_icon = None
 _flask_server = None
 _window_visible = True
+_force_close = False
 _docker = None
 _is_dragging = False
 
@@ -521,6 +522,8 @@ def _show_window(icon, item=None):
 
 
 def _quit_app():
+    global _force_close
+    _force_close = True
     _save_window_rect()
     _stop_flask()
     if _tray_icon:
@@ -1021,6 +1024,20 @@ def main():
 
     _init_dnd(window)
     window.events.resized += _save_window_rect
+
+    def _on_closing():
+        global _force_close
+        if _force_close:
+            _force_close = False
+            return True
+        try:
+            for w in webview.windows:
+                w.hide()
+        except Exception:
+            pass
+        return False
+
+    window.events.closing += _on_closing
 
     if has_saved:
         def _restore_window_size():

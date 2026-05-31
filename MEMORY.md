@@ -1092,6 +1092,24 @@ while (true):
 - **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### PyInstaller rename 权限拒绝：根本解决方案是不需要 rename
+- **场景**：python build.py 打包后在 os.rename() 处报 PermissionError: WinError 5 拒绝访问，导致 _internal/toolbox_core/ 目录未创建、exe 启动崩溃
+- **根因**：旧代码用 --name APP_NAME（固定名）输出到 dist/策划工具箱/，再用 os.rename() 重命名为带时间戳的目录。Windows 上 rename 被占用文件的目录会因杀毒软件/Windows Search/文件句柄未释放而失败
+- **解决方案**：--name 直接使用带时间戳的目录名，PyInstaller 一步输出到最终目录。不产生中间目录 → 不需要 rename → 没有权限拒绝。删除旧代码中整个 rename 逻辑块
+- **关键教训**：不要修 rename 的权限问题（try/except copytree 是绕弯），应该直接从源头消除对 rename 的依赖
+- **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
+
+### Frozen 模式 chdir：永远用 sys._MEIPASS
+- **场景**：打包后 exe 启动报 WinError 2 系统找不到指定的文件 _internal/toolbox_core，因为 main.py 的 os.chdir(core_dir) 找的是源码目录结构，用户电脑上根本没有
+- **根因**：frozen 模式下所有模块在 PYZ 归档中，os.chdir() 对模块导入毫无意义。此前 chdir 到 _internal/toolbox_core/ 是在 build.py rename 失败后该目录被跳过创建才暴露的问题
+- **解决方案**：main.py 分离三个分支：frozen 下 os.chdir(sys._MEIPASS)，源码模式下 os.chdir(core_dir)。desktop_main.py 的 _start_flask() 中 os.chdir 同样用 try/except 回退到 sys._MEIPASS。sys._MEIPASS 在 frozen 模式下永远指向可写的 _internal/ 目录
+- **涉及文件**：[main.py](file:///c:/Users/admin/.qclaw/workspace/main.py)、[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
+
+### 版本号单来源：build.py 从 update_version.py 动态读取
+- **场景**：build.py 中硬编码 APP_VERSION，与 update_version.py 各管各的，push-update 改了版本号但 build.py 没同步，打出来的包版本号还是旧的
+- **解决方案**：删除 hardcode，改为运行时从 update_version.py 解析 APP_VERSION 变量行
+- **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
+
 ### exe 闪退根因：PyInstaller 缺少 --paths 参数 + 打包输出时间戳命名
 - **场景**：2026-05-30 PyInstaller 打包后 `策划工具箱.exe` 启动立即闪退，报 `ModuleNotFoundError: No module named 'desktop_main'`。修复后改进了打包命名方式。
 - **根因**：`main.py` 通过 `sys.path.insert(0, "toolbox_core")` 在运行时添加模块搜索路径，但 PyInstaller 静态分析不会执行代码，不知道从 `toolbox_core/` 找模块。`build.py` 缺了 `--paths toolbox_core` 参数

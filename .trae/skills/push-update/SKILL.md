@@ -9,6 +9,8 @@ description: "Auto-increments version, pushes version.json to update-server, and
 
 ## 执行步骤
 
+> **⚠️ 如果用户需要同时打包和推送，必须先调用 `build-dist` skill 完成打包，再回到本 skill 推送版本信息。本 skill 不执行打包。**
+
 ### Step 0: 确认版本号变更类型
 
 读取 `toolbox_core/update_version.py` 中的 `APP_VERSION`（如 `"v1.0"`）。

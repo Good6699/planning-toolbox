@@ -74,6 +74,34 @@ DATA_DIRS = [
 UPDATER_SCRIPT = "_updater.bat"
 
 
+def _auto_patch_version():
+    """读取 update_version.py，patch 号 +1，写回文件，返回新版本号"""
+    ver_path = os.path.join(CORE_DIR, "update_version.py")
+    with open(ver_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    lines = content.splitlines()
+    new_lines = []
+    new_ver = None
+    for line in lines:
+        if "APP_VERSION" in line and "=" in line:
+            old = line.split("=", 1)[1].strip().strip('"').strip("'")
+            ver = old.lstrip("vV")
+            parts = ver.split(".")
+            major = int(parts[0]) if len(parts) > 0 else 1
+            minor = int(parts[1]) if len(parts) > 1 else 0
+            patch = int(parts[2]) if len(parts) > 2 else 0
+            new_ver = f"v{major}.{minor}.{patch + 1}"
+            indent = line[:len(line) - len(line.lstrip())]
+            new_lines.append(f'{indent}APP_VERSION = "{new_ver}"')
+            print(f"  [版本] {old} → {new_ver}")
+        else:
+            new_lines.append(line)
+    if new_ver:
+        with open(ver_path, "w", encoding="utf-8", newline="") as f:
+            f.write("\n".join(new_lines) + "\n")
+    return new_ver
+
+
 def _get_pyinstaller():
     pyi = shutil.which("pyinstaller")
     if pyi:
@@ -408,6 +436,14 @@ def make_update_zip(dist_app):
 
 if __name__ == "__main__":
     make_zip = "--zip" in sys.argv
+
+    if "--auto-patch" in sys.argv:
+        new_ver = _auto_patch_version()
+        if new_ver:
+            _ver_line = [l for l in open(os.path.join(CORE_DIR, "update_version.py"), encoding="utf-8") if "APP_VERSION" in l and "=" in l]
+            APP_VERSION = _ver_line[0].split("=", 1)[1].strip().strip('"').strip("'") if _ver_line else new_ver
+            print(f"  [版本] 自动更新到 {APP_VERSION}")
+
     dist_app = build()
     if make_zip:
         make_update_zip(dist_app)

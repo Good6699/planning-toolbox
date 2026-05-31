@@ -117,7 +117,8 @@ powershell "$f=Get-ChildItem -Recurse dist\策划工具箱\; $c=($f|Measure-Obje
 
 ## 注意事项
 
-- `build.py` 中的 `APP_VERSION` 读取自 `update_version.py`，打包前可手动修改版本号
+- `build.py` 的 `APP_VERSION` **自动从 `toolbox_core/update_version.py` 读取**，无需手动修改。先用 `push-update` skill 改好版本号，再调用本 skill 打包即可
+- 因此**调用本 skill 前必须先调 `push-update`** 更新版本号，否则打出来的包版本号还是旧的
 - `svn_gui_config.json` 中的 `tr_api_key_enc`/`tr_api_key` 字段会被 `build.py` 自动移除
 - `.gitignore` 排除了 `dist/`、`build/`、`*.spec`，这些文件不会进入 Git
 - 打包后的 exe 是 `--onedir` 模式（目录包），解压即用，无需安装

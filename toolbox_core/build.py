@@ -33,7 +33,10 @@ CORE_DIR = os.path.join(WORKSPACE, "toolbox_core")
 DIST_DIR = os.path.join(WORKSPACE, "dist")
 UPDATE_DIR = os.path.join(WORKSPACE, "update-server")
 APP_NAME = "策划工具箱"
-APP_VERSION = "v1.0.1"
+
+# 从 update_version.py 读取版本号（唯一来源）
+_ver_line = [l for l in open(os.path.join(CORE_DIR, "update_version.py"), encoding="utf-8") if "APP_VERSION" in l and "=" in l]
+APP_VERSION = _ver_line[0].split("=", 1)[1].strip().strip('"').strip("'") if _ver_line else "v1.0"
 
 # PV_HOST = "192.168.1.41"  # 你的开发机 IP，发给用户前改成实际地址
 # UPDATE_URL 在 update_version.py 中配置，打包时自动读取

@@ -1,4 +1,4 @@
 import socket
-APP_VERSION = "v1.0.1"
+APP_VERSION = "v1.0.2"
 _HOSTNAME = socket.gethostname()
 UPDATE_URL = f"http://{_HOSTNAME}:8080/update/"

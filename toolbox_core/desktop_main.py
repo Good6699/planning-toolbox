@@ -26,7 +26,10 @@ WINDOW_W = 1100
 WINDOW_H = 700
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ICON_PATH = os.path.join(SCRIPT_DIR, "assets", "app_icon.ico")
+if getattr(sys, 'frozen', False):
+    ICON_PATH = os.path.join(sys._MEIPASS, "assets", "app_icon.ico")
+else:
+    ICON_PATH = os.path.join(SCRIPT_DIR, "assets", "app_icon.ico")
 
 SPLASH_HTML = """<!DOCTYPE html>
 <html>
@@ -735,29 +738,12 @@ def _show_tray_menu(hwnd):
 
 def _tray_thread():
     global _tray_icon
-    img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle([0, 0, 31, 31], radius=6, outline="#4F8CFF", width=1)
-    pts = [(6, 6), (26, 6), (26, 12), (12, 12), (12, 22), (26, 22), (26, 28), (6, 28), (6, 17), (20, 17)]
-    draw.line(pts, fill="#4F8CFF", width=3, joint="curve")
-    draw.ellipse([17, 14, 23, 20], fill="#4F8CFF")
-
-    # Convert PIL Image to HICON via win32gui
     hicon = None
     try:
-        import winxpgui
-        hicon = win32gui.CreateIconFromResource(img.tobytes(), len(img.tobytes()))
+        hicon_flags = win32con.LR_LOADFROMFILE | win32con.LR_DEFAULTSIZE
+        hicon = win32gui.LoadImage(0, ICON_PATH, win32con.IMAGE_ICON, 32, 32, hicon_flags)
     except Exception:
         pass
-    if not hicon:
-        try:
-            import tempfile
-            ico_path = os.path.join(tempfile.gettempdir(), "_pt_tray_icon.ico")
-            img.save(ico_path, format="ICO", sizes=[(32, 32)])
-            hicon_flags = win32con.LR_LOADFROMFILE | win32con.LR_DEFAULTSIZE
-            hicon = win32gui.LoadImage(0, ico_path, win32con.IMAGE_ICON, 32, 32, hicon_flags)
-        except Exception:
-            pass
     if not hicon:
         hicon = win32gui.LoadIcon(0, win32con.IDI_APPLICATION)
 

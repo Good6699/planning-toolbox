@@ -459,7 +459,13 @@ def _acquire_instance_lock():
 def _start_flask():
     global _flask_server
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    os.chdir(script_dir)
+    try:
+        os.chdir(script_dir)
+    except FileNotFoundError:
+        if getattr(sys, 'frozen', False):
+            os.chdir(sys._MEIPASS)
+        else:
+            raise
     sys.path.insert(0, script_dir)
     pm = os.path.join(script_dir, "py_modules")
     if not os.path.isdir(pm):

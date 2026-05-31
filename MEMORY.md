@@ -1114,6 +1114,13 @@ while (true):
 - **关键教训**：CRLF 换行符 + 纯英文内容 = 双击就好的 bat。UTF-8 文件和 GBK cmd.exe 的中文兼容问题无解，唯一可靠方案是 bat 里不出现任何中文
 - **涉及文件**：[build_all.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build_all.bat)、[serve_update.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/serve_update.bat)
 
+### bat 文件中不能用多行 python -c（每行被当独立命令解析）
+- **场景**：双击 serve_update.bat，输出 `'import' 不是内部或外部命令`、`'with' 不是内部或外部命令`
+- **根因**：bat 文件里写 `python -c "..."` 并用多行字符串，cmd.exe 把每行都当独立命令执行。跨行的 `"` 引号不会自动拼接
+- **解决方案**：将多行 python 代码提取为独立的 `.py` 脚本文件（`_show_version.py`），bat 里用 `python _show_version.py` 调用。bat 里不要写任何跨行的 python -c 代码
+- **关键教训**：bat 中调用 Python 只有两种安全方式：① `python -c "单行代码"`；② `python 脚本文件.py`
+- **涉及文件**：[serve_update.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/serve_update.bat)、[_show_version.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/_show_version.py)
+
 ### AppendMenu separator 传 None 导致右键菜单不弹
 - **场景**：2026-05-31 替换 pystray 为 win32gui 后，托盘图标右键菜单完全弹不出。错误日志显示 `TypeError: None is not a valid string in this context`
 - **根因**：之前从 pystray 迁移到原生 win32gui 时，`AppendMenu(menu, MF_SEPARATOR, 0, None)` 第四个参数为 `None`。win32gui 的 AppendMenu 对分隔条也要求传入有效的字符串（空字符串 `""`），不能传 `None`。同时，由于 Python WNDPROC handler 抛异常未被捕获，整个 `_tray_wndproc` 后续的消息处理全部失效

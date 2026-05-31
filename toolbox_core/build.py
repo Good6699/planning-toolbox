@@ -386,15 +386,20 @@ def make_update_zip(dist_app):
             md5.update(chunk)
     md5_hex = md5.hexdigest()
 
-    # ── 生成 version.json ──
+    # ── 生成 version.json（保留已有字段，只更新 md5）──
     ver_path = os.path.join(UPDATE_DIR, "version.json")
-    ver_info = {
-        "version": APP_VERSION,
-        "url": zip_name,
-        "md5": md5_hex,
-        "notes": "请更新后查看变更日志",
-        "force": False,
-    }
+    if os.path.isfile(ver_path):
+        with open(ver_path, "r", encoding="utf-8") as f:
+            ver_info = json.load(f)
+    else:
+        ver_info = {
+            "version": APP_VERSION,
+            "url": zip_name,
+            "md5": "",
+            "notes": "",
+            "force": False,
+        }
+    ver_info["md5"] = md5_hex
     with open(ver_path, "w", encoding="utf-8") as f:
         json.dump(ver_info, f, ensure_ascii=False, indent=2)
     print(f"  version.json → {UPDATE_DIR}\\")

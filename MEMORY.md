@@ -1092,6 +1092,27 @@ while (true):
 - **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### UPDATE_URL 服务器路径必须与实际目录结构匹配
+- **场景**：启动更新服务器后客户端收不到更新，`/api/update/check` 返回 `Connection refused`
+- **根因**：update_version.py 中的 UPDATE_URL 是 `http://host:8080/update/`，但服务器 `cd update-server && python -m http.server 8080` 直接服务于根目录 `/`。客户端请求 `/update/version.json`，服务器上只有 `/version.json`，永远 404
+- **解决方案**：UPDATE_URL 改为 `http://host:8080/`（去掉 `/update/`）。旧版 exe 已打包的 fix 方式：在 update-server 下建一个 `update/` 子目录，复制文件进去做兼容
+- **涉及文件**：[update_version.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/update_version.py)、[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
+
+### dist_update.py：从现有打包目录生成更新包，不需重新 PyInstaller
+- **场景**：发新版时每次都要先 `python build.py`（PyInstaller 5分钟）再 `--zip`，如果只改 version.json 也要等整个打包流程
+- **解决方案**：新增 dist_update.py，直接从 `dist/策划工具箱/` 现有打包目录读取文件 + 压缩 zip + 算 MD5 + 补 version.json。版本号优先从工作区源码读取（刚 push 的新版本号）。全程约 30 秒
+- **关键教训**：打包流程分离为：
+  1. `build.py`（PyInstaller 打包，仅代码变更时需要）
+  2. `dist_update.py`（压缩+MD5，发版标配，30秒）
+  3. `build_all.bat` 一键组合两者
+- **涉及文件**：[dist_update.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/dist_update.py)、[build_all.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build_all.bat)
+
+### bat 文件中的 UTF-8 中文在 cmd.exe 下乱码
+- **场景**：双击一键打包.bat，输出全部变成乱码，命令解析失败（'寘' 不是内部或外部命令）
+- **根因**：cmd.exe 默认代码页是 GBK（936），bat 文件保存为 UTF-8 时中文会被错误解码。即使 `chcp 65001` 也无法完全避免，某些环境仍会乱码
+- **解决方案**：bat 文件全部使用英文输出，避免中文。文件名也用英文（build_all.bat）
+- **涉及文件**：[build_all.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build_all.bat)、[serve_update.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/serve_update.bat)
+
 ### 托盘图标设置丢失：NIF_GUID 持久化标识
 - **场景**：每次重新打包部署后，Windows 通知区域的"策划工具箱"图标状态（显示/隐藏）都会重置，需要重新进设置打开"显示图标和通知"
 - **根因**：pystray 调用 Shell_NotifyIconW 时不设 NIF_GUID 标志，Windows 默认用进程路径+二进制修改时间匹配图标状态。每次覆盖部署后文件更新时间变了，Windows 视为新应用，旧设置失效

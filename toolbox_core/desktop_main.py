@@ -717,7 +717,7 @@ def _tray_wndproc(hwnd, msg, wparam, lparam):
 def _show_tray_menu(hwnd):
     menu = win32gui.CreatePopupMenu()
     win32gui.AppendMenu(menu, win32con.MF_STRING, 1001, "显示窗口")
-    win32gui.AppendMenu(menu, win32con.MF_SEPARATOR, 0, None)
+    win32gui.AppendMenu(menu, win32con.MF_SEPARATOR, 0, "")
     win32gui.AppendMenu(menu, win32con.MF_STRING, 1002, "退出")
     pos = win32gui.GetCursorPos()
     win32gui.SetForegroundWindow(hwnd)

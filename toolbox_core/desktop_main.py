@@ -720,7 +720,9 @@ def _show_tray_menu(hwnd):
     win32gui.AppendMenu(menu, win32con.MF_SEPARATOR, 0, None)
     win32gui.AppendMenu(menu, win32con.MF_STRING, 1002, "退出")
     pos = win32gui.GetCursorPos()
+    win32gui.SetForegroundWindow(hwnd)
     cmd = win32gui.TrackPopupMenu(menu, win32con.TPM_RIGHTBUTTON | win32con.TPM_RETURNCMD, pos[0], pos[1], 0, hwnd, None)
+    win32gui.PostMessage(hwnd, win32con.WM_NULL, 0, 0)
     win32gui.DestroyMenu(menu)
     if cmd == 1001:
         _show_window(None, None)

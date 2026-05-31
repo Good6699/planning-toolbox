@@ -1119,6 +1119,23 @@ while (true):
 - **解决方案**：`MF_SEPARATOR` 的最后一个参数改为 `""`（空字符串）。另外加了 `SetForegroundWindow` 和 `PostMessage(WM_NULL)` 确保菜单标准流程完整
 - **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
 
+### ctypes NOTIFYICONDATAW 结构体 64 位对齐导致打包后托盘图标不显示
+- **场景**：源码 bat 模式托盘图标正常，但 PyInstaller 打包后的 exe 托盘图标始终不显示（主窗口能正常打开）
+- **根因**：手动用 ctypes 构造的 `NOTIFYICONDATAW` 结构体在 64 位 Windows 上字段对齐有 padding，`cbSize` 算错，Windows 拒绝注册通知图标。同时 `ICON_PATH` 在 frozen 模式下指向 `_internal/toolbox_core/assets/app_icon.ico`（错误），实际在 `_internal/assets/app_icon.ico`。PIL 的 ICO 编码器在 exe 里缺失，`img.save(format="ICO")` 静默失败
+- **解决方案**：① 用 `win32gui.Shell_NotifyIcon(tuple)` 替代手动 ctypes 构造（自动处理对齐）；② frozen 模式 ICON_PATH 改为 `sys._MEIPASS + "assets/app_icon.ico"`；③ 去掉 PIL 画图逻辑，直接加载已存在的 ICO 文件
+- **关键教训**：ctypes 在定义 Win32 结构体时很脆弱，能走 pywin32 封装的 API 就不要自己造。PyInstaller 打包后的路径必须用 `sys._MEIPASS` 定位资源文件
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
+
+### build.py --auto-patch：打包时自动版本号 +1
+- **场景**：每次打包都要手动改 update_version.py，容易忘或改错
+- **解决方案**：build.py 新增 `_auto_patch_version()` 函数和 `--auto-patch` 参数。自动解析当前版本号 v{major}.{minor}.{patch}，patch 号 +1 后写回文件。build_all.bat 默认使用 `--auto-patch --zip`
+- **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)、[build_all.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build_all.bat)
+
+### serve_update.bat 启动前显示版本信息并交互确认
+- **场景**：误双击 serve_update.bat 就直接启动推送服务器，没有确认机会
+- **解决方案**：启动前先读取 version.json 显示当前版本号、包名、MD5、force、notes 等信息，并列出所有 zip 包大小。然后提示 "Push this update? (Y/N)"，只有输入 Y 才启动 HTTP 服务
+- **涉及文件**：[serve_update.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/serve_update.bat)
+
 ### 托盘图标设置丢失：NIF_GUID 持久化标识
 - **场景**：每次重新打包部署后，Windows 通知区域的"策划工具箱"图标状态（显示/隐藏）都会重置，需要重新进设置打开"显示图标和通知"
 - **根因**：pystray 调用 Shell_NotifyIconW 时不设 NIF_GUID 标志，Windows 默认用进程路径+二进制修改时间匹配图标状态。每次覆盖部署后文件更新时间变了，Windows 视为新应用，旧设置失效

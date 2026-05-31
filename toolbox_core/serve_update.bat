@@ -15,23 +15,15 @@ if not exist version.json (
 
 echo Current version info:
 echo.
-python -c "
-import json
-with open('version.json', encoding='utf-8') as f:
-    v = json.load(f)
-print(f'  Version: {v.get(\"version\", \"?\")}')
-print(f'  Package: {v.get(\"url\", \"?\")}')
-print(f'  MD5:     {v.get(\"md5\", \"?\")[:16]}...')
-print(f'  Force:   {v.get(\"force\", False)}')
-print(f'  Notes:   {v.get(\"notes\", \"\")}')
-"
+python "%~dp0_show_version.py" version.json
 echo.
 if exist *.zip (
+    echo Available packages:
     for %%f in (*.zip) do (
         call :size "%%f"
     )
 ) else (
-    echo  [WARNING] No zip package found! Clients will see version info but cannot download.
+    echo  [WARNING] No zip package found!
 )
 echo.
 

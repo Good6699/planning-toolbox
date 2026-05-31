@@ -208,6 +208,17 @@ def _deploy_to_appdata(dist_app):
     print(f"  [部署] 复制到 {deploy_dir} ...")
     shutil.copytree(dist_app, deploy_dir)
 
+    # ── 重命名 exe 为固定名（--name 带时间戳导致 exe 名变化）──
+    for f in os.listdir(deploy_dir):
+        if f.lower().endswith(".exe") and f != f"{APP_NAME}.exe":
+            src_exe = os.path.join(deploy_dir, f)
+            dst_exe = os.path.join(deploy_dir, f"{APP_NAME}.exe")
+            if os.path.exists(dst_exe):
+                os.remove(dst_exe)
+            os.rename(src_exe, dst_exe)
+            print(f"  [重命名] {f} → {APP_NAME}.exe")
+            break
+
     deploy_size = 0
     for dirpath, _, filenames in os.walk(deploy_dir):
         for f in filenames:

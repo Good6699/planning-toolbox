@@ -5,7 +5,7 @@ description: "Builds 策划工具箱 into a distributable exe directory using Py
 
 # Build Dist — 策划工具箱 PyInstaller 打包
 
-一键将策划工具箱打包为可分发目录 `dist/策划工具箱/`。
+一键将策划工具箱打包为可分发目录 `dist/策划工具箱_v1.0_时间戳/`。
 
 ## 前置条件
 
@@ -54,27 +54,30 @@ python build.py
 ```
 
 过程：
-1. `build.py` 自动清理旧构建（删除 `dist/策划工具箱/`、`build/`、`.spec`）
+1. `build.py` 自动清理旧构建缓存（删除 `build/`、`.spec` 文件）
 2. 去掉 API Key 后复制 `svn_gui_config.json`
-3. 运行 PyInstaller（`--onedir` 模式）
+3. 运行 PyInstaller（`--onedir` 模式），直接输出到 `dist/策划工具箱_版本_时间戳/`
 4. 复制 `update_version.py` 到打包目录的 `_internal/toolbox_core/` 下
+5. 自动部署到 `%APPDATA%/planning-toolbox/策划工具箱/`
 
 ### Step 5: 验证打包结果
 
-检查输出目录存在：
+检查最新输出目录：
 ```powershell
-dir dist\策划工具箱\
+Get-ChildItem dist | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 ```
 
 检查关键文件：
-- `dist/策划工具箱/策划工具箱.exe`（主程序）
-- `dist/策划工具箱/_internal/`（依赖库目录）
-- `dist/策划工具箱/_internal/toolbox_core/`（核心模块）
+- `策划工具箱.exe`（主程序，在时间戳目录中）
+- `_internal/`（依赖库目录）
+- `_internal/toolbox_core/`（核心模块，含 update_version.py 和 svn_gui_config.json）
 
 ### Step 6: 统计输出
 
 ```powershell
-powershell "$f=Get-ChildItem -Recurse dist\策划工具箱\; $c=($f|Measure-Object).Count; $s=($f|Measure-Object -Sum Length).Sum; echo \"文件: $c 个, 大小: $('{0:N1}' -f ($s/1MB)) MB\""
+$latest = Get-ChildItem dist | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$f = Get-ChildItem -Recurse $latest.FullName
+Write-Host "$($f.Count) 个文件, $('{0:N1}' -f (($f | Measure-Object -Sum Length).Sum/1MB)) MB"
 ```
 
 ### Step 7: 告知用户打包完成

@@ -1,7 +1,7 @@
 {
-  "version": "v1.0",
-  "url": "策划工具箱_v1.0.zip",
+  "version": "v1.0.1",
+  "url": "策划工具箱_v1.0.1.zip",
   "md5": "",
-  "notes": "初始版本",
-  "force": false
+  "notes": "打包主进程 自动升级",
+  "force": true
 }

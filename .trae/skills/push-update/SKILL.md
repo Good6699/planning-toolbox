@@ -1,11 +1,11 @@
 ---
 name: "push-update"
-description: "Builds new version with PyInstaller, auto-increments version, pushes update package to update-server. Invoke when user says '推送更新' or 'push update' or '发新版'."
+description: "Auto-increments version, pushes version.json to update-server, and commits to git. Invoke when user says '推送更新' or 'push update' or '发新版'."
 ---
 
 # Push Update — 策划工具箱推送更新
 
-一键完成：版本号自增 → PyInstaller 打包 → 生成更新包和 version.json → 更新服务器就绪
+一键完成：版本号自增 → 生成 version.json → Git 提交
 
 ## 执行步骤
 
@@ -56,53 +56,55 @@ python -m py_compile update_version.py
 
 失败则修正后重试。
 
-### Step 3: 执行 PyInstaller 打包 + 生成更新包
+### Step 3: 更新 version.json
 
+读取 `update-server/version.json` 中的旧的 `version` 字段，与新的 `APP_VERSION` 比较：
+
+| 情况 | 说明 | 处理方式 |
+|------|------|---------|
+| `旧 version ≠ 新 APP_VERSION` | 之前已推送过同系列版本（如 v1.0→v1.1），`update-server/` 下有对应的 zip 包 | 读旧 version.json 的 `md5` 和 `url` 复用 |
+| `旧 version = 新 APP_VERSION` | 全新推送，`update-server/` 下没有对应版本的 zip 包 | `md5` 填空字符串 `""`，`url` 填 `"策划工具箱_{新版本}.zip"` |
+| 旧 `version.json` 不存在 | 首次推送 | 同上，全新推送 |
+
+读取旧 version.json：
 ```powershell
-cd toolbox_core
-python build.py --zip
+Get-Content update-server/version.json -Raw | ConvertFrom-Json
 ```
 
-`build.py` 会自动：
-1. 清理旧构建文件
-2. 去掉 API Key 再复制配置
-3. 运行 PyInstaller (`--onedir` 模式)
-4. 复制无 API Key 的 `svn_gui_config.json` 到打包目录
-5. 压缩为 `策划工具箱_vX.X.zip`
-6. 计算 MD5
-7. 生成 `update-server/version.json`
+用 `SearchReplace` 或 `Write` 工具写入新的 `update-server/version.json`：
 
-### Step 4: 修改生成的 version.json
-
-`build.py` 生成的 `update-server/version.json` 中 `force` 默认为 `false`。
-用 `SearchReplace` 修改 `force` 为用户选择的值。
-用 `SearchReplace` 修改 `notes` 为用户输入的更新说明。
-
-手工检查 version.json：
 ```json
 {
   "version": "v1.1",
   "url": "策划工具箱_v1.1.zip",
-  "md5": "a1b2c3d4...",
-  "notes": "修复了XXX，新增了XXX",
-  "force": true
+  "md5": "",
+  "notes": "用户输入的更新说明",
+  "force": false
 }
 ```
 
-### Step 5: Git 提交
+> `md5` 留空是因为本 skill 不做打包，实际 zip 包的 MD5 需在手动 `build.py --zip` 生成后再补填。
+
+### Step 4: Git 提交
 
 ```powershell
-git add toolbox_core/update_version.py update-server/version.json update-server/策划工具箱_v*.zip toolbox_core/build.py
+git add toolbox_core/update_version.py update-server/version.json
 git commit --no-verify -m "feat: 发布 vX.X"
 ```
 
-### Step 6: 告知用户更新服务器已就绪
+### Step 5: 告知用户
 
 告知用户：
 - 新版本号
 - 是否强制推送
-- 更新服务器启动命令
-- 更新服务器地址
+- 版本信息已推送到 Git
+- 下一步操作（二选一）：
+  1. **全新发布**（没有旧 zip）：先 `cd toolbox_core && python build.py --zip` 打包生成 zip 和 MD5，再回到本 skill 重新执行 Step 3 补填 `md5`
+  2. **已有 zip**（版本步进）：`update-server/` 下已有上一版本的 zip 包，可直接启动 HTTP 服务：
+     ```
+     cd update-server && python -m http.server 8080
+     ```
+     客户端会下载旧 zip 覆盖为新版本（版本号变了，客户端检测到 version 不同就会下载）
 
 ## 流程图
 
@@ -119,27 +121,18 @@ git commit --no-verify -m "feat: 发布 vX.X"
 [Step 2: 语法检查]
     │
     ▼
-[Step 3: python build.py --zip]
-    │  ├─ PyInstaller 打包 dist/
-    │  └─ 生成 update-server/策划工具箱_vX.X.zip
-    │     └─ 生成 update-server/version.json
+[Step 3: 生成 version.json]
     │
     ▼
-[Step 4: 修改 version.json 的 force 和 notes]
+[Step 4: Git commit]
     │
     ▼
-[Step 5: Git commit]
-    │
-    ▼
-[Step 6: 告诉用户服务器就绪]
+[Step 5: 告诉用户就绪]
 ```
 
 ## 注意事项
 
-- 确保已安装 PyInstaller：`pip install pyinstaller`
-- `build.py` 会在 workspace 根目录生成 `dist/策划工具箱/` 完整可分发目录
-- 更新 zip 包和 `version.json` 都在 `update-server/` 目录下
-- 用户启动 HTTP 服务：`cd update-server && python -m http.server 8080`
-- 如遇到 build.py 报错，检查是否缺 `_cmp_worker.py` 等 worker 脚本（它们被 `.gitignore` 排除，需要从 git 历史恢复或确认存在）
+- 本 skill **不做打包**，只推送版本信息。打包需要单独执行 `build-dist` 或 `python build.py`
+- version.json 的 `url` 字段指向 `update-server/` 下的 zip 包名，需与手动打包后的 zip 包名一致
+- `.bat` 文件和 `.exe` 被 `.gitignore` 排除，但本 skill 不涉及这些文件
 - **不要 commit `dist/` 目录**（已被 .gitignore 排除）
-- `.bat` 文件和 `.exe` 被 `.gitignore` 排除，需要用 `git add -f` 强制添加

@@ -30,7 +30,6 @@ echo   Output: ..\dist\PlanningToolbox\
 echo   Update: ..\update-server\PlanningToolbox_{v}.zip
 echo.
 echo   To start update server:
-echo     cd ..\update-server
-echo     python -m http.server 8080
+echo     double-click serve_update.bat
 echo.
 pause

@@ -36,7 +36,7 @@ description: "Auto-increments version, pushes version.json to update-server, and
 import socket
 APP_VERSION = "v1.0"           # ← 改这里
 _HOSTNAME = socket.gethostname()
-UPDATE_URL = f"http://{_HOSTNAME}:8080/update/"
+UPDATE_URL = f"http://{_HOSTNAME}:8080/"
 ```
 
 解析当前版本号 `v{major}.{minor}.{patch}`，按选择类型自增：

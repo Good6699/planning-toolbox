@@ -401,7 +401,7 @@ def make_update_zip(dist_app):
     print(f"\n[更新服务器就绪]")
     print(f"  cd {UPDATE_DIR}")
     print(f"  python -m http.server 8080")
-    print(f"  客户端地址: http://你的IP:8080/update/")
+    print(f"  客户端地址: http://你的IP:8080/")
 
     return zip_path
 

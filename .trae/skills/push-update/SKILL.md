@@ -94,19 +94,31 @@ git add toolbox_core/update_version.py update-server/version.json
 git commit --no-verify -m "feat: 发布 vX.X"
 ```
 
-### Step 5: 告知用户
+### Step 5: 从最新包生成更新 zip
+
+用 `python dist_update.py` 从 `dist/策划工具箱/`（现有打包目录）直接生成 zip + 补填 MD5，**不需要重新 PyInstaller**（省时 ~5 分钟）。
+
+```powershell
+cd toolbox_core
+python dist_update.py
+```
+
+该命令会：
+1. 从 `dist/策划工具箱/_internal/toolbox_core/` 读取现有打包文件
+2. 版本号优先用 **工作区的 `update_version.py`**（刚推送的新版本号）
+3. 生成 `update-server/策划工具箱_v1.0.3.zip`
+4. 计算 MD5 并补填到 `update-server/version.json`
+
+### Step 6: 告知用户
 
 告知用户：
 - 新版本号
 - 是否强制推送
-- 版本信息已推送到 Git
-- 下一步操作（二选一）：
-  1. **全新发布**（没有旧 zip）：先 `cd toolbox_core && python build.py --zip` 打包生成 zip 和 MD5，再回到本 skill 重新执行 Step 3 补填 `md5`
-  2. **已有 zip**（版本步进）：`update-server/` 下已有上一版本的 zip 包，可直接启动 HTTP 服务：
-     ```
-     cd update-server && python -m http.server 8080
-     ```
-     客户端会下载旧 zip 覆盖为新版本（版本号变了，客户端检测到 version 不同就会下载）
+- 更新包已就绪，启动 HTTP 服务即可推送：
+  ```
+  cd update-server
+  python -m http.server 8080
+  ```
 
 ## 流程图
 
@@ -129,7 +141,10 @@ git commit --no-verify -m "feat: 发布 vX.X"
 [Step 4: Git commit]
     │
     ▼
-[Step 5: 告诉用户就绪]
+[Step 5: python dist_update.py 生成 zip + 补 MD5]
+    │
+    ▼
+[Step 6: 启动 HTTP 服务推送]
 ```
 
 ## 注意事项

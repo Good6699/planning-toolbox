@@ -295,8 +295,14 @@ def build():
     if os.path.isdir(pyi_out) and pyi_out != dist_app:
         if os.path.exists(dist_app):
             shutil.rmtree(dist_app)
-        os.rename(pyi_out, dist_app)
-        print(f"  [重命名] {os.path.basename(pyi_out)} → {os.path.basename(dist_app)}")
+        try:
+            os.rename(pyi_out, dist_app)
+            print(f"  [重命名] {os.path.basename(pyi_out)} → {os.path.basename(dist_app)}")
+        except (PermissionError, OSError) as e:
+            print(f"  [重命名] 权限拒绝 ({e})，改用复制...")
+            shutil.copytree(pyi_out, dist_app, symlinks=True)
+            shutil.rmtree(pyi_out)
+            print(f"  [重命名] 复制完成 → {os.path.basename(dist_app)}")
 
     if not os.path.isdir(dist_app):
         print(f"\n[错误] 输出目录未生成: {dist_app}")

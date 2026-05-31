@@ -248,7 +248,7 @@ def build():
     # 清理 build 临时目录（不是输出目录，不影响旧包）
     if os.path.exists(build_dir):
         shutil.rmtree(build_dir)
-    spec_file = os.path.join(WORKSPACE, f"{APP_NAME}.spec")
+    spec_file = os.path.join(WORKSPACE, f"{dist_name}.spec")
     if os.path.isfile(spec_file):
         os.remove(spec_file)
 
@@ -270,7 +270,7 @@ def build():
         "--clean",
         "--distpath", DIST_DIR,
         "--workpath", build_dir,
-        "--name", APP_NAME,
+        "--name", dist_name,
         "--specpath", WORKSPACE,
     ]
     if os.path.isfile(icon):
@@ -292,20 +292,6 @@ def build():
         sys.exit(1)
 
     _cleanup_copied_workers(copied_workers)
-
-    # ── PyInstaller 输出被 --name 固定为 APP_NAME，重命名为带时间戳的目录 ──
-    pyi_out = os.path.join(DIST_DIR, APP_NAME)
-    if os.path.isdir(pyi_out) and pyi_out != dist_app:
-        if os.path.exists(dist_app):
-            shutil.rmtree(dist_app)
-        try:
-            os.rename(pyi_out, dist_app)
-            print(f"  [重命名] {os.path.basename(pyi_out)} → {os.path.basename(dist_app)}")
-        except (PermissionError, OSError) as e:
-            print(f"  [重命名] 权限拒绝 ({e})，改用复制...")
-            shutil.copytree(pyi_out, dist_app, symlinks=True)
-            shutil.rmtree(pyi_out)
-            print(f"  [重命名] 复制完成 → {os.path.basename(dist_app)}")
 
     if not os.path.isdir(dist_app):
         print(f"\n[错误] 输出目录未生成: {dist_app}")

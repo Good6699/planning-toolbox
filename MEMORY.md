@@ -1092,6 +1092,13 @@ while (true):
 - **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### 托盘图标设置丢失：NIF_GUID 持久化标识
+- **场景**：每次重新打包部署后，Windows 通知区域的"策划工具箱"图标状态（显示/隐藏）都会重置，需要重新进设置打开"显示图标和通知"
+- **根因**：pystray 调用 Shell_NotifyIconW 时不设 NIF_GUID 标志，Windows 默认用进程路径+二进制修改时间匹配图标状态。每次覆盖部署后文件更新时间变了，Windows 视为新应用，旧设置失效
+- **解决方案**：① 删除 pystray，改用 win32gui 直接调用 Shell_NotifyIconW，设置 NIF_GUID(0x20) 标志+固定 GUID；② build.py 部署从 shutil.rmtree+copytree 改为原地覆盖 copytree(dirs_exist_ok=True)，保留目录元数据
+- **关键教训**：Windows 托盘图标用户设置（显示/隐藏）绑定的是 AppUserModelID 或 GUID，不是 exe 路径。pystray 不暴露 GUID 接口，必须直接调用 Win32 API
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)、[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
+
 ### PyInstaller rename 权限拒绝：根本解决方案是不需要 rename
 - **场景**：python build.py 打包后在 os.rename() 处报 PermissionError: WinError 5 拒绝访问，导致 _internal/toolbox_core/ 目录未创建、exe 启动崩溃
 - **根因**：旧代码用 --name APP_NAME（固定名）输出到 dist/策划工具箱/，再用 os.rename() 重命名为带时间戳的目录。Windows 上 rename 被占用文件的目录会因杀毒软件/Windows Search/文件句柄未释放而失败

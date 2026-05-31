@@ -19,7 +19,6 @@ import webview
 import win32gui
 import win32con
 import win32api
-import pystray
 from PIL import Image, ImageDraw
 from toolbox_config import load_config, save_config, _ensure_frozen_config
 
@@ -75,7 +74,6 @@ _VSCREEN_B = _vy + win32api.GetSystemMetrics(79)
 _instance_socket = None
 _tray_icon = None
 _flask_server = None
-_tray_stop = threading.Event()
 _window_visible = True
 _docker = None
 _is_dragging = False
@@ -522,10 +520,14 @@ def _show_window(icon, item=None):
             win32gui.SetForegroundWindow(hwnd)
 
 
-def _quit_app(icon, item=None):
+def _quit_app():
     _save_window_rect()
     _stop_flask()
-    icon.stop()
+    if _tray_icon:
+        try:
+            win32gui.PostMessage(_tray_icon, win32con.WM_CLOSE, 0, 0)
+        except Exception:
+            pass
 
 
 def _stop_flask():
@@ -681,19 +683,146 @@ class ResizeApi:
             return False
 
 
+# ── 托盘图标 GUID（Windows 用户设置永久绑定的唯一标识，永不改变）──
+_NOTIFY_ICON_ID = 1
+_WM_TRAYICON = win32con.WM_APP + 100
+
+def _create_tray_hwnd():
+    """创建隐藏窗口，接收托盘图标回调消息"""
+    wc = win32gui.WNDCLASS()
+    wc.hInstance = win32gui.GetModuleHandle(None)
+    wc.lpszClassName = "PlanningToolboxTrayWindow"
+    wc.lpfnWndProc = _tray_wndproc
+    wc.hCursor = win32gui.LoadCursor(0, win32con.IDC_ARROW)
+    wc.hbrBackground = win32con.COLOR_WINDOW + 1
+    try:
+        class_atom = win32gui.RegisterClass(wc)
+    except Exception:
+        class_atom = wc.lpszClassName
+    hwnd = win32gui.CreateWindow(class_atom, "TrayWindow", 0, 0, 0, 0, 0, 0, 0, wc.hInstance, None)
+    return hwnd
+
+def _tray_wndproc(hwnd, msg, wparam, lparam):
+    if msg == _WM_TRAYICON:
+        if lparam == win32con.WM_LBUTTONUP:
+            _show_window(None, None)
+        elif lparam == win32con.WM_RBUTTONUP:
+            _show_tray_menu(hwnd)
+        return 0
+    if msg == win32con.WM_DESTROY:
+        win32gui.PostQuitMessage(0)
+        return 0
+    return win32gui.DefWindowProc(hwnd, msg, wparam, lparam)
+
+def _show_tray_menu(hwnd):
+    menu = win32gui.CreatePopupMenu()
+    win32gui.AppendMenu(menu, win32con.MF_STRING, 1001, "显示窗口")
+    win32gui.AppendMenu(menu, win32con.MF_SEPARATOR, 0, None)
+    win32gui.AppendMenu(menu, win32con.MF_STRING, 1002, "退出")
+    pos = win32gui.GetCursorPos()
+    cmd = win32gui.TrackPopupMenu(menu, win32con.TPM_RIGHTBUTTON | win32con.TPM_RETURNCMD, pos[0], pos[1], 0, hwnd, None)
+    win32gui.DestroyMenu(menu)
+    if cmd == 1001:
+        _show_window(None, None)
+    elif cmd == 1002:
+        _quit_app()
+
+
 def _tray_thread():
     global _tray_icon
-    _tray_icon = pystray.Icon(
-        "planning-toolbox",
-        _make_tray_image(),
-        "策划工具箱",
-        menu=pystray.Menu(
-            pystray.MenuItem("显示窗口", _show_window, default=True),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("退出", _quit_app),
-        )
-    )
-    _tray_icon.run()
+    img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle([0, 0, 31, 31], radius=6, outline="#4F8CFF", width=1)
+    pts = [(6, 6), (26, 6), (26, 12), (12, 12), (12, 22), (26, 22), (26, 28), (6, 28), (6, 17), (20, 17)]
+    draw.line(pts, fill="#4F8CFF", width=3, joint="curve")
+    draw.ellipse([17, 14, 23, 20], fill="#4F8CFF")
+
+    # Convert PIL Image to HICON via win32gui
+    hicon = None
+    try:
+        import winxpgui
+        hicon = win32gui.CreateIconFromResource(img.tobytes(), len(img.tobytes()))
+    except Exception:
+        pass
+    if not hicon:
+        try:
+            import tempfile
+            ico_path = os.path.join(tempfile.gettempdir(), "_pt_tray_icon.ico")
+            img.save(ico_path, format="ICO", sizes=[(32, 32)])
+            hicon_flags = win32con.LR_LOADFROMFILE | win32con.LR_DEFAULTSIZE
+            hicon = win32gui.LoadImage(0, ico_path, win32con.IMAGE_ICON, 32, 32, hicon_flags)
+        except Exception:
+            pass
+    if not hicon:
+        hicon = win32gui.LoadIcon(0, win32con.IDI_APPLICATION)
+
+    # Create hidden window and register tray icon with GUID
+    hwnd = _create_tray_hwnd()
+
+    from ctypes import wintypes as _wt
+
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+
+    # GUID struct
+    class GUID(ctypes.Structure):
+        _fields_ = [
+            ("Data1", ctypes.c_ulong),
+            ("Data2", ctypes.c_ushort),
+            ("Data3", ctypes.c_ushort),
+            ("Data4", ctypes.c_ubyte * 8),
+        ]
+
+    # NOTIFYICONDATAW
+
+    class NOTIFYICONDATAW(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", ctypes.c_ulong),
+            ("hWnd", _wt.HWND),
+            ("uID", ctypes.c_uint),
+            ("uFlags", ctypes.c_uint),
+            ("uCallbackMessage", ctypes.c_uint),
+            ("hIcon", _wt.HICON),
+            ("szTip", ctypes.c_wchar * 128),
+            ("dwState", ctypes.c_ulong),
+            ("dwStateMask", ctypes.c_ulong),
+            ("szInfo", ctypes.c_wchar * 256),
+            ("uVersion", ctypes.c_uint),
+            ("szInfoTitle", ctypes.c_wchar * 64),
+            ("dwInfoFlags", ctypes.c_ulong),
+            ("guidItem", GUID),
+            ("hBalloonIcon", _wt.HICON),
+        ]
+
+    nid = NOTIFYICONDATAW()
+    nid.cbSize = ctypes.sizeof(NOTIFYICONDATAW)
+
+    nid.hWnd = hwnd
+    nid.uID = _NOTIFY_ICON_ID
+    nid.uFlags = 0x4 | 0x2 | 0x1 | 0x20  # NIF_TIP | NIF_ICON | NIF_MESSAGE | NIF_GUID
+    nid.uCallbackMessage = _WM_TRAYICON
+    nid.hIcon = hicon
+    nid.szTip = "策划工具箱"
+    # Fixed GUID - NEVER changes between versions
+    nid.guidItem = GUID()
+    nid.guidItem.Data1 = 0x5F8C4B9E
+    nid.guidItem.Data2 = 0x3E7A
+    nid.guidItem.Data3 = 0x4D2A
+    nid.guidItem.Data4 = (ctypes.c_ubyte * 8)(0x9B, 0x1C, 0x0D, 0x8E, 0x6F, 0x4A, 0x2C, 0x3B)
+
+    shell32.Shell_NotifyIconW(0, ctypes.byref(nid))  # 0 = NIM_ADD
+    _tray_icon = hwnd
+
+    # Message loop
+    msg = _wt.MSG()
+    while user32.GetMessageW(ctypes.byref(msg), None, 0, 0):
+        user32.TranslateMessage(ctypes.byref(msg))
+        user32.DispatchMessageW(ctypes.byref(msg))
+
+    # Cleanup
+    shell32.Shell_NotifyIconW(2, ctypes.byref(nid))  # 2 = NIM_DELETE
+    if hicon:
+        win32gui.DestroyIcon(hicon)
     os._exit(0)
 
 
@@ -939,10 +1068,11 @@ def main():
         webview.start(_boot_app, window, debug=False)
     finally:
         _stop_flask()
-        if not _tray_stop.is_set():
-            _tray_stop.set()
-            if _tray_icon:
-                _tray_icon.stop()
+        if _tray_icon:
+            try:
+                win32gui.PostMessage(_tray_icon, win32con.WM_CLOSE, 0, 0)
+            except Exception:
+                pass
     sys.exit(0)
 
 

@@ -198,19 +198,13 @@ def _deploy_to_appdata(dist_app):
         except Exception as e:
             print(f"  [清理] 终止进程失败: {e}")
 
-    # ── 删除旧部署目录 ──
-    if os.path.exists(deploy_dir):
-        shutil.rmtree(deploy_dir)
-        print(f"  [清理] 已删除旧部署: {deploy_dir}")
-
-    # ── 复制到 APPDATA ──
+    # ── 覆盖部署到 APPDATA（原地覆盖，保留目录创建时间/元数据，托盘设置不丢失）──
     os.makedirs(deploy_root, exist_ok=True)
-    print(f"  [部署] 复制到 {deploy_dir} ...")
+    print(f"  [部署] 覆盖到 {deploy_dir} ...")
     try:
-        shutil.copytree(dist_app, deploy_dir, ignore_dangling_symlinks=True)
+        shutil.copytree(dist_app, deploy_dir, dirs_exist_ok=True, ignore_dangling_symlinks=True)
     except PermissionError:
-        # 部分只读文件（如 lxml）会拒绝 copy2，改用 copy 跳过权限
-        shutil.copytree(dist_app, deploy_dir, copy_function=shutil.copy, ignore_dangling_symlinks=True)
+        shutil.copytree(dist_app, deploy_dir, dirs_exist_ok=True, copy_function=shutil.copy, ignore_dangling_symlinks=True)
 
     deploy_size = 0
     for dirpath, _, filenames in os.walk(deploy_dir):

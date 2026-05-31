@@ -1108,9 +1108,10 @@ while (true):
 - **涉及文件**：[dist_update.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/dist_update.py)、[build_all.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build_all.bat)
 
 ### bat 文件中的 UTF-8 中文在 cmd.exe 下乱码
-- **场景**：双击一键打包.bat，输出全部变成乱码，命令解析失败（'寘' 不是内部或外部命令）
-- **根因**：cmd.exe 默认代码页是 GBK（936），bat 文件保存为 UTF-8 时中文会被错误解码。即使 `chcp 65001` 也无法完全避免，某些环境仍会乱码
-- **解决方案**：bat 文件全部使用英文输出，避免中文。文件名也用英文（build_all.bat）
+- **场景**：双击 bat，输出全部变成乱码，命令解析失败（'寘' 不是内部或外部命令）；中文显示为 `????????`
+- **根因**：cmd.exe 默认代码页是 GBK（936），bat 文件保存为 UTF-8 时中文会被错误解码。即使 `chcp 65001` 也无法完全避免
+- **解决方案**：bat 文件**全部使用纯英文**输出，一个中文字都不能有。包括文件名、echo 里的路径名、注释。涉及 `策划工具箱` 路径名的地方也要用英文描述代替（如 `Output: ..\dist\ (versioned timestamp dir)`）
+- **关键教训**：CRLF 换行符 + 纯英文内容 = 双击就好的 bat。UTF-8 文件和 GBK cmd.exe 的中文兼容问题无解，唯一可靠方案是 bat 里不出现任何中文
 - **涉及文件**：[build_all.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build_all.bat)、[serve_update.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/serve_update.bat)
 
 ### AppendMenu separator 传 None 导致右键菜单不弹

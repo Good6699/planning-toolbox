@@ -6,7 +6,7 @@ echo   Auto version patch + PyInstaller + Update Zip
 echo ============================================================
 echo.
 
-echo [1/3] Auto-patch version + PyInstaller packaging...
+echo [1/2] Auto-patch version + PyInstaller packaging...
 python build.py --auto-patch --zip
 if %errorlevel% neq 0 (
     echo [ERROR] Build failed, check log above

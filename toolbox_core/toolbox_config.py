@@ -45,7 +45,11 @@ def _ensure_frozen_config():
     with open(cfg_path, "r", encoding="utf-8") as f:
         dst_cfg = json.load(f)
     for k, v in src_cfg.items():
-        if k not in dst_cfg:
+        if k == "tr_api_key" or k == "tr_api_key_enc":
+            continue
+        if k in ("window_w", "window_h"):
+            dst_cfg[k] = v
+        elif k not in dst_cfg:
             dst_cfg[k] = v
     with open(cfg_path, "w", encoding="utf-8") as f:
         json.dump(dst_cfg, f, ensure_ascii=False, indent=2)

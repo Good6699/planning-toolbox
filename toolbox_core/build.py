@@ -206,7 +206,11 @@ def _deploy_to_appdata(dist_app):
     # ── 复制到 APPDATA ──
     os.makedirs(deploy_root, exist_ok=True)
     print(f"  [部署] 复制到 {deploy_dir} ...")
-    shutil.copytree(dist_app, deploy_dir)
+    try:
+        shutil.copytree(dist_app, deploy_dir, ignore_dangling_symlinks=True)
+    except PermissionError:
+        # 部分只读文件（如 lxml）会拒绝 copy2，改用 copy 跳过权限
+        shutil.copytree(dist_app, deploy_dir, copy_function=shutil.copy, ignore_dangling_symlinks=True)
 
     deploy_size = 0
     for dirpath, _, filenames in os.walk(deploy_dir):
@@ -306,8 +310,11 @@ def build():
     # ── 创建时间戳归档（copytree，不改 exe 文件名）──
     if os.path.exists(ts_app):
         shutil.rmtree(ts_app)
-    shutil.copytree(dist_app, ts_app)
-    print(f"  [归档] {APP_NAME}/ → {os.path.basename(ts_app)}/")
+    try:
+        shutil.copytree(dist_app, ts_app, ignore_dangling_symlinks=True)
+        print(f"  [归档] {APP_NAME}/ → {os.path.basename(ts_app)}/")
+    except Exception as e:
+        print(f"  [归档] 跳过 ({e})")
 
     print(f"\n[完成] PyInstaller 打包成功！")
 

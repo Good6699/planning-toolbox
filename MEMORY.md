@@ -1113,6 +1113,12 @@ while (true):
 - **解决方案**：bat 文件全部使用英文输出，避免中文。文件名也用英文（build_all.bat）
 - **涉及文件**：[build_all.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build_all.bat)、[serve_update.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/serve_update.bat)
 
+### AppendMenu separator 传 None 导致右键菜单不弹
+- **场景**：2026-05-31 替换 pystray 为 win32gui 后，托盘图标右键菜单完全弹不出。错误日志显示 `TypeError: None is not a valid string in this context`
+- **根因**：之前从 pystray 迁移到原生 win32gui 时，`AppendMenu(menu, MF_SEPARATOR, 0, None)` 第四个参数为 `None`。win32gui 的 AppendMenu 对分隔条也要求传入有效的字符串（空字符串 `""`），不能传 `None`。同时，由于 Python WNDPROC handler 抛异常未被捕获，整个 `_tray_wndproc` 后续的消息处理全部失效
+- **解决方案**：`MF_SEPARATOR` 的最后一个参数改为 `""`（空字符串）。另外加了 `SetForegroundWindow` 和 `PostMessage(WM_NULL)` 确保菜单标准流程完整
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
+
 ### 托盘图标设置丢失：NIF_GUID 持久化标识
 - **场景**：每次重新打包部署后，Windows 通知区域的"策划工具箱"图标状态（显示/隐藏）都会重置，需要重新进设置打开"显示图标和通知"
 - **根因**：pystray 调用 Shell_NotifyIconW 时不设 NIF_GUID 标志，Windows 默认用进程路径+二进制修改时间匹配图标状态。每次覆盖部署后文件更新时间变了，Windows 视为新应用，旧设置失效

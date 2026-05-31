@@ -19,7 +19,6 @@ import webview
 import win32gui
 import win32con
 import win32api
-from PIL import Image, ImageDraw
 from toolbox_config import load_config, save_config, _ensure_frozen_config
 
 WINDOW_W = 1100
@@ -494,15 +493,6 @@ def _wait_for_flask(timeout=10):
     return False
 
 
-def _make_tray_image():
-    img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle([0, 0, 31, 31], radius=6, outline="#4F8CFF", width=1)
-    pts = [(6, 6), (26, 6), (26, 12), (12, 12), (12, 22), (26, 22), (26, 28), (6, 28), (6, 17), (20, 17)]
-    draw.line(pts, fill="#4F8CFF", width=3, joint="curve")
-    draw.ellipse([17, 14, 23, 20], fill="#4F8CFF")
-    return img
-
 
 def _show_window(icon, item=None):
     global _window_visible
@@ -750,68 +740,22 @@ def _tray_thread():
     # Create hidden window and register tray icon with GUID
     hwnd = _create_tray_hwnd()
 
-    from ctypes import wintypes as _wt
-
-    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-
-    # GUID struct
-    class GUID(ctypes.Structure):
-        _fields_ = [
-            ("Data1", ctypes.c_ulong),
-            ("Data2", ctypes.c_ushort),
-            ("Data3", ctypes.c_ushort),
-            ("Data4", ctypes.c_ubyte * 8),
-        ]
-
-    # NOTIFYICONDATAW
-
-    class NOTIFYICONDATAW(ctypes.Structure):
-        _fields_ = [
-            ("cbSize", ctypes.c_ulong),
-            ("hWnd", _wt.HWND),
-            ("uID", ctypes.c_uint),
-            ("uFlags", ctypes.c_uint),
-            ("uCallbackMessage", ctypes.c_uint),
-            ("hIcon", _wt.HICON),
-            ("szTip", ctypes.c_wchar * 128),
-            ("dwState", ctypes.c_ulong),
-            ("dwStateMask", ctypes.c_ulong),
-            ("szInfo", ctypes.c_wchar * 256),
-            ("uVersion", ctypes.c_uint),
-            ("szInfoTitle", ctypes.c_wchar * 64),
-            ("dwInfoFlags", ctypes.c_ulong),
-            ("guidItem", GUID),
-            ("hBalloonIcon", _wt.HICON),
-        ]
-
-    nid = NOTIFYICONDATAW()
-    nid.cbSize = ctypes.sizeof(NOTIFYICONDATAW)
-
-    nid.hWnd = hwnd
-    nid.uID = _NOTIFY_ICON_ID
-    nid.uFlags = 0x4 | 0x2 | 0x1 | 0x20  # NIF_TIP | NIF_ICON | NIF_MESSAGE | NIF_GUID
-    nid.uCallbackMessage = _WM_TRAYICON
-    nid.hIcon = hicon
-    nid.szTip = "策划工具箱"
-    # Fixed GUID - NEVER changes between versions
-    nid.guidItem = GUID()
-    nid.guidItem.Data1 = 0x5F8C4B9E
-    nid.guidItem.Data2 = 0x3E7A
-    nid.guidItem.Data3 = 0x4D2A
-    nid.guidItem.Data4 = (ctypes.c_ubyte * 8)(0x9B, 0x1C, 0x0D, 0x8E, 0x6F, 0x4A, 0x2C, 0x3B)
-
-    shell32.Shell_NotifyIconW(0, ctypes.byref(nid))  # 0 = NIM_ADD
+    # 用 win32gui 的 Shell_NotifyIcon（自动处理结构体对齐）
+    tray_flags = win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP
+    nid = (hwnd, _NOTIFY_ICON_ID, tray_flags, _WM_TRAYICON, hicon, "策划工具箱")
+    win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)
     _tray_icon = hwnd
 
     # Message loop
+    from ctypes import wintypes as _wt
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
     msg = _wt.MSG()
     while user32.GetMessageW(ctypes.byref(msg), None, 0, 0):
         user32.TranslateMessage(ctypes.byref(msg))
         user32.DispatchMessageW(ctypes.byref(msg))
 
     # Cleanup
-    shell32.Shell_NotifyIconW(2, ctypes.byref(nid))  # 2 = NIM_DELETE
+    win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, nid)
     if hicon:
         win32gui.DestroyIcon(hicon)
     os._exit(0)

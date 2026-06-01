@@ -751,10 +751,24 @@ def _notify_task_done(name):
             if not os.path.isfile(toast_icon):
                 try:
                     from PIL import Image
-                    img = Image.open(ico_path)
-                    img = img.resize((48, 48), Image.LANCZOS)
+                    src = Image.open(ico_path)
+                    if hasattr(src, 'seek'):
+                        best = src
+                        for i in range(src.n_frames if hasattr(src, 'n_frames') else 1):
+                            src.seek(i)
+                            w, h = src.size
+                            if w >= 48 and h >= 48:
+                                best = src.copy()
+                                break
+                        src = best
+                    raw = src.convert("RGBA")
+                    raw.thumbnail((34, 34), Image.LANCZOS)
+                    canvas = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
+                    left = (48 - raw.width) // 2
+                    top = (48 - raw.height) // 2
+                    canvas.paste(raw, (left, top), raw)
                     os.makedirs(os.path.dirname(toast_icon), exist_ok=True)
-                    img.save(toast_icon, "PNG")
+                    canvas.save(toast_icon, "PNG")
                 except Exception:
                     toast_icon = None
         else:

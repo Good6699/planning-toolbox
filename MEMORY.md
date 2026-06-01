@@ -1636,6 +1636,12 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **解决方案**：新增 `triggerUpdateCheck()` 函数，在 7 个执行按钮（SVN 开始执行/上传到 SVN/开始翻译/语义分析/开始合并/工作流 ▶ 播放/步骤 ▶ 播放）的 click handler 中调用。检测到新版本后显示更新条，已显示则不再重复触发。纯前端改动，不涉及后端
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### Toast 通知图标圆形裁剪适配：加 padding 居中缩略图
+- **场景**：Windows Toast 通知左侧的应用图标显示为一个剪切的大圆形，图标边缘被切掉，视觉效果差
+- **根因**：`_notify_task_done()` 中将 ICO 直接 resize 到 48×48 填满画布，Windows Toast 用圆形 mask 裁剪后，图标内容超出圆形区域被切掉
+- **解决方案**：改用 `thumbnail((34, 34))` 将图标缩小到约 70%，在 48×48 透明 RGBA 画布上居中粘贴（约 7px padding），paste 时用 alpha 通道 mask 保留透明度。ICO 多帧处理：循环 seek 找出分辨率 ≥ 48px 的最佳帧再处理
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
 ### UI：⚙ 高级设置按钮移至 "过滤与输出" 标题右侧并缩小
 - **场景**：2026-05-29 用户觉得 SVN 记录页签右侧的 ⚙ 高级设置按钮位置太独立（单独占一行），且太大（font-size:32px）
 - **解决方案**：将按钮从独自一行（输出目录下方的 flex 容器）移到 `.section-label` 标题行右侧，使用 flexbox `justify-content:space-between` 布局，字号从 32px 缩小到 18px

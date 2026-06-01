@@ -14,6 +14,9 @@ tr > R > API > Key      → 翻译页签右侧API Key输入框
 wf > F > 工作流.0       → 工作流页签第一个工作流
 merge > F > 版本.1      → 语义合并第二个版本项
 upload > L > 文件.3     → 复制合并左列第4个文件
+@update-apply           → 更新横幅的「一键更新」按钮
+app > D > 确认          → 确认弹窗（替代原生confirm）
+app > D > 通知          → Windows原生Toast通知
 ```
 
 ---
@@ -33,6 +36,41 @@ upload > L > 文件.3     → 复制合并左列第4个文件
 | `app > S > nav.upload` | `.nav-btn[data-key="upload"]` | 导航-复制合并，黄点 `#nav_dot_upload` 在文本右侧 |
 | `app > S > nav.wf` | `.nav-btn[data-key="workflow"]` | 导航-工作流，黄点 `#nav_dot_workflow` 在文本右侧 |
 | `app > S > nav.tr` | `.nav-btn[data-key="translate"]` | 导航-翻译，黄点 `#nav_dot_translate` 在文本右侧 |
+| `app > F > 更新横幅` | `#update_banner` | 顶部蓝色更新通知横幅（新版本可用时显示） |
+| `app > F > 更新横幅 > 版本号` | `#update_banner .version` | 新版本号文本 |
+| `app > F > 更新横幅 > 更新说明` | `#update_banner .notes` | 版本更新说明 |
+| `app > F > 更新横幅 > 一键更新` | `@update-apply` | [一键更新] 按钮 |
+| `app > F > 更新横幅 > 关闭` | `@update-dismiss` | ✕ 关闭横幅（仅非强制更新时显示） |
+| `app > D > 确认` | `.confirm-overlay` | 确认弹窗（替代原生 confirm/alert），全屏遮罩flex居中 |
+| `app > D > 确认 > 标题` | `.confirm-dialog .title` | 弹窗标题文字 |
+| `app > D > 确认 > 消息` | `.confirm-dialog .msg` | 弹窗内容消息 |
+| `app > D > 确认 > 确定` | `.confirm-dialog .btn-confirm` | 确定按钮（删除操作时为红色 `.btn-danger`） |
+| `app > D > 确认 > 取消` | `.confirm-dialog .btn-cancel` | 取消按钮（仅 `showConfirm()` 时显示，`showAlert()` 时隐藏） |
+| `app > D > 通知` | 桌面Toast | Windows原生Toast通知，窗口隐藏/最小化时弹出 |
+| `app > D > 通知 > 点击` | `on_click` → `_focus_app_window()` | 点击通知后调起主窗口 |
+| `app > D > 通知 > 图标` | `app_icon.ico` → PNG缓存 | 通知左侧应用图标 |
+| `app > D > 通知 > app_id` | `"策划工具箱"` | Windows Toast 应用标识 |
+
+### 全局JS API
+
+| API | 说明 |
+|-----|------|
+| `showConfirm(options)` | Promise化确认弹窗：`{title, message, confirmText, cancelText, danger}` |
+| `showAlert(message, title?)` | 仅确定按钮的提示弹窗 |
+
+### 任务完成通知触发场景
+
+| 后端调用点 | 触发时机 | 通知内容 |
+|-----------|---------|---------|
+| `svn/run` | SVN对比/摘要/导出完成 | 「SVN 对比/摘要/导出」任务已完成... |
+| `upload/run` | 上传SVN完成 | 「上传SVN」任务已完成... |
+| `translate/run` | 翻译完成 | 「翻译」任务已完成... |
+| `workflow/run` | 工作流完成 | 「工作流名」任务已完成... |
+| `merge/query` | 语义合并查询完成 | 「语义合并查询」任务已完成... |
+| `merge/run` | 语义合并执行完成 | 「语义合并」任务已完成... |
+| `merge/analyze` | 语义分析完成 | 「语义分析」任务已完成... |
+
+> 通知仅在窗口完全隐藏（非最小化、未贴边可见）时弹出，窗口可见时静默。取消的任务不弹通知。
 
 ---
 
@@ -266,4 +304,19 @@ upload > L > 文件.3     → 复制合并左列第4个文件
 
 你: @run-svn 按钮灰的
 我: 检查开始执行按钮的disabled状态
+
+你: app > F > 更新横幅 一直闪，点了关闭又出来
+我: 检查更新轮询逻辑，非强制更新点击关闭后应存 localStorage 跳过该版本
+
+你: app > F > 更新横幅 > 一键更新 点了没反应
+我: 检查 /api/update/apply 路由和 _updater.bat 的启动链路
+
+你: app > D > 确认 弹窗里的按钮文字不对
+我: 检查 showConfirm 的 confirmText/cancelText 参数
+
+你: 任务完成后没弹通知
+我: 检查 win11toast 依赖和 _notify_task_done 的窗口可见性判断
+
+你: merge > F > 文件列表 新加了全选/反选/清空按钮
+我: 已在文档中记录，参考 merge > F > 文件.全选/反选/清空
 ```

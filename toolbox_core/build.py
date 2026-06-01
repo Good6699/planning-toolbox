@@ -192,7 +192,6 @@ def _get_excludes():
         "--exclude-module=llvmlite",
         "--exclude-module=numba",
         "--exclude-module=matplotlib",
-        "--exclude-module=tkinter",
         "--exclude-module=networkx",
         "--exclude-module=scipy.libs",
         "--exclude-module=numpy.libs",
@@ -317,13 +316,24 @@ def _deploy_to_appdata(dist_app):
         except Exception as e:
             print(f"  [清理] 终止进程失败: {e}")
 
-    # ── 覆盖部署到 APPDATA（原地覆盖，保留目录创建时间/元数据，托盘设置不丢失）──
+    # ── 全新部署到 APPDATA（先删旧目录，再完整复制，避免残留旧文件）──
     os.makedirs(deploy_root, exist_ok=True)
-    print(f"  [部署] 覆盖到 {deploy_dir} ...")
+    if os.path.isdir(deploy_dir):
+        try:
+            shutil.rmtree(deploy_dir)
+        except PermissionError:
+            def _onerror(func, path, exc_info):
+                try:
+                    os.chmod(path, stat.S_IWRITE)
+                    func(path)
+                except Exception:
+                    pass
+            shutil.rmtree(deploy_dir, onerror=_onerror)
+    print(f"  [部署] 复制到 {deploy_dir} ...")
     try:
-        shutil.copytree(dist_app, deploy_dir, dirs_exist_ok=True, ignore_dangling_symlinks=True)
+        shutil.copytree(dist_app, deploy_dir, ignore_dangling_symlinks=True)
     except PermissionError:
-        shutil.copytree(dist_app, deploy_dir, dirs_exist_ok=True, copy_function=shutil.copy, ignore_dangling_symlinks=True)
+        shutil.copytree(dist_app, deploy_dir, copy_function=shutil.copy, ignore_dangling_symlinks=True)
 
     deploy_size = 0
     for dirpath, _, filenames in os.walk(deploy_dir):

@@ -1092,11 +1092,11 @@ while (true):
 - **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
-### ctypes NOTIFYICONDATAW 真正根因：缺 argtypes 导致指针被截断（非对齐问题）
-- **场景**：2026-05-31 手动用 ctypes 构造 `NOTIFYICONDATAW` 注册托盘图标，PyInstaller 打包后图标不显示。此前 MEMORY.md 记录为"64 位对齐问题"，实际是误判
-- **根因**：① `Shell_NotifyIconW` 的 `argtypes` 默认为 `None`，ctypes 把所有参数当 32 位整数传递。`ctypes.byref(nid)` 返回的 64 位指针被截断为 32 位，Windows 收到无效地址，拒绝注册图标。实测 `ctypes.sizeof(NOTIFYICONDATAW) = 976`，所有字段偏移正确（`HWND` 8 字节对齐、`HICON` 8 字节对齐、`GUID` 4 字节对齐），对齐不是问题。② 恢复 ctypes 后需同时设置 `argtypes = [c_uint, c_void_p]` 和 `restype = c_bool` 才能正确传递指针
-- **解决方案**：① 设置 `shell32.Shell_NotifyIconW.argtypes = [ctypes.c_uint, ctypes.c_void_p]`；② 同时设置 `restype = ctypes.c_bool`；③ 用 `nid.uFlags = 0x1 | 0x2 | 0x4 | 0x20`（含 `NIF_GUID`）注册固定 GUID `{5F8C4B9E-3E7A-4D2A-9B1C-0D8E6F4A2C3B}`；④ 图标注册后写入注册表 `HKCU\Control Panel\NotifyIconSettings\{GUID}\IsPromoted=1` 强制始终显示
-- **关键教训**：① ctypes 在 64 位 Windows 上定义 Win32 结构体时，对齐通常不是问题（ctypes 自动处理标准对齐），真正的问题往往出在 `argtypes` 未设置导致指针被截断。② 遇到 exe 不显示但源码正常的情况，先检查 ctypes 函数的 `argtypes` 和 `restype`。③ Windows 通知区域图标"显示/隐藏"偏好绑定了 GUID（注册表 `NotifyIconSettings\{GUID}\IsPromoted`），即使有 NIF_GUID 也要显式写入 `IsPromoted=1` 才能默认显示
+### ctypes NOTIFYICONDATAW 在 frozen exe 中不可靠，最终方案用 win32gui 元组
+- **场景**：2026-06-01 反复验证确认：ctypes 构造的 `NOTIFYICONDATAW` 在源码 bat 模式下能正常显示托盘图标，但 PyInstaller 打包后的 exe 始终不显示（主窗口能正常打开）。设置 `argtypes` 解决源码模式的指针截断问题，但 frozen exe 下仍有未知的兼容性问题
+- **根因**：ctypes 的 `Structure` 在 PyInstaller frozen 环境下的内存布局不可预测。`Shell_NotifyIconW` 传入 `NOTIFYICONDATAW` 结构体指针后，Windows 可能读到错误的 `cbSize` 或字段偏移，拒绝注册图标。这是 ctypes 在 frozen exe 中的固有问题，不是简单的 `argtypes` 能解决的
+- **解决方案**：① 用 `win32gui.Shell_NotifyIcon(tuple)` 替代手动 ctypes 构造（pywin32 内部使用 C 代码正确处理结构体对齐和参数传递，兼容 frozen exe）；② 保留 registry 写入 `HKCU\Control Panel\NotifyIconSettings\{GUID}\IsPromoted=1` 强制图标默认显示；③ 持久化靠 `build.py` 的 APPDATA 固定路径部署（微软文档确认：无 GUID 时系统用 `exe路径 + uID` 标识图标）
+- **关键教训**：① ctypes 在 frozen exe 下定义 Win32 结构体不可靠，能走 pywin32 封装的 API 就不要自己造。② `win32gui.Shell_NotifyIcon(tuple)` 的元组格式不支持 NIF_GUID，但持久化可以通过固定部署路径 + registry IsPromoted 双重保障实现。③ 不要被"源码能跑"迷惑——ctypes 在 frozen 和源码模式是两回事
 - **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
 
 ### build.py 清理旧包：杀死 策划工具箱.exe 释放 .pyd 锁 + 按创建时间排序
@@ -1155,10 +1155,10 @@ while (true):
 - **解决方案**：`MF_SEPARATOR` 的最后一个参数改为 `""`（空字符串）。另外加了 `SetForegroundWindow` 和 `PostMessage(WM_NULL)` 确保菜单标准流程完整
 - **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
 
-### ctypes NOTIFYICONDATAW 结构体 64 位对齐导致打包后托盘图标不显示
+### ctypes NOTIFYICONDATAW 结构体在 frozen exe 下不可靠
 - **场景**：源码 bat 模式托盘图标正常，但 PyInstaller 打包后的 exe 托盘图标始终不显示（主窗口能正常打开）
-- **根因**：手动用 ctypes 构造的 `NOTIFYICONDATAW` 结构体在 64 位 Windows 上字段对齐有 padding，`cbSize` 算错，Windows 拒绝注册通知图标。同时 `ICON_PATH` 在 frozen 模式下指向 `_internal/toolbox_core/assets/app_icon.ico`（错误），实际在 `_internal/assets/app_icon.ico`。PIL 的 ICO 编码器在 exe 里缺失，`img.save(format="ICO")` 静默失败
-- **解决方案**：① 用 `win32gui.Shell_NotifyIcon(tuple)` 替代手动 ctypes 构造（自动处理对齐）；② frozen 模式 ICON_PATH 改为 `sys._MEIPASS + "assets/app_icon.ico"`；③ 去掉 PIL 画图逻辑，直接加载已存在的 ICO 文件
+- **根因**：手动用 ctypes 构造的 `NOTIFYICONDATAW` 在 PyInstaller frozen 环境下内存布局不可预测，Windows 可能读到错误的 `cbSize` 或字段偏移，拒绝注册通知图标。同时 `ICON_PATH` 在 frozen 模式下指向 `_internal/toolbox_core/assets/app_icon.ico`（错误），实际在 `_internal/assets/app_icon.ico`。PIL 的 ICO 编码器在 exe 里缺失，`img.save(format="ICO")` 静默失败
+- **解决方案**：① 用 `win32gui.Shell_NotifyIcon(tuple)` 替代手动 ctypes 构造（pywin32 内部正确处理结构体）；② frozen 模式 ICON_PATH 改为 `sys._MEIPASS + "assets/app_icon.ico"`；③ 去掉 PIL 画图逻辑，直接加载已存在的 ICO 文件；④ 用 registry `IsPromoted=1` + 固定 APPDATA 路径实现图标显示持久化
 - **关键教训**：ctypes 在定义 Win32 结构体时很脆弱，能走 pywin32 封装的 API 就不要自己造。PyInstaller 打包后的路径必须用 `sys._MEIPASS` 定位资源文件
 - **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
 

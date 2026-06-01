@@ -741,57 +741,16 @@ def _tray_thread():
     if not hicon:
         hicon = win32gui.LoadIcon(0, win32con.IDI_APPLICATION)
 
-    # Create hidden window and register tray icon with GUID
+    # Create hidden window and register tray icon
+    # 用 win32gui.Shell_NotifyIcon(tuple) 注册（避免 ctypes 在 frozen exe 下结构体兼容问题）
+    # 持久化通过固定 APPDATA 路径 + registry IsPromoted=1 双重保障
     hwnd = _create_tray_hwnd()
 
-    # 用 ctypes NOTIFYICONDATAW + 正确 argtypes 注册托盘图标（确保 64 位指针正确传递 + NIF_GUID 持久化）
-    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
-    shell32.Shell_NotifyIconW.argtypes = [ctypes.c_uint, ctypes.c_void_p]
-    shell32.Shell_NotifyIconW.restype = ctypes.c_bool
-    wt = ctypes.wintypes
+    tray_flags = win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP
+    nid = (hwnd, _NOTIFY_ICON_ID, tray_flags, _WM_TRAYICON, hicon, "策划工具箱")
+    win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)
+    _tray_icon = hwnd
 
-    class GUID(ctypes.Structure):
-        _fields_ = [
-            ("Data1", ctypes.c_ulong),
-            ("Data2", ctypes.c_ushort),
-            ("Data3", ctypes.c_ushort),
-            ("Data4", ctypes.c_ubyte * 8),
-        ]
-
-    class NOTIFYICONDATAW(ctypes.Structure):
-        _fields_ = [
-            ("cbSize", ctypes.c_ulong),
-            ("hWnd", wt.HWND),
-            ("uID", ctypes.c_uint),
-            ("uFlags", ctypes.c_uint),
-            ("uCallbackMessage", ctypes.c_uint),
-            ("hIcon", wt.HICON),
-            ("szTip", ctypes.c_wchar * 128),
-            ("dwState", ctypes.c_ulong),
-            ("dwStateMask", ctypes.c_ulong),
-            ("szInfo", ctypes.c_wchar * 256),
-            ("uVersion", ctypes.c_uint),
-            ("szInfoTitle", ctypes.c_wchar * 64),
-            ("dwInfoFlags", ctypes.c_ulong),
-            ("guidItem", GUID),
-            ("hBalloonIcon", wt.HICON),
-        ]
-
-    nid = NOTIFYICONDATAW()
-    nid.cbSize = ctypes.sizeof(NOTIFYICONDATAW)
-    nid.hWnd = hwnd
-    nid.uID = _NOTIFY_ICON_ID
-    nid.uFlags = 0x1 | 0x2 | 0x4 | 0x20  # NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_GUID
-    nid.uCallbackMessage = _WM_TRAYICON
-    nid.hIcon = hicon
-    nid.szTip = "策划工具箱"
-    nid.guidItem = GUID()
-    nid.guidItem.Data1 = _TRAY_GUID[0]
-    nid.guidItem.Data2 = _TRAY_GUID[1]
-    nid.guidItem.Data3 = _TRAY_GUID[2]
-    nid.guidItem.Data4 = (ctypes.c_ubyte * 8)(*_TRAY_GUID[3])
-
-    shell32.Shell_NotifyIconW(0, ctypes.byref(nid))  # 0 = NIM_ADD
     # 强制托盘图标始终显示（不在折叠区），写入注册表持久化
     try:
         import winreg
@@ -817,7 +776,7 @@ def _tray_thread():
         user32.DispatchMessageW(ctypes.byref(msg))
 
     # Cleanup
-    shell32.Shell_NotifyIconW(2, ctypes.byref(nid))  # 2 = NIM_DELETE
+    win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, nid)
     if hicon:
         win32gui.DestroyIcon(hicon)
     os._exit(0)

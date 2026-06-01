@@ -591,6 +591,7 @@ input::placeholder,textarea::placeholder{
 .wf-child-type.unlock_svn{background:rgba(100,200,100,.15);color:#64c864;}
 .wf-child-type.open_tables{background:rgba(100,200,255,.15);color:#64c8ff;}
 .wf-child-type.revert_svn{background:rgba(255,60,60,.15);color:#ff3c3c;}
+.wf-child-type.copy_files{background:rgba(78,201,176,.15);color:#4ec9b0;}
 .wf-add-step-item{
   display:flex;align-items:center;gap:8px;position:relative;
   padding:8px 12px;cursor:pointer;color:var(--accent);
@@ -1936,8 +1937,8 @@ function runUpload() {
 }
 function buildWorkflowTab(panel) {
   const wfs = config.workflows || [];
-  const typeCn = {export_text:"导出文字表",upload_svn:"上传SVN",merge_table:"合并表格",merge_translation:"合并翻译",export_error_code:"导出错误码",lock_svn:"锁定SVN",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退"};
-  const typeIcon = {export_text:"📄",upload_svn:"📤",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",lock_svn:"🔒",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩"};
+  const typeCn = {export_text:"导出文字表",upload_svn:"上传SVN",merge_table:"合并表格",merge_translation:"合并翻译",export_error_code:"导出错误码",lock_svn:"锁定SVN",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"复制文件"};
+  const typeIcon = {export_text:"📄",upload_svn:"📤",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",lock_svn:"🔒",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📋"};
   const isEmpty = !wfs.length;
   panel.innerHTML = `
     <div class="wf-layout">
@@ -2238,6 +2239,11 @@ function buildWorkflowTab(panel) {
     modalBody.querySelectorAll("input[type=checkbox][data-key]").forEach(inp => {
       step[inp.dataset.key] = inp.checked;
     });
+    if (step.type === "copy_files") {
+      step.selected_files = _wfCfEntries.filter(f => f._sel).map(f => ({
+        name: f.name, path: f.path, is_dir: f.is_dir
+      }));
+    }
     const autoName = _wfAutoName(step);
     if (autoName) step.name = autoName;
     saveConfig({workflows:config.workflows});
@@ -2297,6 +2303,25 @@ function buildWorkflowTab(panel) {
           <input type="text" class="wf-modal-input" id="wf_m_rv_exclude" data-key="exclude_paths" value="${v("exclude_paths")}" placeholder="多个路径用,分隔">
         </div>
         <label class="wf-rv-check"><input type="checkbox" data-key="delete_unversioned" ${step.delete_unversioned?'checked':''}> 永久删除未版本控制的文件</label>`,
+      copy_files: `
+        <div class="form-group"><label>源目录</label>
+          <div class="flex-row"><input type="text" class="wf-modal-input" id="wf_m_cf_src" data-key="src_dir" value="${v("src_dir")}" style="flex:1" placeholder="选择目录">
+          <button class="btn btn-normal btn-sm" onclick="browseDir('wf_m_cf_src',_wfCfRefresh)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>
+        <div class="card-header compact" style="margin:8px 0 4px;padding:0">
+          <span style="font-weight:600;font-size:13px">文件列表</span>
+          <div style="display:inline-flex;gap:6px">
+            <a href="#" onclick="_wfCfSelAll();return false" style="color:var(--accent);font-size:13px">全选</a>
+            <a href="#" onclick="_wfCfSelNone();return false" style="color:var(--dim);font-size:13px">取消全选</a>
+            <a href="#" onclick="_wfCfSelInv();return false" style="color:var(--dim);font-size:13px">反选</a>
+          </div>
+        </div>
+        <div class="file-list" id="wf_cf_file_list">
+          <div class="empty-state" style="padding:16px;color:var(--dim);text-align:center">请先选择源目录</div>
+        </div>
+        <div id="wf_cf_count" style="font-size:13px;color:var(--dim);margin:4px 0 8px">已选 0 个文件</div>
+        <div class="form-group"><label>目标目录</label>
+          <div class="flex-row"><input type="text" class="wf-modal-input" id="wf_m_cf_tgt" data-key="tgt_dir" value="${v("tgt_dir")}" style="flex:1" placeholder="选择目录">
+          <button class="btn btn-normal btn-sm" onclick="browseDir('wf_m_cf_tgt',null)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>`,
     };
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
   }
@@ -2367,6 +2392,66 @@ function buildWorkflowTab(panel) {
     _wfHistoryDd = dd;
   }
 
+  let _wfCfEntries = [];
+  let _wfCfLastSrcDir = "";
+
+  window._wfCfRefresh = async function() {
+    const src = document.querySelector("#wf_m_cf_src")?.value?.trim();
+    if (!src) return;
+    if (_modalCtx) {
+      const wf = config.workflows[_modalCtx.wfIdx];
+      if (wf) wf.steps[_modalCtx.stepIdx].src_dir = src;
+    }
+    const prevSrc = _wfCfLastSrcDir || "";
+    _wfCfLastSrcDir = src;
+    const r = await fetch("/api/files/list", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:src})});
+    const d = await r.json();
+    if (d.error) { await showAlert(d.error); return; }
+    _wfCfEntries = d.entries || [];
+    if (prevSrc && prevSrc !== src) {
+      _wfCfEntries.forEach(f => f._sel = false);
+    } else {
+      const savedFiles = (_modalCtx && config.workflows[_modalCtx.wfIdx]?.steps?.[_modalCtx.stepIdx]?.selected_files) || [];
+      _wfCfEntries.forEach(f => {
+        f._sel = savedFiles.some(sf => sf.path === f.path);
+      });
+    }
+    _wfCfRender();
+  };
+
+  function _wfCfRender() {
+    const container = document.getElementById("wf_cf_file_list");
+    if (!container) return;
+    if (!_wfCfEntries.length) {
+      container.innerHTML = '<div class="empty-state" style="padding:16px;color:var(--dim);text-align:center">目录为空</div>';
+      _wfCfUpdateCount();
+      return;
+    }
+    container.innerHTML = _wfCfEntries.map((f, i) =>
+      `<div class="file-item ${f._sel?'selected':''}" data-idx="${i}" onclick="_wfCfToggle(${i})">
+        <input type="checkbox" ${f._sel?'checked':''}>
+        <div style="flex:1">${f.is_dir?'📁':'📄'} ${escapeHtml(f.name)}</div>
+        <div style="color:var(--dim);font-size:0.8125rem">${f.size} ${f.date||''}</div>
+      </div>`
+    ).join("");
+    _wfCfUpdateCount();
+  }
+
+  function _wfCfToggle(i) {
+    _wfCfEntries[i]._sel = !_wfCfEntries[i]._sel;
+    _wfCfRender();
+  }
+
+  window._wfCfSelAll = function() { _wfCfEntries.forEach(f => f._sel = true); _wfCfRender(); };
+  window._wfCfSelNone = function() { _wfCfEntries.forEach(f => f._sel = false); _wfCfRender(); };
+  window._wfCfSelInv = function() { _wfCfEntries.forEach(f => f._sel = !f._sel); _wfCfRender(); };
+
+  function _wfCfUpdateCount() {
+    const cnt = document.getElementById("wf_cf_count");
+    if (!cnt) return;
+    cnt.textContent = `已选 ${_wfCfEntries.filter(f=>f._sel).length} 个文件`;
+  }
+
   function _wfModalAfterOpen() {
     modalBody.querySelectorAll("[id^=wf_m_]").forEach(inp => {
       if (inp.id) enablePathDrop(inp.id);
@@ -2383,6 +2468,21 @@ function buildWorkflowTab(panel) {
         _wfHistorySave(pool, inp.value);
       });
     });
+    const step = _modalCtx ? config.workflows[_modalCtx.wfIdx]?.steps?.[_modalCtx.stepIdx] : null;
+    if (step?.type === "copy_files") {
+      const src = document.querySelector("#wf_m_cf_src");
+      if (src) {
+        _wfCfLastSrcDir = "";
+        if (src.value.trim()) _wfCfRefresh();
+        let _cfTimer;
+        const _cfRefreshDebounced = () => {
+          clearTimeout(_cfTimer);
+          _cfTimer = setTimeout(_wfCfRefresh, 300);
+        };
+        src.addEventListener("input", _cfRefreshDebounced);
+        src.addEventListener("change", _cfRefreshDebounced);
+      }
+    }
   }
 
   document.getElementById("wf_modal_close").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } });
@@ -2611,6 +2711,12 @@ function _wfAutoName(step) {
     const p = step.target_path || "";
     const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
     return i >= 0 ? p.substring(i+1) : p;
+  }
+  if (t === "copy_files") {
+    const p = step.src_dir || "";
+    const s = p.replace(/[\/\\]$/,"");
+    const i = Math.max(s.lastIndexOf("\\"), s.lastIndexOf("/"));
+    return i >= 0 ? s.substring(i+1) : s;
   }
   return "";
 }

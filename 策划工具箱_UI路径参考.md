@@ -216,6 +216,7 @@ app > D > 通知          → Windows原生Toast通知
 🔓 unlock_svn       解锁SVN      绿色
 📂 open_tables      打开表格     青色
 ↩ revert_svn        SVN回退     红色
+📋 copy_files       复制文件     青色
 ```
 
 ### 工具栏与日志
@@ -244,6 +245,7 @@ app > D > 通知          → Windows原生Toast通知
 | `unlock_svn` | 目标文件路径, 更新目录, 解锁消息 | 逗号分隔 |
 | `open_tables` | 文件路径 | 逗号分隔多个 |
 | `revert_svn` | 回退路径, 排除路径 | 目录浏览+逗号分隔；下拉显示已有排除项，每项带×删除；复选框控制是否删除未版本文件 |
+| `copy_files` | 源目录, 文件列表(文件列表), 目标目录 | 目录浏览(自动刷新)+文件列表复用上传页签.file-list/.file-item样式+全选/取消全选/反选+自动恢复勾选 |
 
 ---
 

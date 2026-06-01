@@ -1647,3 +1647,12 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **解决方案**：将按钮从独自一行（输出目录下方的 flex 容器）移到 `.section-label` 标题行右侧，使用 flexbox `justify-content:space-between` 布局，字号从 32px 缩小到 18px
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### feat(wf): 新增工作流步骤类型「复制文件」(copy_files)
+- **场景**：2026-06-01 用户需要在工作流中编排"复制文件到目标 SVN 工作副本"的步骤，覆盖前先 svn update，遇到冲突用 theirs-full 覆盖
+- **解决方案**：
+  - 后端：新增 `_exec_copy_files` 函数，复用 `_copy2_force`（解除只读+shutil.copy2）和 `_svn_update_with_cleanup`，跳过 svn add/commit
+  - 前端：弹窗 layout 直接复用上传页签的 `.file-list`/`.file-item` CSS（card-header compact 风格），不另建独立样式
+  - 交互：打开弹窗自动刷新文件列表、源目录 input/change 事件 300ms debounce 自动刷新、`_wfCfLastSrcDir` 追踪路径变化时自动清空勾选、`selected_files` 按 path 匹配恢复勾选
+- **关键经验**：弹窗内文件列表复用已有 CSS 类而非新建，保持了视觉统一；桌面端拖拽用 change 事件而不是 input 事件，需同时监听两者
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+

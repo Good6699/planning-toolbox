@@ -60,6 +60,8 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
     q.put(None)
     sys.exit(proc.returncode)
 
+_quit_app_callback = lambda: None
+
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
@@ -590,6 +592,22 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
             q.put("⚠️ 未找到 TortoiseSVN\n")
 
 
+def _copy2_force(src, dst):
+    if os.path.exists(dst):
+        try:
+            os.chmod(dst, stat.S_IWRITE | stat.S_IREAD)
+        except Exception:
+            pass
+    try:
+        shutil.copy2(src, dst)
+    except PermissionError:
+        try:
+            os.remove(dst)
+        except Exception:
+            pass
+        shutil.copy2(src, dst)
+
+
 def _run_upload_copy(src, tgt, files, q, task_id):
     q.put(f"{'='*50}\n")
     q.put("开始上传\n")
@@ -611,21 +629,6 @@ def _run_upload_copy(src, tgt, files, q, task_id):
         wc_root = _decode_svn_output(wc_r.stdout).strip()
         if wc_root:
             _svn_update_first(q, wc_root)
-
-    def _copy2_force(src, dst):
-        if os.path.exists(dst):
-            try:
-                os.chmod(dst, stat.S_IWRITE | stat.S_IREAD)
-            except Exception:
-                pass
-        try:
-            shutil.copy2(src, dst)
-        except PermissionError:
-            try:
-                os.remove(dst)
-            except Exception:
-                pass
-            shutil.copy2(src, dst)
 
     q.put("开始复制文件...\n")
     success = fail = 0
@@ -837,6 +840,8 @@ def _run_wf_task(q, wf, steps, task_id):
                 ok = _exec_open_tables(step, _put)
             elif stype == "revert_svn":
                 ok = _exec_revert_svn(step, _put, task_id)
+            elif stype == "copy_files":
+                ok = _exec_copy_files(step, _put, task_id)
             else:
                 _line(f"未知步骤类型: {stype}", "error")
                 ok = False
@@ -990,6 +995,60 @@ def _exec_upload_svn(step, put, task_id=None):
             put("TortoiseSVN 启动失败: " + str(e) + "\n")
             return False
     return True
+
+
+def _exec_copy_files(step, put, task_id=None):
+    src_dir = step.get("src_dir", "").strip()
+    tgt_dir = step.get("tgt_dir", "").strip()
+    files = step.get("selected_files", [])
+    if not src_dir or not os.path.isdir(src_dir):
+        put(f"源目录无效: {src_dir}\n")
+        return False
+    if not tgt_dir or not os.path.isdir(tgt_dir):
+        put(f"目标目录无效: {tgt_dir}\n")
+        return False
+    if not files:
+        put("未选择文件\n")
+        return True
+
+    put(f"{'='*50}\n")
+    put(f"复制文件: {os.path.basename(src_dir)}\n")
+    put(f"源: {src_dir}\n")
+    put(f"目标: {tgt_dir}\n\n")
+
+    svn = _get_svn_path()
+    put("正在更新目标工作副本...\n")
+    if not _svn_update_with_cleanup(svn, tgt_dir, put, task_id):
+        put("目标目录不是 SVN 工作副本或更新失败\n但仍继续复制\n")
+
+    put("开始复制...\n")
+    success = fail = 0
+    for fi in files:
+        name = fi.get("name", "")
+        sp = fi.get("path", "")
+        is_dir = fi.get("is_dir", False)
+        if not sp or not os.path.exists(sp):
+            put(f"✗ 路径不存在: {sp}\n")
+            fail += 1
+            continue
+        try:
+            if is_dir:
+                target_dir = os.path.join(tgt_dir, name)
+                if os.path.isdir(target_dir):
+                    put(f"📂 {name}/ 合并到目标目录...\n")
+                shutil.copytree(sp, target_dir, dirs_exist_ok=True, copy_function=_copy2_force)
+                put(f"✓ {name}/ 文件夹已复制\n")
+            else:
+                dst = os.path.join(tgt_dir, name)
+                _copy2_force(sp, dst)
+                put(f"✓ {name}\n")
+            success += 1
+        except Exception as e:
+            fail += 1
+            put(f"✗ {name}: {e}\n")
+
+    put(f"\n── 复制完成: {success} 成功, {fail} 失败 ──\n")
+    return fail == 0
 
 
 def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
@@ -2903,6 +2962,11 @@ def api_update_apply():
         with open(vbs_path, "w") as f:
             f.write(f'CreateObject("WScript.Shell").Run "cmd.exe /c ""{updater}""", 0, False\n')
         os.startfile(vbs_path)
+
+        threading.Thread(target=lambda: (
+            time.sleep(2),
+            _quit_app_callback()
+        ), daemon=True).start()
 
         return jsonify({"ok": True})
     except Exception as e:

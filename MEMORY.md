@@ -1092,6 +1092,20 @@ while (true):
 - **解决方案**：改为 `scrollTop + clientHeight >= scrollHeight - 5`（用户在底部才自动滚），标准 scroll-lock 模式
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### ctypes NOTIFYICONDATAW 真正根因：缺 argtypes 导致指针被截断（非对齐问题）
+- **场景**：2026-05-31 手动用 ctypes 构造 `NOTIFYICONDATAW` 注册托盘图标，PyInstaller 打包后图标不显示。此前 MEMORY.md 记录为"64 位对齐问题"，实际是误判
+- **根因**：① `Shell_NotifyIconW` 的 `argtypes` 默认为 `None`，ctypes 把所有参数当 32 位整数传递。`ctypes.byref(nid)` 返回的 64 位指针被截断为 32 位，Windows 收到无效地址，拒绝注册图标。实测 `ctypes.sizeof(NOTIFYICONDATAW) = 976`，所有字段偏移正确（`HWND` 8 字节对齐、`HICON` 8 字节对齐、`GUID` 4 字节对齐），对齐不是问题。② 恢复 ctypes 后需同时设置 `argtypes = [c_uint, c_void_p]` 和 `restype = c_bool` 才能正确传递指针
+- **解决方案**：① 设置 `shell32.Shell_NotifyIconW.argtypes = [ctypes.c_uint, ctypes.c_void_p]`；② 同时设置 `restype = ctypes.c_bool`；③ 用 `nid.uFlags = 0x1 | 0x2 | 0x4 | 0x20`（含 `NIF_GUID`）注册固定 GUID `{5F8C4B9E-3E7A-4D2A-9B1C-0D8E6F4A2C3B}`；④ 图标注册后写入注册表 `HKCU\Control Panel\NotifyIconSettings\{GUID}\IsPromoted=1` 强制始终显示
+- **关键教训**：① ctypes 在 64 位 Windows 上定义 Win32 结构体时，对齐通常不是问题（ctypes 自动处理标准对齐），真正的问题往往出在 `argtypes` 未设置导致指针被截断。② 遇到 exe 不显示但源码正常的情况，先检查 ctypes 函数的 `argtypes` 和 `restype`。③ Windows 通知区域图标"显示/隐藏"偏好绑定了 GUID（注册表 `NotifyIconSettings\{GUID}\IsPromoted`），即使有 NIF_GUID 也要显式写入 `IsPromoted=1` 才能默认显示
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
+
+### build.py 清理旧包：杀死 策划工具箱.exe 释放 .pyd 锁 + 按创建时间排序
+- **场景**：2026-05-31 build.py 新增 `_cleanup_old_packages()` 在打包后自动清理旧包，但第一次写时杀进程不全面（只杀了 python.exe/pythonw.exe），且文件名排序不如创建时间按排序可靠
+- **根因**：① `shutil.rmtree` 遇到被 Python 进程加载的 `.pyd` 文件会静默失败（`onerror` 吞异常）；② 真正的锁持有者是 `策划工具箱.exe` 实例（9 个在运行），不是 `python.exe`；③ 按文件名排序不能保证时间顺序（如 v1.0.10 在字符串排序中会在 v1.0.9 前面，`10 < 9` 字符串比较问题）
+- **解决方案**：① `_kill_locker_processes()` 用 `taskkill /f /im "策划工具箱.exe" /fi "PID ne {my_pid}"` 杀掉所有非自身的策划工具箱进程；② 用 `os.path.getctime()` 获取文件夹创建时间排序，而非文件名；③ 逐文件用 `os.chmod(fp, stat.S_IWRITE)` + `os.remove()` 而不是 `shutil.rmtree`；④ 保留 3 个最新的，删除更早的
+- **关键教训**：① Windows 上删除被进程加载的 DLL 文件时，必须杀死持有文件锁的进程。`tasklist` 查看到底是哪个进程在持有。② 打包后的 exe 才是 `.pyd` 的真正持有者，`python.exe` 不一定持有。③ 文件名排序不可靠（语义化版本号的字符串比较问题），用文件系统的创建/修改时间更可靠
+- **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
+
 ### UPDATE_URL 服务器路径必须与实际目录结构匹配
 - **场景**：启动更新服务器后客户端收不到更新，`/api/update/check` 返回 `Connection refused`
 - **根因**：update_version.py 中的 UPDATE_URL 是 `http://host:8080/update/`，但服务器 `cd update-server && python -m http.server 8080` 直接服务于根目录 `/`。客户端请求 `/update/version.json`，服务器上只有 `/version.json`，永远 404

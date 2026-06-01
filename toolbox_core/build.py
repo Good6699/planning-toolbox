@@ -26,6 +26,7 @@ import subprocess
 import hashlib
 import zipfile
 import time
+import stat
 from datetime import datetime
 
 WORKSPACE = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
@@ -186,6 +187,79 @@ def _get_path_args():
     return [
         "--paths", CORE_DIR,
     ]
+
+
+def _kill_locker_processes():
+    """杀掉占用旧包文件的进程（不杀自己），释放文件锁后重试删除"""
+    my_pid = os.getpid()
+    print(f"  [清理] 终止占用进程 (跳过 PID={my_pid})...")
+    for img in ("python.exe", "pythonw.exe", "策划工具箱.exe"):
+        try:
+            r = subprocess.run(
+                ["taskkill", "/f", "/im", img, "/fi", f"PID ne {my_pid}"],
+                capture_output=True, timeout=5
+            )
+            out = r.stdout.decode("gbk", errors="replace").strip()
+            if out:
+                print(f"    {img}: {out}")
+        except Exception as e:
+            print(f"    {img}: 跳过 ({e})")
+    time.sleep(1.5)
+
+
+def _cleanup_old_packages(keep=3):
+    """保留 dist 下最新的 keep 个带版本/时间戳的包（按文件夹创建时间），永久删除更早的"""
+    pattern_prefix = f"{APP_NAME}_v"
+    dirs_with_time = []
+    for d in os.listdir(DIST_DIR):
+        full = os.path.join(DIST_DIR, d)
+        if os.path.isdir(full) and d.startswith(pattern_prefix):
+            try:
+                ctime = os.path.getctime(full)
+            except Exception:
+                ctime = 0
+            dirs_with_time.append((ctime, d))
+    if len(dirs_with_time) <= keep:
+        print(f"  [清理] 带时间戳包共 {len(dirs_with_time)} 个，无需清理")
+        return
+    dirs_with_time.sort(key=lambda x: x[0], reverse=True)
+    to_delete = dirs_with_time[keep:]
+    print(f"  [清理] 超出 {keep} 个，需删除 {len(to_delete)} 个包")
+    _kill_locker_processes()
+    for _, d in to_delete:
+        full = os.path.join(DIST_DIR, d)
+        locked = []
+        for retry in range(3):
+            locked = []
+            try:
+                for root, dirs, files in os.walk(full, topdown=False):
+                    for f in files:
+                        fp = os.path.join(root, f)
+                        try:
+                            os.chmod(fp, stat.S_IWRITE)
+                            os.remove(fp)
+                        except OSError:
+                            locked.append(fp)
+                    for sd in dirs:
+                        fp = os.path.join(root, sd)
+                        try:
+                            os.rmdir(fp)
+                        except OSError:
+                            pass
+                if not locked:
+                    os.rmdir(full)
+                    print(f"  [清理] 已删除: {d}")
+                    break
+                else:
+                    if retry < 2:
+                        time.sleep(2)
+                    else:
+                        print(f"  [清理] 跳过: {d} ({len(locked)} 个文件被占用)")
+            except OSError:
+                if retry < 2:
+                    time.sleep(2)
+                else:
+                    print(f"  [清理] 跳过: {d} (目录被占用)")
 
 
 def _deploy_to_appdata(dist_app):
@@ -449,3 +523,4 @@ if __name__ == "__main__":
         make_update_zip(dist_app)
     else:
         print(f"\n提示: 加 --zip 参数可同时生成 update-server 下的更新包")
+    _cleanup_old_packages()

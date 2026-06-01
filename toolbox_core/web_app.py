@@ -2885,7 +2885,10 @@ def api_update_apply():
         args_file = os.path.join(os.path.dirname(updater), "_update_args.txt")
         with open(args_file, "w", encoding=locale.getpreferredencoding()) as f:
             f.write(f"{zip_path}\n{tmp_dir}\n{app_name}\n")
-        os.startfile(updater)
+        vbs_path = os.path.join(tmp_dir, "run_update.vbs")
+        with open(vbs_path, "w") as f:
+            f.write(f'CreateObject("WScript.Shell").Run "cmd.exe /c ""{updater}""", 0, False\n')
+        os.startfile(vbs_path)
 
         return jsonify({"ok": True})
     except Exception as e:

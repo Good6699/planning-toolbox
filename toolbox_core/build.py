@@ -206,18 +206,34 @@ def _get_path_args():
 
 
 def _kill_locker_processes():
-    """杀掉占用旧包文件的进程（不杀自己），释放文件锁后重试删除"""
+    """杀掉打包输出目录（dist/）下的进程，释放文件锁"""
     my_pid = os.getpid()
-    print(f"  [清理] 终止占用进程 (跳过 PID={my_pid})...")
+    target_dir = os.path.normpath(DIST_DIR)
+    print(f"  [清理] 终止 {target_dir} 目录下的进程...")
     for img in ("python.exe", "pythonw.exe", "策划工具箱.exe"):
         try:
-            r = subprocess.run(
-                ["taskkill", "/f", "/im", img, "/fi", f"PID ne {my_pid}"],
-                capture_output=True, timeout=5
+            ps_script = (
+                f'Get-CimInstance Win32_Process -Filter "Name=\'{img}\'" | '
+                f'Where-Object {{ $_.ExecutablePath -like \'{target_dir}*\' }} | '
+                f'Select-Object -ExpandProperty ProcessId'
             )
-            out = r.stdout.decode("gbk", errors="replace").strip()
-            if out:
-                print(f"    {img}: {out}")
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_script],
+                capture_output=True, text=True, timeout=10
+            )
+            killed = 0
+            for line in result.stdout.strip().splitlines():
+                pid_str = line.strip()
+                if pid_str.isdigit():
+                    pid = int(pid_str)
+                    if pid != my_pid:
+                        subprocess.run(
+                            ["taskkill", "/f", "/pid", str(pid)],
+                            capture_output=True, timeout=5
+                        )
+                        killed += 1
+            if killed:
+                print(f"    {img}: 已终止 {killed} 个进程")
         except Exception as e:
             print(f"    {img}: 跳过 ({e})")
     time.sleep(1.5)

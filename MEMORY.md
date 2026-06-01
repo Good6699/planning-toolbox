@@ -1617,6 +1617,19 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **解决方案**：新增 `_parse_svn_date()` 函数：`Z` → `+00:00` → `datetime.fromisoformat` → `astimezone()` 转本地 → `strftime` 输出 `YYYY-MM-DD HH:MM:SS`
 - **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/toolbox_merge.py)
 
+### VBS 中间层静默更新：os.startfile(bat) → os.startfile(vbs) 隐藏 CMD 窗口
+- **场景**：点击"一键更新"后弹出 CMD 黑窗，打扰用户。`os.startfile` 调用 ShellExecute 默认 `SW_SHOWNORMAL`，无法控制窗口隐藏
+- **根因**：`os.startfile` 不提供窗口风格参数。此前试过 `subprocess.Popen` + `CREATE_NO_WINDOW` 在 `--noconsole` 下静默失败，最终方案是 `os.startfile(bat)`。但 bat 运行时 cmd.exe 的窗口始终可见
+- **解决方案**：在下载临时目录 `tmp_dir` 中创建一个 ~100 字节的纯 ASCII VBS 文件 `run_update.vbs`，内容为 `CreateObject("WScript.Shell").Run "cmd.exe /c ""{updater}""", 0, False`。`os.startfile(vbs)` 启动 wscript.exe（GUI 进程，无窗口），VBS 的 `WScript.Shell.Run` 第二个参数 `0` = `SW_HIDE`，cmd.exe 以零窗口启动。VBS 文件随 `tmp_dir` 被 bat 的 `rd /S/Q` 自动删除，无残留
+- **关键教训**：① `WScript.Shell.Run` 的第二个参数 `0` = `SW_HIDE`，是 Windows 上隐藏控制台窗口的最可靠方式，从 XP 到 11 全系兼容；② VBS 脚本中路径含空格时必须用 `"" ""` 双引号包裹；③ VBS 文件本身的启动也通过 `os.startfile`（无需 `wscript.exe` 显式调用），因为 `.vbs` 的文件关联默认就是 `wscript.exe`；④ VBS 不需要管理员权限，在当前用户上下文中即可运行
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
+### 打包脚本杀进程优化：按 ExecutablePath 过滤而非全量通杀
+- **场景**：`build_all.bat` 执行时杀掉机器上所有 `python.exe`/`pythonw.exe`/`策划工具箱.exe`（不包括自己），导致 IDE（Trae）和其他工作区的 Python 进程被误杀
+- **根因**：`_kill_locker_processes()` 用 `taskkill /f /im python.exe /fi "PID ne 当前PID"`，无条件杀所有同名进程
+- **解决方案**：改用 PowerShell `Get-CimInstance Win32_Process` 查询进程的 `ExecutablePath`，只杀 `ExecutablePath -like 'dist/*'` 的进程（即从打包输出目录启动的进程）。Python 安装目录（`C:\Python39\`）、IDE 进程、其他工作区进程的路径不在 `dist/` 下，自然被过滤掉。`taskkill` 改为按 PID 精准杀，不再用 `/im` + `/fi` 通杀
+- **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
+
 ### 触发式更新检测：点击执行按钮即检查更新，无需重启
 - **场景**：推送新版本到 update-server 后，已在运行的客户端不会主动检测更新，必须重启后才看到更新提示
 - **根因**：`checkUpdate()` 只在页面加载时执行一次，之后不再触发

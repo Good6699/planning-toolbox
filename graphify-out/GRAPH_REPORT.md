@@ -1,11 +1,11 @@
 # 策划工具箱知识图谱报告
-生成时间：2026-06-01 18:42
+生成时间：2026-06-01 19:05
 
 ## 概况
 - 项目文件：196 个
-- 图谱节点：1224 个（代码 809，文档 186）
-- 关系边数：1744 条
-- 社区数：319 个
+- 图谱节点：1228 个（代码 809，文档 186）
+- 关系边数：1748 条
+- 社区数：315 个
 
 ## 核心模块（高连接度节点）
 1. **SVNCompareGUI** — 137 条连接
@@ -140,138 +140,138 @@
 - **web_app.py** — 63 节点
 - **web_launcher.py** — 2 节点
 
-## 社区分组（Top 25 / 319 个）
-### Community 53
+## 社区分组（Top 25 / 315 个）
+### Community 50
 - 凝聚度：1.0
 - 节点：_build_dist.py, build(), copytree()
 - 文件：_build_dist.py
 
-### Community 54
+### Community 51
 - 凝聚度：1.0
 - 节点：_do_push.py, git(), log()
 - 文件：_do_push.py
 
-### Community 56
+### Community 53
 - 凝聚度：1.0
 - 节点：_push_via_api.py, api(), log()
 - 文件：_push_via_api.py
 
-### Community 46
+### Community 43
 - 凝聚度：0.83
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：_export_error_code_erl.py
 
-### Community 49
+### Community 46
 - 凝聚度：0.83
 - 节点：main(), _export_error_code_erl.py, _read_xlsm_data(), _write_erl()
 - 文件：toolbox_core/_export_error_code_erl.py
 
-### Community 51
+### Community 48
 - 凝聚度：0.67
 - 节点：diagnose_cache.py, 诊断脚本：测试 worker 进程中是否能写入 __parse_cache__, test_in_subprocess()
 - 文件：diagnose_cache.py
 
-### Community 52
+### Community 49
 - 凝聚度：0.67
 - 节点：graphify_quick.py, main(), graphify_quick.py — 策划工具箱知识图谱一键构建 用法:   python graphify_quick.py              #
 - 文件：graphify_quick.py
 
-### Community 55
+### Community 52
 - 凝聚度：0.67
 - 节点：_dump_comparison.py, parse_hd_new(), parse_hd_old()
 - 文件：_dump_comparison.py
 
-### Community 57
+### Community 54
 - 凝聚度：0.67
 - 节点：_reencrypt.py, Re-encrypt API key in config with fixed obfuscation key, try_decrypt()
 - 文件：_reencrypt.py
 
-### Community 58
+### Community 55
 - 凝聚度：0.67
 - 节点：_test_params.py, parse_hd(), run_test()
 - 文件：_test_params.py
 
-### Community 44
+### Community 41
 - 凝聚度：0.5
 - 节点：_test_pipeline.py, collect(), get_cache_path(), 验证 流水线+传路径: 1/2/4 worker 并发测试, run_one()
 - 文件：_test_pipeline.py
 
-### Community 47
+### Community 44
 - 凝聚度：0.5
 - 节点：_test_proc_mem.py, do_full_parse(), 实测 ProcessPool — 所有函数在模块顶层, test_import()
 - 文件：_test_proc_mem.py
 
-### Community 48
+### Community 45
 - 凝聚度：0.5
 - 节点：_test_subproc.py, collect(), 验证 subprocess 并行: 1/2/4 worker 并发测试, run_one()
 - 文件：_test_subproc.py
 
-### Community 50
+### Community 47
 - 凝聚度：0.5
 - 节点：Phase ABCDE Progressive Skip Optimization, Row-level Fingerprint (Phase C), Structure Fingerprint (Phase A)
 - 文件：svn_compare_optimization_plan.md
 
-### Community 36
+### Community 35
 - 凝聚度：0.48
 - 节点：_get_version(), main(), make_update_zip(), dist_update.py, 读取版本号：优先用工作区的 update_version.py（源码的版本号总是最新的）...
 - 文件：toolbox_core/dist_update.py
 
-### Community 38
+### Community 37
 - 凝聚度：0.4
 - 节点：parse_error_msg.py, parse_bin_entries(), Extract error code + message pairs from ErrorMessage.bin, Read proper LEB128 little-endian variable-length integer, read_leb128()...
 - 文件：parse_error_msg.py
 
-### Community 39
+### Community 38
 - 凝聚度：0.4
 - 节点：quick_excel_diff.py, cell_value(), col_letter(), extract_strings(), p()...
 - 文件：quick_excel_diff.py
 
-### Community 43
+### Community 40
 - 凝聚度：0.4
 - 节点：col_letter(), col_str(), log(), parse_lxml_fast(), calamine_verify.py...
 - 文件：tools/calamine_verify.py
 
-### Community 45
+### Community 42
 - 凝聚度：0.4
 - 节点：_cmp_worker.py, main(), _cmp_worker.py, _cmp_task_proc(), main()
 - 文件：_cmp_worker.py, toolbox_core/_cmp_worker.py, toolbox_core/svn_oneclick_compare.py
 
-### Community 30
+### Community 31
 - 凝聚度：0.39
 - 节点：_theme_preview.py, ThemePreview, ._build_svn_tab(), ._build_translate_tab(), ._build_ui()...
 - 文件：_theme_preview.py
 
-### Community 35
+### Community 34
 - 凝聚度：0.38
 - 节点：apply_via_excel(), _looks_like_excel_number(), xlsm_zipper.py, xlsm_zipper - Apply data changes to .xlsm files via Excel (VBScript).  Strategy:, Serialize a Python value to VBScript literal, safe for VBS string rules....
 - 文件：backup_toolbox_20260509/xlsm_zipper.py
 
-### Community 37
+### Community 36
 - 凝聚度：0.38
 - 节点：apply_via_excel(), _looks_like_excel_number(), xlsm_zipper.py, xlsm_zipper - Apply data changes to .xlsm files via Excel (VBScript).  Strategy:, Serialize a Python value to VBScript literal, safe for VBS string rules....
 - 文件：toolbox_core/xlsm_zipper.py
 
-### Community 40
+### Community 39
 - 凝聚度：0.33
-- 节点：_format_generic_val(), _format_prop_change(), _format_vec3(), GUID 转资产相对路径，查不到返回空字符串, 格式化通用值为可读字符串，dict 转 (x,y) 或 {k=v} 格式...
-- 文件：_merge_analyzer.py
+- 节点：_dedupe_by_id(), _get_cmp_config(), 按ID去重，合并多版本对的操作记录。          去重规则：     1. 有删除操作：        - 最新操作是删除 → 删除        - 先, 下载并对比 Excel 版本对。      返回: {文件名: [差异行, ...], ...}     file_pairs: {文件名: [版本对列表],, 根据文件名（不含扩展名和路径）查找 cmp_file_settings 中的预设配置，     找不到则用空文件名（""）配置作为全局兜底。     返回: (...
+- 文件：toolbox_core/svn_oneclick_compare.py
 
-### Community 41
-- 凝聚度：0.33
-- 节点：_analyze_squash_revisions(), _build_rev_file_map(), _parse_cs_diff(), 对多个版本做汇总分析：按版本分片并行 → 文件路径合并（最新覆盖）      流程：     1. 构建 {rev: [语义文件列表]}     2. 按版本分, 解析 .cs 文件的 diff，返回语义描述...
-- 文件：_merge_analyzer.py
+### Community 20
+- 凝聚度：0.25
+- 节点：setup_checker.py, check_office(), check_project_files(), check_py_modules(), ensure_pythonpath()...
+- 文件：setup_checker.py
 
-### Community 42
-- 凝聚度：0.33
-- 节点：_dict_diff_summary(), _format_list_diff(), _get_dict_item_key(), 从 dict 类型的列表项中提取标识键（m_key、fileID、guid 等），用于按身份匹配, 比较两个 dict，返回变更字段的摘要列表...
-- 文件：_merge_analyzer.py
+### Community 32
+- 凝聚度：0.25
+- 节点：将 URL 保存到历史记录（最新置顶，最多20个）, 清除 __parse_cache__、__byte_cache__ 和 __ss_cache__ 目录，立即生效, 添加日志（优化版本，避免频繁的 UI 更新）, ._clear_cache(), ._do_detect()...
+- 文件：backup_toolbox_20260509/svn_compare_gui.py
 
 ## 跨模块连接（你可能不知道的关联）
+- `open_commit_dialog()` → `_merge_worker()` [INFERRED]
 - `main()` → `_cmp_task_proc()` [INFERRED]
 - `_analyze_revision_data()` → `main()` [INFERRED]
 - `analyze_source_url()` → `_merge_analyze_worker()` [INFERRED]
 - `main()` → `_ensure_frozen_config()` [INFERRED]
-- `svn_log()` → `_merge_query_worker()` [INFERRED]
 
 ## 孤立节点（172 个代码节点仅 0-1 条连接）
 - __check.py (__check.py)

@@ -1149,6 +1149,13 @@ while (true):
 - **关键教训**：① `socket.gethostname()` 在双栈网络中可能返回 IPv6 地址，必须用 `gethostbyname()` 确保 IPv4；② `urllib` 不支持非 ASCII URL，拼接 URL 时中文文件名必须用 `urllib.parse.quote()` 百分号编码；③ `version.json` 的版本号必须每次打包都更新，`build.py` 中 `make_update_zip()` 的语义应该是"生成当前版本的更新包"而不是"修补已有 json"
 - **涉及文件**：[update_version.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/update_version.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
 
+### 更新链路终极修复：os.startfile + 参数文件 GBK 编码 + 纯 ASCII bat
+- **场景**：2026-06-01 用 v1.0.22~v1.0.52 反复测试更新链路，每次点击"一键更新"后都卡在"更新已启动，正在重启"，应用关闭后不重启或重启后仍然提示有更新。前后经历了 16 次版本、10 次不同的修复尝试
+- **根因**：三个问题叠加：① `PyInstaller --noconsole` 模式下 `subprocess.Popen` 创建的 `cmd.exe` 因父进程无控制台句柄而静默失败（`DETACHED_PROCESS`、`close_fds`、`stdin/stdout/stderr=PIPE` 都没用）；② 用 `os.startfile` 启动 bat 后，bat 文件（UTF-8）中的中文字符在 GBK 控制台下被错误解析，导致 `set APP_NAME=策划工具箱` 语法破坏，后续全部报 "不是内部命令"；③ 用参数文件传递中文时，`for /f type` 在 cmd 中永远用 GBK 读取（不受 `chcp 65001` 影响），UTF-8 写入的文件读取为乱码
+- **解决方案**：① 整体方案改为 `web_app.py` 中 `os.startfile(updater)` 走 ShellExecute API（不依赖父进程控制台句柄）；② `_updater.bat` 改为纯 ASCII 文件，不含任何中文字符；③ 参数通过 `_update_args.txt` 文件传递，Python 用 `locale.getpreferredencoding()`（GBK/cp936）编码写入，bat 用 `for /f type` 原生读取
+- **关键教训**：① `--noconsole` 下子进程启动必须使用 `os.startfile`（ShellExecute），`subprocess.Popen` 系列全部靠不住；② Windows bat 文件存在中文必须用 GBK/ANSI 编码保存或者纯 ASCII，UTF-8 必定在 GBK 系统上解析失败；③ `for /f type` 读取文件不受 `chcp` 影响，永远走系统默认编码，必须与写入编码一致；④ 更新链路涉及 4 个独立环节（版本检测、URL 编码、bat 启动、文件覆盖），每个环节分别调试不可靠，最好一次性完整模拟
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[_updater.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/_updater.bat)
+
 ### bat 文件中的 UTF-8 中文在 cmd.exe 下乱码
 - **场景**：双击 bat，输出全部变成乱码，命令解析失败（'寘' 不是内部或外部命令）；中文显示为 `????????`
 - **根因**：cmd.exe 默认代码页是 GBK（936），bat 文件保存为 UTF-8 时中文会被错误解码。即使 `chcp 65001` 也无法完全避免

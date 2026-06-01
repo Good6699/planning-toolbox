@@ -2872,11 +2872,20 @@ def api_update_apply():
         import urllib.request as _req
         _req.urlretrieve(zip_url, zip_path)
 
-        updater = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_updater.bat")
+        if getattr(sys, 'frozen', False):
+            updater = os.path.join(sys._MEIPASS, "_updater.bat")
+        else:
+            updater = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_updater.bat")
         if not os.path.isfile(updater):
             return jsonify({"ok": False, "error": "未找到更新器脚本 _updater.bat"}), 500
 
-        subprocess.Popen([updater, zip_path, tmp_dir], shell=True)
+        # 参数通过文件传递，用 GBK 编码写入（cmd for /f type 仅支持系统默认编码）
+        import locale
+        app_name = zip_name.rsplit("_v", 1)[0] if "_v" in zip_name else "策划工具箱"
+        args_file = os.path.join(os.path.dirname(updater), "_update_args.txt")
+        with open(args_file, "w", encoding=locale.getpreferredencoding()) as f:
+            f.write(f"{zip_path}\n{tmp_dir}\n{app_name}\n")
+        os.startfile(updater)
 
         return jsonify({"ok": True})
     except Exception as e:

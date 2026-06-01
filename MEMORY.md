@@ -1135,6 +1135,13 @@ while (true):
 - **关键教训**：① `--exclude-module` 排除前必须确认该模块完全没有被任何生产代码 import。用 `grep -r "import tkinter\|from tkinter" *.py` 全局搜索确认。② daemon 线程中启动的 Flask 如果 import 出错，异常不会出现在主线程，只能通过先排除 exclude 逐项排查或增加非 daemon 调试线程来诊断
 - **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
 
+### 托盘图标默认显示最终方案：写注册表 IsPromoted + NIM_DELETE/NIM_ADD 刷新
+- **场景**：2026-06-01 win32gui 元组注册的托盘图标虽然能显示，但始终被藏在折叠区（默认隐藏）。需要每次启动都自动设为"始终显示"，且设置能持久化
+- **根因**：① 无 NIF_GUID 时 Windows 用 `exe路径 + uID` 哈希作为 `NotifyIconSettings\{哈希}` 的子 key 名（哈希算法未公开），图标显示状态存在 `IsPromoted` 字段中。② 写注册表后 Explorer 不会即时重读，必须靠 `Shell_NotifyIcon(NIM_DELETE)` + `NIM_ADD` 触发刷新。③ 不重新注册的话，修改只对下次重启 Explorer 生效，当前启动图标仍在折叠区
+- **解决方案**：① `win32gui.Shell_NotifyIcon` 元组注册图标后，`time.sleep(0.5)` 等 Explorer 创建注册表条目；② 用 `winreg.EnumKey` 循环扫描 `NotifyIconSettings\` 所有子键，匹配 `ExecutablePath` 含"策划工具箱"的；③ 找到后写 `IsPromoted=1`；④ `NIM_DELETE` 删图标再 `NIM_ADD` 重新注册，Explorer 即时读取新 `IsPromoted` 值，图标跳出折叠区
+- **关键教训**：① Windows 托盘图标显示状态的 key 名是未公开的哈希，不要尝试自己算或自己创建，注册图标后扫描找即可。② 写注册表后必须重新注册图标才能即时生效（`NIM_DELETE` + `NIM_ADD`）。③ 固定 APPDATA 路径部署确保后续启动时 `ExecutablePath` 不变，注册表设置可复用。④ `win32gui.Shell_NotifyIcon(tuple)` 的 6 元组格式虽不支持 NIF_GUID，但通过写注册表 + 固定路径可以实现同样的持久化效果
+- **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
+
 ### bat 文件中的 UTF-8 中文在 cmd.exe 下乱码
 - **场景**：双击 bat，输出全部变成乱码，命令解析失败（'寘' 不是内部或外部命令）；中文显示为 `????????`
 - **根因**：cmd.exe 默认代码页是 GBK（936），bat 文件保存为 UTF-8 时中文会被错误解码。即使 `chcp 65001` 也无法完全避免

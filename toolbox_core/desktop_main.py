@@ -751,21 +751,35 @@ def _tray_thread():
     win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)
     _tray_icon = hwnd
 
-    # 强制托盘图标始终显示（不在折叠区），写入注册表持久化
+    # 等待 0.5 秒让 Explorer 创建注册表条目，然后扫描并设为始终显示
+    # 写注册表后重新注册图标，让 Explorer 即时应用 IsPromoted=1
+    time.sleep(0.5)
     try:
         import winreg
-        guid_str = "{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}" % (
-            _TRAY_GUID[0], _TRAY_GUID[1], _TRAY_GUID[2],
-            _TRAY_GUID[3][0], _TRAY_GUID[3][1], _TRAY_GUID[3][2], _TRAY_GUID[3][3],
-            _TRAY_GUID[3][4], _TRAY_GUID[3][5], _TRAY_GUID[3][6], _TRAY_GUID[3][7],
-        )
-        key_path = "Control Panel\\NotifyIconSettings\\" + guid_str
-        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path)
-        winreg.SetValueEx(key, "IsPromoted", 0, winreg.REG_DWORD, 1)
-        winreg.CloseKey(key)
+        base_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                  r"Control Panel\NotifyIconSettings")
+        i = 0
+        while True:
+            try:
+                sub_name = winreg.EnumKey(base_key, i)
+                sub = winreg.OpenKey(base_key, sub_name, 0,
+                                     winreg.KEY_READ | winreg.KEY_SET_VALUE)
+                try:
+                    val, _ = winreg.QueryValueEx(sub, "ExecutablePath")
+                    if val and "策划工具箱" in val:
+                        winreg.SetValueEx(sub, "IsPromoted", 0, winreg.REG_DWORD, 1)
+                except FileNotFoundError:
+                    pass
+                winreg.CloseKey(sub)
+                i += 1
+            except OSError:
+                break
+        winreg.CloseKey(base_key)
+        # 重新注册图标，让 Explorer 即时读取新的 IsPromoted 值
+        win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, nid)
+        win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)
     except Exception:
         pass
-    _tray_icon = hwnd
 
     # Message loop
     from ctypes import wintypes as _wt

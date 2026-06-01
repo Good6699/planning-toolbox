@@ -1,0 +1,786 @@
+{
+  "C:\\Users\\admin\\.qclaw\\workspace\\auto_study.py": {
+    "mtime": 1778374524.975434,
+    "hash": "15f13548077be6e409820e2e51ef2c03"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\browser_control.py": {
+    "mtime": 1778331700.8894665,
+    "hash": "12c099298e11802f523429e7f9633309"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\create_job_button.py": {
+    "mtime": 1775551276.642392,
+    "hash": "9984e7ca21500a705d9e622066efdcde"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\diagnose_cache.py": {
+    "mtime": 1777021656.8598378,
+    "hash": "c43b47b5b823278b386db2aa6bd921d6"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\enhance_template.py": {
+    "mtime": 1775534362.6302867,
+    "hash": "49fafd5552682b66da14df0f41272abc"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\gen_job_change_doc.py": {
+    "mtime": 1775734304.6497314,
+    "hash": "3f78003b6d3ed525eba529915218207b"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\gen_job_change_doc_v2.py": {
+    "mtime": 1775799511.959352,
+    "hash": "bd21ba3a52a6a25efc2da755ed58404b"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\gen_job_change_doc_v3.py": {
+    "mtime": 1775799816.5329523,
+    "hash": "54707e00293e8cfb3c2e237de3a7da0a"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\gen_job_doc_template.py": {
+    "mtime": 1775737862.8515232,
+    "hash": "971da147f8eda013822173a51b80e89b"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\gen_professional_doc.py": {
+    "mtime": 1775802688.8784535,
+    "hash": "c775e0849f74d2bd6a9c435f9465a603"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\gen_professional_doc_v2.py": {
+    "mtime": 1775803657.952485,
+    "hash": "d8ca13471a9ab368f95d661a4a896c2c"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\graphify_quick.py": {
+    "mtime": 1779681163.509785,
+    "hash": "bacfeebb227ffeb0c5d33bebe7c46f87"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\main.py": {
+    "mtime": 1780190568.101716,
+    "hash": "a509ff85b60da02247ac6564bfe3f4f3"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\parse_error_msg.py": {
+    "mtime": 1778206187.5770242,
+    "hash": "8a564db45709488dd45361e83f13f733"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\quick_excel_diff.py": {
+    "mtime": 1778769338.4959261,
+    "hash": "f94bacfc4f96cb50563b958786d726e1"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\read_template.py": {
+    "mtime": 1775734490.3152094,
+    "hash": "98450da992e121182ccada5cd6519898"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\read_template_v2.py": {
+    "mtime": 1775786791.0224526,
+    "hash": "c4d16b41f1c915a5f948f38c7ca5f27d"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\replace_avatar.py": {
+    "mtime": 1775543649.3294485,
+    "hash": "5a5f1f23ae0be2f14110062489470fc5"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\replace_character.py": {
+    "mtime": 1775543249.4134202,
+    "hash": "cae77e33b1bd6ef310e934886d4c19d3"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\setup_checker.py": {
+    "mtime": 1778318416.3866565,
+    "hash": "d1841f0ad0667961e83c46384c95e5f4"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\web_launcher.py": {
+    "mtime": 1778487911.685763,
+    "hash": "f42024179b05522daa1d81e1debdb67c"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_analyze_page.py": {
+    "mtime": 1778331835.9049802,
+    "hash": "01c83fa31fe56068946f5c5a8874a556"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_build_dist.py": {
+    "mtime": 1778326648.9955187,
+    "hash": "7ce338d4cefb2539f0b718af90abcbc3"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_check_fix.py": {
+    "mtime": 1779347524.2472,
+    "hash": "8c5ca35863ab742a3800a0ec2fe22a14"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_check_github_user.ps1": {
+    "mtime": 1778312626.4186876,
+    "hash": "ca36312b922524fdc9a8d1993b6eed09"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_check_js.py": {
+    "mtime": 1778500541.3706474,
+    "hash": "84d8f1727c5955c968a3b61be91105b0"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_check_render.py": {
+    "mtime": 1778500677.6188579,
+    "hash": "0e50fda27107df33ef364322421aa6a1"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_check_sheets.py": {
+    "mtime": 1778816181.2801738,
+    "hash": "35066c77281a1802a88fabd26babcd3b"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_check_token.py": {
+    "mtime": 1778312847.920466,
+    "hash": "780729213a2db28beaa6dd60df0efcd7"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_cmp_worker.py": {
+    "mtime": 1779338078.8707502,
+    "hash": "3fb4b55c5f6e4354479e01e815191245"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_compare_ref.py": {
+    "mtime": 1778154001.4527743,
+    "hash": "2afeb2266f0fe1b27805101bee7d116f"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_create_repo.ps1": {
+    "mtime": 1778312699.623476,
+    "hash": "b4184da605e02a409a9821db6d34053a"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_debug_diffs.py": {
+    "mtime": 1778154175.108091,
+    "hash": "890bea48ccf0917f514da240d7ce5e8d"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_debug_gaps.py": {
+    "mtime": 1778154906.608413,
+    "hash": "9fe9e17ac11e67cc005ddd95bfd9738f"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_debug_xlsm.py": {
+    "mtime": 1778156257.9018364,
+    "hash": "975b59af985b89edd9dd17b116d74669"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_do_push.py": {
+    "mtime": 1778314458.8959706,
+    "hash": "fab735390f0d7f9b4742e0af22315b00"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_dump_comparison.py": {
+    "mtime": 1778205114.9929,
+    "hash": "8c33ec1573a341a686e9e0eb838fdcc3"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_explore_course.py": {
+    "mtime": 1778332530.9345956,
+    "hash": "dd436f67f52ec8a0bf012b0e20dbc9eb"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_export_error_code_erl.py": {
+    "mtime": 1780123168.9992566,
+    "hash": "8a4788536e649c29c9a61f25adade62a"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_extract_js.py": {
+    "mtime": 1778500718.668166,
+    "hash": "eafd95ed9e6e1b253515daf04e58f3fc"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_fix_c901.py": {
+    "mtime": 1779336276.8030548,
+    "hash": "0c15fa00a28e6c1f24d5fe47b881f440"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_gf_detect.py": {
+    "mtime": 1778830489.5899415,
+    "hash": "bcfae6860487356fa1587942e139b822"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_github_push.py": {
+    "mtime": 1778313961.6720018,
+    "hash": "756e3857944fda8cfadb2510e5d4cc14"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_git_mcp_runner.py": {
+    "mtime": 1778316543.0432043,
+    "hash": "9dd4e3790b20f7550ffff5d52df57b3f"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_git_push.ps1": {
+    "mtime": 1778314079.9191957,
+    "hash": "d82d0fc7d39c5d059ab166839db72c9d"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_git_push.py": {
+    "mtime": 1778314376.0737731,
+    "hash": "ce1c67c8e984075c1ba6d5964a6c9f45"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_graphify_step.py": {
+    "mtime": 1778369026.1992254,
+    "hash": "acac300f709fd4923c334b2ef96a993f"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_install_git_mcp.py": {
+    "mtime": 1778319942.0276742,
+    "hash": "5f241cc7fcb5c4176879b0756a4268cc"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_merge_analyzer.py": {
+    "mtime": 1780108475.7834394,
+    "hash": "de751c1e9b247e77f88e87d023b0a723"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_merge_analyze_worker.py": {
+    "mtime": 1779591377.3367097,
+    "hash": "4d3729fcfe78bf442d91f7933b6aa31b"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_push_via_api.py": {
+    "mtime": 1778314722.731256,
+    "hash": "9892be1fadf0c737ceb3d961c0350173"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_rebuild_html.py": {
+    "mtime": 1779164206.4434204,
+    "hash": "b6b53348a81a156b2432259feb89efb0"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_reencrypt.py": {
+    "mtime": 1778327034.7468736,
+    "hash": "dbc449c29f3fc56d08c7540245d44068"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_squash_worker.py": {
+    "mtime": 1779689012.2696157,
+    "hash": "d4dfe99df9c63d8c3a973b7971b60b74"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_test_bat_popup.py": {
+    "mtime": 1779263302.2837732,
+    "hash": "ff6cdc65f7b52830c565bfbbe249f3cb"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_test_encrypt.py": {
+    "mtime": 1778326205.62539,
+    "hash": "3ade81619b80717b611f3c6e12cfbac6"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_test_mini.py": {
+    "mtime": 1778817869.3956199,
+    "hash": "af18c36645e604b20b118954a34cde6d"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_test_mono.py": {
+    "mtime": 1778134294.5440333,
+    "hash": "e1b5e34e9b5be43f3b27d7d3c86ea5e1"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_test_params.py": {
+    "mtime": 1778156560.4356287,
+    "hash": "b438bf436298d6625db29f56164efd4e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_test_pipeline.py": {
+    "mtime": 1778823384.245011,
+    "hash": "4f0ac94f5cb556a181cc16e6ecb47147"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_test_proc_mem.py": {
+    "mtime": 1778820757.267699,
+    "hash": "dc2441d56cce33fc7563705c69a74a17"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_test_server.py": {
+    "mtime": 1778501134.4678724,
+    "hash": "468966d83e260244b031ae116ca70d8e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_test_speed.py": {
+    "mtime": 1779357253.4765642,
+    "hash": "77d05e43c74a5b3d837e7f00a68245c4"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_test_ss_parse.py": {
+    "mtime": 1778817311.4522681,
+    "hash": "068b4a87ee8bb11f0effd1a32082a434"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_test_ss_reuse.py": {
+    "mtime": 1778829367.3257892,
+    "hash": "47d626600848f1c22e5d70df9a3d5a3f"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_test_subproc.py": {
+    "mtime": 1778821494.2884707,
+    "hash": "e186e292d35bc26afcb741b1a4f245c9"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_theme_preview.py": {
+    "mtime": 1778465701.948408,
+    "hash": "169f25a6a54decaba01167aa06f92e4c"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_tmp_check.js": {
+    "mtime": 1778500838.3053856,
+    "hash": "8f129352ebdc12ebe9f2a2aee13247c7"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_verify_algorithm.py": {
+    "mtime": 1778156347.5415869,
+    "hash": "4c257fe952db9aaeb6b9596ffdefc63a"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_verify_final.py": {
+    "mtime": 1778155485.5002985,
+    "hash": "f065d9ff658dd4696f5271deee43c07f"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_verify_minimal.py": {
+    "mtime": 1778810627.1258807,
+    "hash": "8437c0c114ba5c13bf9033726e06c8c1"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_verify_old.py": {
+    "mtime": 1778168346.2098246,
+    "hash": "a0a20d9a88d18c6d063b0d0ec4b1da87"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_verify_process_pool.py": {
+    "mtime": 1778810446.3903413,
+    "hash": "ecb45c518f16b80ef59e2cba1a9aaa8d"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_verify_push.py": {
+    "mtime": 1778314816.913448,
+    "hash": "ddfe0974628e162c625acf139f3a3605"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_verify_raw_bytes.py": {
+    "mtime": 1778816041.798397,
+    "hash": "047a0df50ff26742e4e119d0653ae2dc"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_verify_self.py": {
+    "mtime": 1778162782.6027298,
+    "hash": "c246cfed27f92027fccca4ee086ed0ed"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_verify_ss_fp.py": {
+    "mtime": 1778818021.2748625,
+    "hash": "64c935d231f1839c11404e0b0e4afb43"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\__check.py": {
+    "mtime": 1779250899.7814965,
+    "hash": "a77266eb757a0f55e6d2f7a94a115d96"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\__git.py": {
+    "mtime": 1779251553.6983054,
+    "hash": "6c3657799c96904ade5dbe0c49ee1eaf"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\__test.ps1": {
+    "mtime": 1779258125.2944431,
+    "hash": "ff9829381f1bc2876d08ad94031179bc"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\backup_toolbox_20260509\\check_diff.py": {
+    "mtime": 1776916507.693915,
+    "hash": "29e99565cf1daace3d8345aa813f373e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\backup_toolbox_20260509\\ExcelTool2.py": {
+    "mtime": 1778301565.9185503,
+    "hash": "3279a31d5045e52b6e7497b1a0b06974"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\backup_toolbox_20260509\\export_error_code.py": {
+    "mtime": 1778221950.044186,
+    "hash": "6c3556a0e2e284b84f0f30875fc1f0be"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\backup_toolbox_20260509\\inject_excel_tool2.py": {
+    "mtime": 1778138833.5273986,
+    "hash": "b40f5f1ef1bb9778c79b4bf81a350396"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\backup_toolbox_20260509\\svn_compare_gui.py": {
+    "mtime": 1778299111.7593687,
+    "hash": "eddea48c0d25c7f04cd06b34f1566907"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\backup_toolbox_20260509\\svn_oneclick_compare.py": {
+    "mtime": 1778295493.725377,
+    "hash": "fd3fe40af60cc1c80f469acf85499189"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\backup_toolbox_20260509\\xlsm_zipper.py": {
+    "mtime": 1777558755.0531862,
+    "hash": "f63c254ae9cc9a9c2f33f6ef1c85e281"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\graphify-in\\auto_study.py": {
+    "mtime": 1778343298.1524336,
+    "hash": "7336dd49ddfb4c34b40cbb8b43706719"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\graphify-in\\browser_control.py": {
+    "mtime": 1778331700.8894665,
+    "hash": "12c099298e11802f523429e7f9633309"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\graphify-in\\console_script.js": {
+    "mtime": 1778345305.477418,
+    "hash": "9acced541fbfdb17ad0d5c81da400f4e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\build.py": {
+    "mtime": 1780289392.478105,
+    "hash": "8c3ce17aafd994d7479f086fed6e3e85"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\desktop_main.py": {
+    "mtime": 1780287537.594321,
+    "hash": "599e03a3ff771bf048b26c010cde755c"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\dist_update.py": {
+    "mtime": 1780195561.3211899,
+    "hash": "8825c74be931cb29348a9d93eb3d8e29"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\ExcelTool2.py": {
+    "mtime": 1778301565.9185503,
+    "hash": "3279a31d5045e52b6e7497b1a0b06974"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\export_error_code.py": {
+    "mtime": 1778221950.044186,
+    "hash": "6c3556a0e2e284b84f0f30875fc1f0be"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\svn_oneclick_compare.py": {
+    "mtime": 1780116960.676837,
+    "hash": "c3bbf50ec97a7b4b306db9e60adce75e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\toolbox_config.py": {
+    "mtime": 1780192423.1880891,
+    "hash": "f475659059b5adc6ce6087bfb37728c2"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\toolbox_merge.py": {
+    "mtime": 1780108422.9280303,
+    "hash": "a10e85888dad743cd9b9ae7cc5ad9cdc"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\toolbox_platform.py": {
+    "mtime": 1778302915.2087688,
+    "hash": "9e6780d61dc6473d153f3854c46a6574"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\update_version.py": {
+    "mtime": 1780310386.2710695,
+    "hash": "626a9cd0e1de6b9d6ba0e8f52cb03edd"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\web_app.py": {
+    "mtime": 1780307742.227729,
+    "hash": "4c18785c707aa29a64679f86dda3fed8"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\xlsm_zipper.py": {
+    "mtime": 1777558755.0531862,
+    "hash": "f63c254ae9cc9a9c2f33f6ef1c85e281"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\_cmp_worker.py": {
+    "mtime": 1779338078.8707502,
+    "hash": "3fb4b55c5f6e4354479e01e815191245"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\_export_error_code_erl.py": {
+    "mtime": 1780098012.281689,
+    "hash": "24a4035b53d4de5505b5bf5c06f30b71"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\_show_version.py": {
+    "mtime": 1780234036.8720882,
+    "hash": "c9122f4fcb865edd3dd4bd49c59e7bf8"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\tools\\calamine_verify.py": {
+    "mtime": 1778575993.2314608,
+    "hash": "22b5630cea64546dc82134bc8e390fc0"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\tools\\__graphify_ast.py": {
+    "mtime": 1779175331.4334815,
+    "hash": "c0889735b6fcfc7416806fab83e025b5"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\tools\\__graphify_build.py": {
+    "mtime": 1779175780.9933767,
+    "hash": "1b97b1a5de1c7802bb051055c1e811bb"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\tools\\__graphify_cache_check.py": {
+    "mtime": 1779175381.678497,
+    "hash": "e622a303625c79488a52f708211dd248"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\tools\\__graphify_chunk_0.py": {
+    "mtime": 1779175511.005283,
+    "hash": "5edb30ef17ef636627dc60e8492e87cf"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\tools\\__graphify_filter.py": {
+    "mtime": 1779175281.6985087,
+    "hash": "e4c493a800ce423e0cd14bfd4afa3695"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\tools\\__graphify_label_html.py": {
+    "mtime": 1779175835.730035,
+    "hash": "191d298e70ecf829053428b4751e52f2"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\tools\\__graphify_merge.py": {
+    "mtime": 1779175713.1620822,
+    "hash": "66a8dc96d3abf7cfe212c222d96fad7a"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\tools\\__graphify_merge_ast_sem.py": {
+    "mtime": 1779175733.8637424,
+    "hash": "b2d3809bf06b7a308bfa1362460cba35"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\tools\\__graphify_semantic.py": {
+    "mtime": 1779175647.5549428,
+    "hash": "7d7dc09a8d76e6823efbe9bf59da9483"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\2.txt": {
+    "mtime": 1776559788.6867933,
+    "hash": "f3fffce1de600a4e537b620cbb2b0ea0"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\AGENTS.md": {
+    "mtime": 1780284383.945637,
+    "hash": "3eac9709aedecb47342859f406179fcf"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\AI SVN\u7cbe\u51c6\u6587\u4ef6\u5408\u5e76\u529f\u80fd-\u5f00\u53d1\u6267\u884c\u5b8c\u6574\u6587\u6863.md": {
+    "mtime": 1779367727.3404253,
+    "hash": "ecabc80f4f008dadddcf9ca90720f175"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\avatar_replace.html": {
+    "mtime": 1775543829.1291425,
+    "hash": "553bb6d42b6b8708e1fe950ff3a8d8c3"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\ErrorMessage_Readable.txt": {
+    "mtime": 1778206193.378297,
+    "hash": "e4fa486a9471bc1d6dc8d4858c0bf177"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\exe_log.txt": {
+    "mtime": 1780189998.4373052,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\exe_out.txt": {
+    "mtime": 1780189446.5264566,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\gui_err.txt": {
+    "mtime": 1776736460.302992,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\gui_out.txt": {
+    "mtime": 1776736460.301936,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\HEARTBEAT.md": {
+    "mtime": 1777013075.969586,
+    "hash": "509fecabe3d1237a5fe4930a220739db"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\MEMORY.md": {
+    "mtime": 1780308145.9787467,
+    "hash": "667d02768ccb0e360557a5504c6a2e08"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\readme.txt": {
+    "mtime": 1779956957.1768234,
+    "hash": "88d7622b1f20c0180ccd4f3b21ac6692"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\sc_value.txt": {
+    "mtime": 1776653285.3054304,
+    "hash": "8ed8c453a5f29cdc785d5e5eef6141ef"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\SOUL.md": {
+    "mtime": 1778374294.612351,
+    "hash": "d89361ca40f165c5cb07b966fcb1d3bb"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\stderr.txt": {
+    "mtime": 1780189378.1894503,
+    "hash": "0dca247129cbb7e3386459f1136eb1c8"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\stdout.txt": {
+    "mtime": 1780189377.6905353,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\svn-compare-optimization_20260423.md": {
+    "mtime": 1776923273.976022,
+    "hash": "438ca8bd8a8202e1542bfbb97ec98619"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\svn_combo_out.txt": {
+    "mtime": 1776828056.0036733,
+    "hash": "fbcb7d9d992738e2024731dc59a25de4"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\svn_compare_optimization_plan.md": {
+    "mtime": 1778683341.0706851,
+    "hash": "c9cf00fd31bb3b334634e2a3eb8b5bf8"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\svn_gui_create_20260419.md": {
+    "mtime": 1776636971.6913276,
+    "hash": "0cc85974ed53e0eef27ad5ab22f1f853"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\svn_oneclick_merge_20260419.md": {
+    "mtime": 1776561556.5836246,
+    "hash": "8a072c2151ba133b85dc68ad27640cf9"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\svn_oneclick_v8_optimization_plan.md": {
+    "mtime": 1776850090.2327619,
+    "hash": "f2fe483daf949d3781cc2dc221c045f0"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\svn_oneclick_v9_optimization_implementation.md": {
+    "mtime": 1776850527.0630653,
+    "hash": "4d56768acf5e476a8de764661e3be36e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\svn_out_test.txt": {
+    "mtime": 1776824192.4245872,
+    "hash": "cd72bbff1d3f75004aabdb8abf0631b2"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-20260421.md": {
+    "mtime": 1776785806.6082191,
+    "hash": "0e5139d50b4c2e53f124132195c8d565"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_2026-04-23_2054.md": {
+    "mtime": 1776949123.1347466,
+    "hash": "37a4fa2bd7b549871d56e8ad929d19d1"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_2026-04-23_2256.md": {
+    "mtime": 1776956347.1810782,
+    "hash": "7ce3468ade2c6ecb936e75b05ab0c0bd"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_2026-04-24_cache-fix-v2.md": {
+    "mtime": 1777030070.072543,
+    "hash": "10da577680e9bddb434745117fd54ff7"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_2026-04-24_cache-fix.md": {
+    "mtime": 1777029194.3268728,
+    "hash": "55a14ba35dee015f6fd360c7a470c0c3"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_20260422-1730.md": {
+    "mtime": 1776850560.0435243,
+    "hash": "cbad38e57b0a52d7d31b6e9984804b33"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_20260422-1744.md": {
+    "mtime": 1776851065.9111335,
+    "hash": "445bc64cf5e096ec59d201ba39050924"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_20260422-1758.md": {
+    "mtime": 1776852070.824618,
+    "hash": "976f44da652e07f5c7756db992a7aa3c"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_20260422_2240.md": {
+    "mtime": 1776870375.4677396,
+    "hash": "d3aa6f2644f2a30f2f6f8461aaa2b3a6"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_20260423-1336.md": {
+    "mtime": 1776922711.6974127,
+    "hash": "ab93fba579cd620f47c0290d37cb1bbe"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_20260423_1135.md": {
+    "mtime": 1776915290.858133,
+    "hash": "119d5dd0ac0c9f5ef5254748c2b1e5b9"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_20260424-1229.md": {
+    "mtime": 1777005053.5490708,
+    "hash": "cbd1a0bcc723a2dbadf01c7cc9b54e95"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_20260424-1251.md": {
+    "mtime": 1777006582.7791173,
+    "hash": "b5aa20d178a45e81e31456474d43aadb"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\task-summary_svn-refactor_20260424-1130.md": {
+    "mtime": 1777001600.455114,
+    "hash": "58660c4af67cca17ee1c5f7aae8967f5"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\TOOLS.md": {
+    "mtime": 1775527100.6651814,
+    "hash": "7f25f99542d044549910ad14d93e2232"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\Unity Prefab \u7cbe\u51c6\u8bed\u4e49\u5408\u5e76\u6267\u884c\u65b9\u6848\uff08\u6700\u7ec8\u5b9a\u7a3f\uff09.md": {
+    "mtime": 1779580839.7410767,
+    "hash": "632a3e0a19617a10f8756ef98ad4febe"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\USER.md": {
+    "mtime": 1778722220.3215616,
+    "hash": "8d201c8cc4def889b5515b614ad4ce9c"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\vbs_debug.txt": {
+    "mtime": 1776650565.8900292,
+    "hash": "8585fa7e01bb08ca350ece41b8771f9a"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\version.txt": {
+    "mtime": 1778471487.706737,
+    "hash": "9d08a2cac6ef3bcf5967cab1d32511ee"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_check_out.txt": {
+    "mtime": 1779264214.9343944,
+    "hash": "ae62f6b95bc2dff0b3e7c6d4a6438507"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_check_out2.txt": {
+    "mtime": 1779264225.1838815,
+    "hash": "b54b2111983e106fb8fe08333d02961a"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_gfx_err.txt": {
+    "mtime": 1778301319.1836987,
+    "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_install_log.txt": {
+    "mtime": 1778316132.708192,
+    "hash": "1aa6bbb529ecaf12f5d73460c5b76c22"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\_push_result.txt": {
+    "mtime": 1778314741.9243624,
+    "hash": "23245ae2bd7439ab2fc460a6436bfba4"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\\u4e2d\u6587\u73af\u5883\u9002\u914d.md": {
+    "mtime": 1777375363.2828996,
+    "hash": "162d1edccd9172773e64d8c1c658df84"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\\u7b56\u5212\u5de5\u5177\u7bb1UI\u8bbe\u8ba1\u6307\u5bfc.txt": {
+    "mtime": 1778473064.0935268,
+    "hash": "11dd76fd500a34ca556fc4dd872c2612"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\\u7b56\u5212\u5de5\u5177\u7bb1UI\u8bbe\u8ba1\u6307\u5bfc2.txt": {
+    "mtime": 1778556158.8890073,
+    "hash": "fc2daa986997c5941db880b4ade4fc80"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\\u7b56\u5212\u5de5\u5177\u7bb1_UI\u8def\u5f84\u53c2\u8003.md": {
+    "mtime": 1780019817.8842142,
+    "hash": "6acaa470415ce0f3c76693a29929a6fc"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\\u7b56\u5212\u5de5\u5177\u7bb1_\u529f\u80fd\u53c2\u8003.md": {
+    "mtime": 1779887206.9454124,
+    "hash": "78ed6b9abf7707d7bad4113e60fc3ed0"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\\u7b56\u5212\u5de5\u5177\u7bb1_\u8bf4\u660e\u4e66.html": {
+    "mtime": 1778423058.6543965,
+    "hash": "a44266de8b15b2b1c30a4f63f485cc33"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\\u7b56\u5212\u5de5\u5177\u7bb1\u5408\u5e76\u6587\u4ef6\u8bbe\u8ba1\u6307\u5bfc.txt": {
+    "mtime": 1778635223.137611,
+    "hash": "f9c0ce94abbe94899de670eb4af407a6"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\\u7b56\u5212\u5de5\u5177\u7bb1\u6253\u5f00\u7279\u6548\u6267\u884c\u65b9\u6848.txt": {
+    "mtime": 1779534030.6970603,
+    "hash": "c9d14080867fa0b691ccf408ebab1d82"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\docs\\thread_safety_spec.md": {
+    "mtime": 1778737865.6153953,
+    "hash": "2fb8650e7992a12161afe9cf60b75ae3"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\excel\u5bfc\u51fa\u6570\u636e\\\u6b63\u786e\u6570\u636e\\gameData\\Language\\ZH_CN\\ExportTxt\\ErrorMessage.txt": {
+    "mtime": 1778238535.9496338,
+    "hash": "1dc56f5a54aad6689366b9041233e62b"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\excel\u5bfc\u51fa\u6570\u636e\\\u9519\u8bef\u6570\u636e\\gameData\\Language\\ZH_CN\\ExportTxt\\ErrorMessage.txt": {
+    "mtime": 1778238163.6821535,
+    "hash": "1dc56f5a54aad6689366b9041233e62b"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\graphify-in\\conversation\\00_conversation_summary.md": {
+    "mtime": 1778368872.35209,
+    "hash": "f1f71aa0b196d63161337657e5c5c0d0"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\graphify-in\\conversation\\\u7f51\u9875\u8be6\u60c5.txt": {
+    "mtime": 1778367834.5091789,
+    "hash": "129de29a97a3989fbd5827fa2c802049"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\graphify-in\\conversation\\\u8f85\u52a9.txt": {
+    "mtime": 1778339505.7332618,
+    "hash": "af96868e69ad1de66ec237dfaa75c1ed"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\2026-04-16.md": {
+    "mtime": 1776344125.732451,
+    "hash": "78e6c0916195578aca2f8d166dfadab7"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\2026-04-17.md": {
+    "mtime": 1776417708.4448073,
+    "hash": "4e8f69f435c4dd8210fae3a9742b2b28"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\2026-04-18.md": {
+    "mtime": 1776519722.331031,
+    "hash": "bae20ee552faeffd56fb357a0b306ea8"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\2026-04-19.md": {
+    "mtime": 1776636991.6870522,
+    "hash": "5e5bb5a6f4c63f73b3bb6a0251e9ac30"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\2026-04-20.md": {
+    "mtime": 1776711728.9179435,
+    "hash": "59bb7df4af5141c6e6a631c047f440f8"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\2026-04-21.md": {
+    "mtime": 1776768910.916638,
+    "hash": "a48a9edeee2f135ca294ffb3695a758e"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\2026-04-22.md": {
+    "mtime": 1776857931.4328928,
+    "hash": "7ad03ba09682dec366b862311c76ab39"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\2026-04-23.md": {
+    "mtime": 1776957669.3398235,
+    "hash": "86731bd1e2e799da20e19144856f9f8b"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\2026-04-24.md": {
+    "mtime": 1777011872.9848492,
+    "hash": "6cf2fcbe2ce4b7aab060bd47f2c0822f"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\2026-05-09.md": {
+    "mtime": 1778304847.0288894,
+    "hash": "75981bc7a4ff791a21bf716ef10578ec"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\2026-05-10.md": {
+    "mtime": 1778403342.2267025,
+    "hash": "74a542e46fdb318807267bf6f8a17a3a"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\2026-05-14.md": {
+    "mtime": 1778769787.1200693,
+    "hash": "59364acb8816a936fb5c9b14f387feac"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\memory\\svn_compare_requirements.md": {
+    "mtime": 1776782858.8581579,
+    "hash": "243333b18ed399d9d4e85f3f199e8056"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\subdir\\data.txt": {
+    "mtime": 1779956957.1793323,
+    "hash": "c76a140c89560b100ea23d449b156f55"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\lang_map.txt": {
+    "mtime": 1778072104.9961731,
+    "hash": "8ad58868f9c10ffc848cf83697619f06"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\stderr_build.txt": {
+    "mtime": 1780189841.2139294,
+    "hash": "13403936cb195ec757488dd7139114dc"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\stdout_build.txt": {
+    "mtime": 1780189748.098951,
+    "hash": "e001e269ab59a890fe5fe1df284ac742"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\templates\\index.html": {
+    "mtime": 1780309944.9381318,
+    "hash": "2da6debd59c60370b547bfbafa3d08e5"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\tools\\calamine_verify_result.txt": {
+    "mtime": 1778576010.684816,
+    "hash": "fbfdd7b531015faedee5be4ba6d1a630"
+  }
+}

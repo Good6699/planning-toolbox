@@ -1617,6 +1617,12 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **解决方案**：新增 `_parse_svn_date()` 函数：`Z` → `+00:00` → `datetime.fromisoformat` → `astimezone()` 转本地 → `strftime` 输出 `YYYY-MM-DD HH:MM:SS`
 - **涉及文件**：[toolbox_merge.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/toolbox_merge.py)
 
+### 触发式更新检测：点击执行按钮即检查更新，无需重启
+- **场景**：推送新版本到 update-server 后，已在运行的客户端不会主动检测更新，必须重启后才看到更新提示
+- **根因**：`checkUpdate()` 只在页面加载时执行一次，之后不再触发
+- **解决方案**：新增 `triggerUpdateCheck()` 函数，在 7 个执行按钮（SVN 开始执行/上传到 SVN/开始翻译/语义分析/开始合并/工作流 ▶ 播放/步骤 ▶ 播放）的 click handler 中调用。检测到新版本后显示更新条，已显示则不再重复触发。纯前端改动，不涉及后端
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
 ### UI：⚙ 高级设置按钮移至 "过滤与输出" 标题右侧并缩小
 - **场景**：2026-05-29 用户觉得 SVN 记录页签右侧的 ⚙ 高级设置按钮位置太独立（单独占一行），且太大（font-size:32px）
 - **解决方案**：将按钮从独自一行（输出目录下方的 flex 容器）移到 `.section-label` 标题行右侧，使用 flexbox `justify-content:space-between` 布局，字号从 32px 缩小到 18px

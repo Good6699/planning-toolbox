@@ -1121,6 +1121,13 @@ while (true):
   3. `build_all.bat` 一键组合两者
 - **涉及文件**：[dist_update.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/dist_update.py)、[build_all.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build_all.bat)
 
+### PyInstaller 包体瘦身：清除 py_modules 冗余 + build.py --exclude-module
+- **场景**：2026-06-01 PyInstaller 打包的 dist 目录达 371 MB，打包耗时数分钟。分析发现大量无用重量级科学计算库被误打包
+- **根因**：① `py_modules/` 目录堆积了大量用不到的包（numpy、scipy、graphify、tree_sitter 全系列、networkx、pydantic、httpx、mcp 等 142 项），合计 ~200+ MB；② 系统 site-packages 中的 scipy、numpy、pandas、pyarrow、llvmlite 等被 PyInstaller 自动扫描并打包进 exe（即使代码从未 import 它们），合计 ~250+ MB
+- **解决方案**：① 清理 `py_modules/` 只保留项目实际 import 的包（certifi/cffi/click/colorama/idna/PIL/pycparser/pywin32/win32），共删除 142 项；② `build.py` 新增 `_get_excludes()` 返回 `--exclude-module=scipy/numpy/pandas/pyarrow/llvmlite/numba/matplotlib/tkinter` 等，加进 PyInstaller 命令；③ 确认 PyInstaller 打包本身就是自包含的，不需要闪屏环境检测
+- **关键教训**：① PyInstaller 会扫描系统全部 site-packages 打包进去，必须显式 `--exclude-module` 排除不需要的大包；② 检查包体大小的最快方法是：`Get-ChildItem -Recurse | Group-Object Extension | Select-Object Count, @{N="MB";E={...}} | Sort-Object MB` 看哪个扩展占最大；③ 项目实际 import 的第三方包很少（flask/lxml/pywin32/pywebview/openpyxl/PIL/requests/yaml），其余都是多余的
+- **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)、[py_modules/](file:///c:/Users/admin/.qclaw/workspace/py_modules)
+
 ### bat 文件中的 UTF-8 中文在 cmd.exe 下乱码
 - **场景**：双击 bat，输出全部变成乱码，命令解析失败（'寘' 不是内部或外部命令）；中文显示为 `????????`
 - **根因**：cmd.exe 默认代码页是 GBK（936），bat 文件保存为 UTF-8 时中文会被错误解码。即使 `chcp 65001` 也无法完全避免

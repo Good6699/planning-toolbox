@@ -182,6 +182,23 @@ def _get_hidden_imports():
     ]
 
 
+def _get_excludes():
+    """排除系统 site-packages 中用不到的重量级包，缩小包体"""
+    return [
+        "--exclude-module=scipy",
+        "--exclude-module=numpy",
+        "--exclude-module=pandas",
+        "--exclude-module=pyarrow",
+        "--exclude-module=llvmlite",
+        "--exclude-module=numba",
+        "--exclude-module=matplotlib",
+        "--exclude-module=tkinter",
+        "--exclude-module=networkx",
+        "--exclude-module=scipy.libs",
+        "--exclude-module=numpy.libs",
+    ]
+
+
 def _get_path_args():
     """添加 PyInstaller 模块搜索路径（main.py 中 sys.path.insert 出来的路径）"""
     return [
@@ -365,6 +382,7 @@ def build():
     icon = os.path.join(CORE_DIR, "assets", "app_icon.ico")
     data_args = _get_data_args()
     hidden_imports = _get_hidden_imports()
+    exclude_args = _get_excludes()
     path_args = _get_path_args()
 
     # ── Step 5: 执行 PyInstaller ──
@@ -383,6 +401,7 @@ def build():
         cmd += ["--icon", icon]
     cmd += data_args
     cmd += hidden_imports
+    cmd += exclude_args
     cmd += path_args
     cmd.append(entry)
 

@@ -205,40 +205,6 @@ def _get_path_args():
     ]
 
 
-def _kill_locker_processes():
-    """杀掉打包输出目录（dist/）下的进程，释放文件锁"""
-    my_pid = os.getpid()
-    target_dir = os.path.normpath(DIST_DIR)
-    print(f"  [清理] 终止 {target_dir} 目录下的进程...")
-    for img in ("python.exe", "pythonw.exe", "策划工具箱.exe"):
-        try:
-            ps_script = (
-                f'Get-CimInstance Win32_Process -Filter "Name=\'{img}\'" | '
-                f'Where-Object {{ $_.ExecutablePath -like \'{target_dir}*\' }} | '
-                f'Select-Object -ExpandProperty ProcessId'
-            )
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_script],
-                capture_output=True, text=True, timeout=10
-            )
-            killed = 0
-            for line in result.stdout.strip().splitlines():
-                pid_str = line.strip()
-                if pid_str.isdigit():
-                    pid = int(pid_str)
-                    if pid != my_pid:
-                        subprocess.run(
-                            ["taskkill", "/f", "/pid", str(pid)],
-                            capture_output=True, timeout=5
-                        )
-                        killed += 1
-            if killed:
-                print(f"    {img}: 已终止 {killed} 个进程")
-        except Exception as e:
-            print(f"    {img}: 跳过 ({e})")
-    time.sleep(1.5)
-
-
 def _cleanup_old_packages(keep=3):
     """保留 dist 下最新的 keep 个带版本/时间戳的包（按文件夹创建时间），永久删除更早的"""
     pattern_prefix = f"{APP_NAME}_v"
@@ -257,7 +223,6 @@ def _cleanup_old_packages(keep=3):
     dirs_with_time.sort(key=lambda x: x[0], reverse=True)
     to_delete = dirs_with_time[keep:]
     print(f"  [清理] 超出 {keep} 个，需删除 {len(to_delete)} 个包")
-    _kill_locker_processes()
     for _, d in to_delete:
         full = os.path.join(DIST_DIR, d)
         locked = []

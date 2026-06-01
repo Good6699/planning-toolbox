@@ -1624,10 +1624,10 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **关键教训**：① `WScript.Shell.Run` 的第二个参数 `0` = `SW_HIDE`，是 Windows 上隐藏控制台窗口的最可靠方式，从 XP 到 11 全系兼容；② VBS 脚本中路径含空格时必须用 `"" ""` 双引号包裹；③ VBS 文件本身的启动也通过 `os.startfile`（无需 `wscript.exe` 显式调用），因为 `.vbs` 的文件关联默认就是 `wscript.exe`；④ VBS 不需要管理员权限，在当前用户上下文中即可运行
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
 
-### 打包脚本杀进程优化：按 ExecutablePath 过滤而非全量通杀
+### 打包脚本移除杀进程逻辑：直接删除 _kill_locker_processes()
 - **场景**：`build_all.bat` 执行时杀掉机器上所有 `python.exe`/`pythonw.exe`/`策划工具箱.exe`（不包括自己），导致 IDE（Trae）和其他工作区的 Python 进程被误杀
-- **根因**：`_kill_locker_processes()` 用 `taskkill /f /im python.exe /fi "PID ne 当前PID"`，无条件杀所有同名进程
-- **解决方案**：改用 PowerShell `Get-CimInstance Win32_Process` 查询进程的 `ExecutablePath`，只杀 `ExecutablePath -like 'dist/*'` 的进程（即从打包输出目录启动的进程）。Python 安装目录（`C:\Python39\`）、IDE 进程、其他工作区进程的路径不在 `dist/` 下，自然被过滤掉。`taskkill` 改为按 PID 精准杀，不再用 `/im` + `/fi` 通杀
+- **根因**：`_kill_locker_processes()` 用 `taskkill /f /im` 无条件杀所有同名进程，即使改为按 `ExecutablePath` 过滤也仍有误杀风险和复杂度
+- **解决方案**：直接删除 `_kill_locker_processes()` 整个函数及其调用。`_cleanup_old_packages()` 的重试循环（`for retry in range(3)`）天然处理被锁文件——删不掉就打印"跳过"，不影响当前打包。等旧进程退出后下次运行自然删除。`_deploy_to_appdata()` 的端口杀进程（`taskkill /pid 18124`）保持不动，只杀特定端口不误杀
 - **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
 
 ### 触发式更新检测：点击执行按钮即检查更新，无需重启

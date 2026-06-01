@@ -1142,6 +1142,13 @@ while (true):
 - **关键教训**：① Windows 托盘图标显示状态的 key 名是未公开的哈希，不要尝试自己算或自己创建，注册图标后扫描找即可。② 写注册表后必须重新注册图标才能即时生效（`NIM_DELETE` + `NIM_ADD`）。③ 固定 APPDATA 路径部署确保后续启动时 `ExecutablePath` 不变，注册表设置可复用。④ `win32gui.Shell_NotifyIcon(tuple)` 的 6 元组格式虽不支持 NIF_GUID，但通过写注册表 + 固定路径可以实现同样的持久化效果
 - **涉及文件**：[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
 
+### 更新链路修复：gethostbyname 强制 IPv4 + quote 百分号编码中文 URL
+- **场景**：2026-06-01 完成包体瘦身后测试更新链路，遇到两个 bug：① exe 检测不到更新（`/api/update/check` 返回 502）；② 点击一键更新后报错 `'ascii' codec can't encode characters`
+- **根因**：① `update_version.py` 用 `socket.gethostname()` 获取主机名，Python 解析为 IPv6 链路本地地址 `fe80::`（无作用域 ID），无法路由 → 502；② `api_update_apply()` 用中文文件名拼接 URL（`策划工具箱_v1.0.22.zip`），`urllib.request.urlretrieve` 发送 HTTP 请求时不能处理非 ASCII 字符 → `ascii` 编码错误
+- **解决方案**：① `update_version.py` 中 `_HOSTNAME = socket.gethostbyname(socket.gethostname())` 强制返回 IPv4 地址；② `web_app.py` 中 `from urllib.parse import quote; zip_url = ... + quote(zip_name)` 百分号编码中文路径；③ `build.py` 的 `make_update_zip()` 中每次打包时强制更新 `version.json` 的 `version`/`url`/`md5` 三个字段（之前只更新 `md5`，导致 `version.json` 永远卡在第一次打包的版本号）
+- **关键教训**：① `socket.gethostname()` 在双栈网络中可能返回 IPv6 地址，必须用 `gethostbyname()` 确保 IPv4；② `urllib` 不支持非 ASCII URL，拼接 URL 时中文文件名必须用 `urllib.parse.quote()` 百分号编码；③ `version.json` 的版本号必须每次打包都更新，`build.py` 中 `make_update_zip()` 的语义应该是"生成当前版本的更新包"而不是"修补已有 json"
+- **涉及文件**：[update_version.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/update_version.py)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
+
 ### bat 文件中的 UTF-8 中文在 cmd.exe 下乱码
 - **场景**：双击 bat，输出全部变成乱码，命令解析失败（'寘' 不是内部或外部命令）；中文显示为 `????????`
 - **根因**：cmd.exe 默认代码页是 GBK（936），bat 文件保存为 UTF-8 时中文会被错误解码。即使 `chcp 65001` 也无法完全避免

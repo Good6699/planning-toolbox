@@ -2864,7 +2864,8 @@ def api_update_apply():
         if not zip_name:
             return jsonify({"ok": False, "error": "version.json 缺少 url 字段"}), 400
 
-        zip_url = UPDATE_URL.rstrip("/") + "/" + zip_name
+        from urllib.parse import quote
+        zip_url = UPDATE_URL.rstrip("/") + "/" + quote(zip_name)
         tmp_dir = tempfile.mkdtemp(prefix="toolbox_update_")
         zip_path = os.path.join(tmp_dir, zip_name)
 

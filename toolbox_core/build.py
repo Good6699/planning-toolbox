@@ -278,6 +278,31 @@ def _cleanup_old_packages(keep=3):
                     print(f"  [清理] 跳过: {d} (目录被占用)")
 
 
+def _cleanup_old_zips(keep=3):
+    """保留 update-server 下最新的 keep 个 zip 包，删除更早的（按创建时间）"""
+    zips_with_time = []
+    for f in os.listdir(UPDATE_DIR):
+        full = os.path.join(UPDATE_DIR, f)
+        if os.path.isfile(full) and f.endswith(".zip") and f.startswith(APP_NAME):
+            try:
+                ctime = os.path.getctime(full)
+            except Exception:
+                ctime = 0
+            zips_with_time.append((ctime, f))
+    if len(zips_with_time) <= keep:
+        print(f"  [清理] 更新 zip 共 {len(zips_with_time)} 个，无需清理")
+        return
+    zips_with_time.sort(key=lambda x: x[0], reverse=True)
+    to_delete = zips_with_time[keep:]
+    for _, f in to_delete:
+        full = os.path.join(UPDATE_DIR, f)
+        try:
+            os.remove(full)
+            print(f"  [清理] 删除旧 zip: {f}")
+        except Exception as e:
+            print(f"  [清理] 跳过: {f} ({e})")
+
+
 def _deploy_to_appdata(dist_app):
     """部署到 %APPDATA%/planning-toolbox/ 固定路径，使托盘设置不丢失"""
     appdata_dir = os.environ.get("APPDATA", os.path.expanduser("~"))
@@ -511,19 +536,18 @@ def make_update_zip(dist_app):
             md5.update(chunk)
     md5_hex = md5.hexdigest()
 
-    # ── 生成 version.json（保留已有字段，只更新 md5）──
+    # ── 生成 version.json（每次打包自动更新 version/url/md5）──
     ver_path = os.path.join(UPDATE_DIR, "version.json")
     if os.path.isfile(ver_path):
         with open(ver_path, "r", encoding="utf-8") as f:
             ver_info = json.load(f)
     else:
         ver_info = {
-            "version": APP_VERSION,
-            "url": zip_name,
-            "md5": "",
             "notes": "",
             "force": False,
         }
+    ver_info["version"] = APP_VERSION
+    ver_info["url"] = zip_name
     ver_info["md5"] = md5_hex
     with open(ver_path, "w", encoding="utf-8") as f:
         json.dump(ver_info, f, ensure_ascii=False, indent=2)
@@ -553,3 +577,4 @@ if __name__ == "__main__":
     else:
         print(f"\n提示: 加 --zip 参数可同时生成 update-server 下的更新包")
     _cleanup_old_packages()
+    _cleanup_old_zips()

@@ -84,6 +84,24 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 
 ## 经验与决策
 
+### openpyxl 保存后公式单元格丢失缓存值 - 用 Excel COM 后台刷新
+- **场景**：合并表格后，目标文件中含公式的单元格被对比工具读取为空（看不到计算值），但 Excel 中打开显示正常
+- **根因**：openpyxl 保存时只写 `<f>`（公式标签），不写 `<v>`（缓存计算值）。手动用 Excel 打开保存后，Excel 会同时写入 `<f>` + `<v>`，所以对比工具能读到。openpyxl 没有自动计算/写入缓存值的能力
+- **解决方案**：在 `_exec_merge_table` 的 `wb_tgt.save()` 之后，用 `win32com.client.Dispatch("Excel.Application")` 后台静默打开刚保存的文件，调用 `Save()` 让 Excel 写入 `<v>` 缓存值。设置 `xl.Visible = False` 和 `xl.DisplayAlerts = False`，异常时静默跳过
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
+### 工作流日志显示区域固定上限导致内容截断
+- **场景**：工作流日志内容较多时，`.wf-log-body` 的 `max-height:60vh` 限制了最大高度，超出部分被截断不可见
+- **根因**：`.wf-layout .wf-log-body` 在 flex 布局中同时设置了 `flex:1` 和 `max-height:60vh`，`max-height` 优先级高于 `flex:1` 的拉伸，导致日志区域上限被封死
+- **解决方案**：去掉 `max-height:60vh`，仅保留 `flex:1; height:auto; min-height:60px`，让日志 body 完全填满 flex 容器分配的剩余空间
+- **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
+### 版本号 patch >= 100 时进位
+- **场景**：每次 `build.py --auto-patch` 版本号 `patch + 1`，版本号不断增长到多位数（如 v1.0.127）
+- **根因**：原逻辑是简单的 `patch + 1`，patch 超过 99 后不会向 minor 进位，导致版本号位数膨胀
+- **解决方案**：在 `_auto_patch_version` 中增加进位逻辑：`patch >= 100 → patch=0, minor+=1`；`minor >= 100 → minor=0, major+=1`。保持语义化版本号整洁
+- **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
+
 ### SSE 错误日志不滚动：DocumentFragment children 在 append 后变空
 - **场景**：工作流执行报错（翻译文件不存在），后端已推送 `❌ 步骤执行失败` 错误日志，但前端不滚动到日志区域，用户看不到错误
 - **根因**：`_logFlush()` 中用 `DocumentFragment` 收集日志行，`frag.appendChild(div)` 后 `frag.children` 有内容，但调用 `_logAppend(logEl, frag)` 后 **frag 的 children 被移入 DOM 变为空**，紧接着的 `for (const c of frag.children)` 循环永远执行 0 次，`_focusAppOnError()` 永不触发。以下所有修复均因此失效：① ❌ 字符检测 + ② block:end + ③ .content 滚动

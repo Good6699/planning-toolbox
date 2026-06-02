@@ -91,7 +91,14 @@ def _auto_patch_version():
             major = int(parts[0]) if len(parts) > 0 else 1
             minor = int(parts[1]) if len(parts) > 1 else 0
             patch = int(parts[2]) if len(parts) > 2 else 0
-            new_ver = f"v{major}.{minor}.{patch + 1}"
+            patch += 1
+            if patch >= 100:
+                patch = 0
+                minor += 1
+                if minor >= 100:
+                    minor = 0
+                    major += 1
+            new_ver = f"v{major}.{minor}.{patch}"
             indent = line[:len(line) - len(line.lstrip())]
             new_lines.append(f'{indent}APP_VERSION = "{new_ver}"')
             print(f"  [版本] {old} → {new_ver}")

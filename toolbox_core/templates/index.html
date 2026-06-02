@@ -435,7 +435,6 @@ input::placeholder,textarea::placeholder{
   flex:1;
   height:auto;
   min-height:60px;
-  max-height:60vh;
 }
 .wf-tree{
   display:flex;
@@ -3224,7 +3223,7 @@ async function runTask(url, body, btn, logId, label, onDone) {
 
   function _done() {
     _decRunning();
-    if (tabKey) _decTabRunning(tabKey);
+    if (tabKey) { _tabCount[tabKey] = 0; _setTabDot(tabKey, false); }
     if (label) {
       if (onDone) onDone();
     } else {

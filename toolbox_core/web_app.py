@@ -1973,6 +1973,18 @@ def _exec_merge_table(step, put):
 
         wb_in.close()
         wb_tgt.save(target_path)
+        # 用 Excel COM 刷新公式缓存值（让对比工具能读取公式单元格的计算结果）
+        try:
+            import win32com.client as win32
+            xl = win32.Dispatch("Excel.Application")
+            xl.Visible = False
+            xl.DisplayAlerts = False
+            wb = xl.Workbooks.Open(target_path)
+            wb.Save()
+            wb.Close()
+            xl.Quit()
+        except Exception:
+            pass
         wb_tgt.close()
         merged += 1
         put(f"✓ 合并完成 (输入 {input_count} 行)\n")

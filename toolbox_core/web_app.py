@@ -1867,78 +1867,263 @@ def _exec_merge_table(step, put):
         # 读取输入文件
         try:
             wb_in = openpyxl.load_workbook(src_path, read_only=True, data_only=True)
-            ws_in = wb_in.active
-            in_rows = list(ws_in.iter_rows(values_only=True))
-            wb_in.close()
         except Exception as e:
             put(f"✗ 读取输入失败: {e}\n")
             failed += 1
             continue
 
-        if not in_rows:
-            put(f"⚠ 空文件\n")
-            skipped += 1
-            continue
-
-        header_row_idx = title_rows - 1
-        if header_row_idx >= len(in_rows):
-            put(f"⚠ 标题行超出范围\n")
-            skipped += 1
-            continue
-
-        headers = [str(c) if c is not None else "" for c in in_rows[header_row_idx]]
-
-        # 读取目标文件
-        target_data = {}
+        # 打开目标文件（可写模式，保留 xlsm 结构）
         try:
-            wb_tgt = openpyxl.load_workbook(target_path, data_only=True)
-            ws_tgt = wb_tgt.active
-            tgt_rows = list(ws_tgt.iter_rows(values_only=True))
-            wb_tgt.close()
-
-            if tgt_rows and len(tgt_rows) > header_row_idx:
-                tgt_headers = [str(c) if c is not None else "" for c in tgt_rows[header_row_idx]]
-                for ci_t, h_t in enumerate(tgt_headers):
-                    if h_t and h_t not in headers:
-                        headers.append(h_t)
-
-                for row in tgt_rows[title_rows:]:
-                    vals = [str(c) if c is not None else "" for c in row]
-                    if id_col_idx < len(vals):
-                        sid = vals[id_col_idx].strip()
-                        if sid and sid not in ("::ID::", "ID"):
-                            target_data[sid] = {tgt_headers[i]: vals[i] for i in range(len(tgt_headers)) if i < len(vals)}
-            put(f"  目标文件: {len(target_data)} 行\n")
+            wb_tgt = openpyxl.load_workbook(target_path)
         except Exception as e:
-            put(f"  ⚠ 目标文件读取失败, 按空文件处理: {e}\n")
+            put(f"✗ 打开目标文件失败: {e}\n")
+            failed += 1
+            continue
 
-        # 合并：输入数据覆盖/追加
+        # 从目标文件获取 ID 列头
+        tgt_id_header = None
+        for sn in wb_tgt.sheetnames:
+            if wb_tgt[sn].max_row >= title_rows:
+                v = wb_tgt[sn].cell(row=title_rows, column=id_col).value
+                if v:
+                    tgt_id_header = str(v).strip()
+                    if tgt_id_header:
+                        break
+        if not tgt_id_header:
+            put("✗ 在目标文件中未找到 ID 列头\n")
+            failed += 1
+            continue
+
+        # ── Phase 0: 构建全局 ID 索引 ──
+        global_id_sheets = {}  # id → set(sheet_names)
+        for inp_sn in wb_in.sheetnames:
+            ws_in = wb_in[inp_sn]
+            if ws_in.max_row < title_rows + 1:
+                continue
+            inp_id_col = None
+            for col in range(1, ws_in.max_column + 1):
+                h = ws_in.cell(row=title_rows, column=col).value
+                if h and str(h).strip() == tgt_id_header:
+                    inp_id_col = col
+                    break
+            if inp_id_col is None:
+                continue
+            for r in range(title_rows + 1, ws_in.max_row + 1):
+                op_val = ws_in.cell(row=r, column=1).value
+                if op_val is not None and str(op_val).strip() == "删除":
+                    continue
+                v = ws_in.cell(row=r, column=inp_id_col).value
+                if v is not None:
+                    sid = str(v).strip()
+                    if sid and sid not in ("::ID::", "ID"):
+                        global_id_sheets.setdefault(sid, set()).add(inp_sn)
+
+        dup_ids = {sid for sid, sheets in global_id_sheets.items() if len(sheets) > 1}
+        if dup_ids:
+            put(f"  ℹ 发现 {len(dup_ids)} 个跨 sheet 重复 ID\n")
+
         input_count = 0
-        for row in in_rows[title_rows:]:
-            vals = [str(c) if c is not None else "" for c in row]
-            if id_col_idx < len(vals):
-                sid = vals[id_col_idx].strip()
-                if sid and sid not in ("::ID::", "ID"):
-                    target_data[sid] = {headers[i]: vals[i] for i in range(len(headers)) if i < len(vals)}
-                    input_count += 1
+        processed_dup_logged = False
 
-        # 写回
-        wb_out = openpyxl.Workbook()
-        ws_out = wb_out.active
-        ws_out.title = os.path.splitext(fname)[0] or "Sheet1"
+        for inp_sn in wb_in.sheetnames:
+            ws_in = wb_in[inp_sn]
+            if ws_in.max_row < title_rows + 1:
+                continue
 
-        ws_out.append(headers)
-        for sid in sorted(target_data.keys(), key=lambda x: (x.partition("_")[0].isalpha(), int("".join(c for c in x if c.isdigit()) or 0) if any(c.isdigit() for c in x) else 0)):
-            rec = target_data[sid]
-            ws_out.append([rec.get(h, "") for h in headers])
+            # 匹配目标 sheet
+            tgt_sn = inp_sn if inp_sn in wb_tgt.sheetnames else None
+            if tgt_sn is None:
+                sheet_col = None
+                for col in range(1, ws_in.max_column + 1):
+                    h = ws_in.cell(row=title_rows, column=col).value
+                    if h and str(h).strip().lower() == "sheet":
+                        sheet_col = col
+                        break
+                if sheet_col is None:
+                    continue
+                sheet_rows = {}
+                for r in range(title_rows + 1, ws_in.max_row + 1):
+                    op_val = ws_in.cell(row=r, column=1).value
+                    if op_val is not None and str(op_val).strip() == "删除":
+                        continue
+                    v = ws_in.cell(row=r, column=sheet_col).value
+                    if v is not None:
+                        sn = str(v).strip()
+                        if sn:
+                            sheet_rows.setdefault(sn, []).append(r)
+                for tgt_sn, rows in sheet_rows.items():
+                    if tgt_sn not in wb_tgt.sheetnames:
+                        continue
+                    ws_tgt = wb_tgt[tgt_sn]
+                    added, updated = _merge_sheet_rows(
+                        ws_in, ws_tgt, rows, title_rows, id_col, dup_ids, put)
+                    input_count += added
+                continue
 
-        wb_out.save(target_path)
-        wb_out.close()
+            ws_tgt = wb_tgt[tgt_sn]
+            all_rows = []
+            for r in range(title_rows + 1, ws_in.max_row + 1):
+                op_val = ws_in.cell(row=r, column=1).value
+                if op_val is not None and str(op_val).strip() == "删除":
+                    continue
+                all_rows.append(r)
+            added, updated = _merge_sheet_rows(
+                ws_in, ws_tgt, all_rows, title_rows, id_col, dup_ids, put)
+            input_count += added
+
+        wb_in.close()
+        wb_tgt.save(target_path)
+        wb_tgt.close()
         merged += 1
-        put(f"✓ 合并完成: {len(target_data)} 行 (输入 {input_count} 行)\n")
+        put(f"✓ 合并完成 (输入 {input_count} 行)\n")
+
+        # ── Phase 2: 报告重复 ID ──
+        if dup_ids:
+            dup_list = sorted(dup_ids)
+            put(f"  ⚠ 以下 {len(dup_list)} 个 ID 存在于多个 sheet:\n")
+            for did in dup_list:
+                sheets = sorted(global_id_sheets[did])
+                put(f"    {did}: {', '.join(sheets)}\n")
 
     put(f"\n── 合并完成: {merged} 成功, {skipped} 跳过(无同名), {failed} 失败 ──\n")
     return failed == 0
+
+
+def _merge_sheet_rows(ws_in, ws_tgt, inp_rows, title_rows, id_col, dup_ids, put):
+    """按 ID 合并 sheet：更新现有行、追加新增行。返回 (added, updated)
+    
+    对齐 Tkinter 旧版逻辑：
+    - ID 列按列头文字匹配
+    - 数据列按 (列头, 出现次数) 元匹配（支持重复列头）
+    - 连续数据区识别，END 标记处理：
+      有 END 时旧 END 行变 "0"，新行插在 END 后，最后一行变 "END"
+    - dup_ids: 跨 sheet 重复的 ID 集合，用于日志标注 """
+    id_col_num = id_col
+    if id_col_num > ws_tgt.max_column:
+        return 0, 0
+
+    tgt_id_header = str(ws_tgt.cell(row=title_rows, column=id_col_num).value or "").strip()
+    if not tgt_id_header:
+        return 0, 0
+
+    inp_id_col = None
+    for col in range(1, ws_in.max_column + 1):
+        h = ws_in.cell(row=title_rows, column=col).value
+        if h and str(h).strip() == tgt_id_header:
+            inp_id_col = col
+            break
+    if inp_id_col is None:
+        return 0, 0
+
+    # ── 查找连续数据区 ──
+    last_continuous_id_row = title_rows
+    for r in range(title_rows + 1, ws_tgt.max_row + 1):
+        val = ws_tgt.cell(row=r, column=id_col_num).value
+        if val is not None and str(val).strip():
+            last_continuous_id_row = r
+        else:
+            break
+
+    # ── 查找 END 标记 ──
+    has_end = False
+    end_row_at = None
+    if last_continuous_id_row >= title_rows + 1:
+        for r in range(last_continuous_id_row, ws_tgt.max_row + 1):
+            val = ws_tgt.cell(row=r, column=1).value
+            if val is not None and str(val).strip().lower() == "end":
+                has_end = True
+                end_row_at = r
+                break
+
+    # ── 构建目标 ID → 行号 映射（连续数据区内） ──
+    tgt_id_map = {}
+    for r in range(title_rows + 1, last_continuous_id_row + 1):
+        val = ws_tgt.cell(row=r, column=id_col_num).value
+        if val is not None:
+            key = str(val).strip()
+            if key:
+                tgt_id_map[key] = r
+
+    updated = 0
+    new_rows_data = []  # 待插入行的 (inp_id, col_data) 列表
+
+    for inp_r in inp_rows:
+        inp_id_val = ws_in.cell(row=inp_r, column=inp_id_col).value
+        if inp_id_val is None:
+            continue
+        inp_id = str(inp_id_val).strip()
+        if not inp_id or inp_id in ("::ID::", "ID"):
+            continue
+
+        # 读取输入行数据，按 (列头, 出现次数) 为 key（从列 2 开始，列 1 为 ID）
+        inp_hdr_count = {}
+        row_data = {}
+        for col in range(2, ws_in.max_column + 1):
+            h = ws_in.cell(row=title_rows, column=col).value
+            if h is not None:
+                h_str = str(h).strip()
+                occ = inp_hdr_count.get(h_str, 0)
+                inp_hdr_count[h_str] = occ + 1
+                val = ws_in.cell(row=inp_r, column=col).value
+                row_data[(h_str, occ)] = val
+
+        if inp_id in tgt_id_map:
+            # ── 更新：按目标列头匹配写入 ──
+            tgt_r = tgt_id_map[inp_id]
+            tgt_hdr_count = {}
+            for col in range(1, ws_tgt.max_column + 1):
+                h = ws_tgt.cell(row=title_rows, column=col).value
+                if h is not None:
+                    h_str = str(h).strip()
+                    occ = tgt_hdr_count.get(h_str, 0)
+                    tgt_hdr_count[h_str] = occ + 1
+                    if h_str != tgt_id_header and col != 1:
+                        key = (h_str, occ)
+                        if key in row_data:
+                            ws_tgt.cell(row=tgt_r, column=col).value = row_data[key]
+            updated += 1
+        else:
+            # ── 插入：按目标列头匹配收集数据（跳过列 1） ──
+            tgt_hdr_count = {}
+            col_data = {}
+            for col in range(1, ws_tgt.max_column + 1):
+                h = ws_tgt.cell(row=title_rows, column=col).value
+                if h is not None:
+                    h_str = str(h).strip()
+                    occ = tgt_hdr_count.get(h_str, 0)
+                    tgt_hdr_count[h_str] = occ + 1
+                    if col == 1:
+                        continue
+                    key = (h_str, occ)
+                    if key in row_data:
+                        col_data[col] = row_data[key]
+            new_rows_data.append((inp_id, col_data))
+
+    # ── 批量写入插入行 ──
+    added = len(new_rows_data)
+    if new_rows_data:
+        if has_end:
+            # END → "0"，新行插在 END 后，最后一行变 "END"
+            ws_tgt.cell(row=end_row_at, column=1).value = "0"
+            for col, val in new_rows_data[0][1].items():
+                ws_tgt.cell(row=end_row_at, column=col).value = val
+            for i in range(1, len(new_rows_data)):
+                inp_id, col_data = new_rows_data[i]
+                tgt_r = end_row_at + i
+                col_data[1] = "0" if i < len(new_rows_data) - 1 else "END"
+                for col, val in col_data.items():
+                    ws_tgt.cell(row=tgt_r, column=col).value = val
+        else:
+            after_row = last_continuous_id_row
+            for i, (inp_id, col_data) in enumerate(new_rows_data):
+                col_data[1] = inp_id
+                tgt_r = after_row + 1 + i
+                for col, val in col_data.items():
+                    ws_tgt.cell(row=tgt_r, column=col).value = val
+
+    if added > 0 or updated > 0:
+        put(f"    {ws_in.title}: 新增 {added} 行, 更新 {updated} 行\n")
+    return added, updated
 
 
 # ═══════════════════════════════════════════════════════════

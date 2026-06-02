@@ -1679,6 +1679,12 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **解决方案**：① 前端 `input_paths` → 目录选择器 `input_dir`，`merge_prefixes` 移除；② `arrKeys` 中去掉 `input_paths`；③ 后端改为扫描输入目录根层 xlsx/xlsm，按文件名匹配目标目录，同名才合并（ID 覆盖/追加），不同名跳过
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### fix(wf): 合并表格增量合并——保留 xlsm 结构 + 按列头文字匹配 + 全局 ID 去重
+- **场景**：2026-06-01 合并表格后的 Texts.xlsm 被 Python 2.7 的 xlrd 解析时 `assert tvalue is not None` 崩溃，原因是 `Workbook()` 新建覆盖破坏了原始 xlsm XML 结构；同时合并时未按 ID 去重
+- **根因**：① 用 `openpyxl.Workbook()` 新文件覆盖保存 vs `load_workbook()` 直接修改；② 更新/插入行时按列号索引赋值而非按列头文字匹配；③ 无全局 ID 去重，未处理源表"删除"标记行；④ Phase 0 中调用 `_find_id_col(ws_tgt, ws_in)` 时 `ws_tgt` 未赋值
+- **解决方案**：① `load_workbook(target_path)` 打开目标文件直接修改逐行逐格赋值后 `save()`，保留原始 xlsm 结构；② 按列头 `(h_str, occ)` 元组匹配输入和目标的列位置；③ Phase 0 预扫描所有 sheet 构建 `global_id_sheets` 字典作跨 sheet 去重，跳过第一列值为"删除"的行；④ Phase 0 前从目标文件第一个有效 sheet 读取 `tgt_id_header`，避免未初始化的 `ws_tgt`；⑤ 末尾输出重复 ID 列表
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
 ### fix(cmp): 对比模式下 ::SC:: 列在某些 sheet 为空——标题行扫描提前 break 遗漏 SC 列头
 - **场景**：2026-06-01 Texts.xlsm 对比结果中 ::SC:: 列在不同 sheet 混合出现空值
 - **根因**：`_parse_excel_lxml` 的标题行扫描有三个分支：`is_numeric_id_col` 分支只找 ID 列就 `break`，未扫描其余列头；`if global_id_col` 分支填充映射但不检测 SC 列头。两者都导致 `found_sc_hdr=None`，后续行扫描时 `cell_vals.get(found_sc_hdr, "")` 永远返回空字符串

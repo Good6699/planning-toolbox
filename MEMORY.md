@@ -102,6 +102,18 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 - **解决方案**：在 `_auto_patch_version` 中增加进位逻辑：`patch >= 100 → patch=0, minor+=1`；`minor >= 100 → minor=0, major+=1`。保持语义化版本号整洁
 - **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)
 
+### export_text 工作流步骤重构——工具自动检测 + svn update + lock + 上传
+- **场景**：导出文字表工作流原先需要手动配置工具目录和语言列表，导出前后没有自动的 SVN 操作
+- **根因**：旧版弹窗有 3 个字段（主文件路径、工具目录、语言列表），后端从 tools 读取路径。用户每次配置都需要手动填两个 bat 路径，费时且容易出错。导出前也没有 svn update 和锁定的环节
+- **解决方案**：弹窗精简为 2 个字段（主文件路径 + 上传SVN目录）。工具路径自动从主文件同目录检测两个 bat 文件；导出前自动 svn update + svn lock，导出后自动打开 TortoiseSVN 提交对话框。全部使用现有函数（`_svn_update_with_cleanup`/`_exec_lock_svn`/`_exec_upload_svn`）组合
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)，[index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
+### upload_svn_dir 为逗号分隔路径时需用数组字段存储
+- **场景**：用户配置导出文字表的上传SVN目录为两个路径（"H:\D3_EA\Client\Assets\StreamingAssets, H:\D3_EA\gameData"），保存后所有 svn update/lock/上传全部跳过了
+- **根因**：`upload_svn_dir` 按字符串存储，但 `_wfModalDoSave` 的 `arrKeys` 列表中不包含 `upload_svn_dir`，所以保存为单字符串。后端用 `os.path.isdir(整串含逗号)` 判断 → 无效 → 全部跳过
+- **解决方案**：前端将 `upload_svn_dir` 加入 `arrKeys` 数组字段列表，保存时自动按逗号拆分为数组。后端 `_exec_export_text` 遍历数组逐一 svn update，并添加 `isinstance(str)` 兼容旧版字符串格式
+- **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)，[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
 ### SSE 错误日志不滚动：DocumentFragment children 在 append 后变空
 - **场景**：工作流执行报错（翻译文件不存在），后端已推送 `❌ 步骤执行失败` 错误日志，但前端不滚动到日志区域，用户看不到错误
 - **根因**：`_logFlush()` 中用 `DocumentFragment` 收集日志行，`frag.appendChild(div)` 后 `frag.children` 有内容，但调用 `_logAppend(logEl, frag)` 后 **frag 的 children 被移入 DOM 变为空**，紧接着的 `for (const c of frag.children)` 循环永远执行 0 次，`_focusAppOnError()` 永不触发。以下所有修复均因此失效：① ❌ 字符检测 + ② block:end + ③ .content 滚动

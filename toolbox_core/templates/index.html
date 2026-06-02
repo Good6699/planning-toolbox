@@ -423,18 +423,15 @@ input::placeholder,textarea::placeholder{
   height:auto;
   max-height:none;
   min-height:60px;
-  display:flex;
-  flex-direction:column;
+  overflow-y:auto;
 }
 .wf-layout .wf-log-section{
-  flex:1;
   display:flex;
   flex-direction:column;
 }
 .wf-layout .wf-log-body{
-  flex:1;
   height:auto;
-  min-height:60px;
+  min-height:40px;
 }
 .wf-tree{
   display:flex;
@@ -2269,7 +2266,7 @@ function buildWorkflowTab(panel) {
     modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
       const key = inp.dataset.key;
       if (!key) return;
-      const arrKeys = ["tools","dirs","file_paths","update_dirs","exclude_paths"];
+      const arrKeys = ["tools","dirs","file_paths","update_dirs","exclude_paths","upload_svn_dir"];
       if (arrKeys.includes(key)) {
         step[key] = inp.value.split(",").map(s => s.trim()).filter(Boolean);
       } else {
@@ -2310,8 +2307,7 @@ function buildWorkflowTab(panel) {
     const m = {
       export_text: `
         ${_fb("主文件路径","input_file","wf_m_input_file","file")}
-        <div class="form-group"><label>工具目录（逗号分隔多个）</label><input type="text" class="wf-modal-input" id="wf_m_tools" data-key="tools" value="${v("tools")}" placeholder="多个路径用,分隔"></div>
-        <div class="form-group"><label>语言列表</label><input type="text" class="wf-modal-input" id="wf_m_lang" data-key="lang_codes" value="${v("lang_codes")}" placeholder="zh,en,ja"></div>`,
+        ${_fb("上传SVN目录","upload_svn_dir","wf_m_upload_svn_dir","dir")}`,
       upload_svn: `
         <div class="form-group"><label>源目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_dirs" data-key="dirs" value="${v("dirs")}" placeholder="多个目录用,分隔"></div>`,
       merge_table: `

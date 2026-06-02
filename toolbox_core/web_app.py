@@ -907,15 +907,45 @@ def api_workflow_run():
 
 def _exec_export_text(step, put, task_id=None):
     input_file = step.get("input_file", "").strip()
-    tools = step.get("tools", [])
     if input_file and not os.path.exists(input_file):
         put(f"输入文件无效: {input_file}\n")
         return False
-    if not tools:
-        put("未配置工具，跳过\n")
-        return True
+
+    input_dir = os.path.dirname(input_file) if input_file else ""
     put(f"输入文件: {os.path.basename(input_file) if input_file else 'N/A'}\n")
-    put(f"使用 {len(tools)} 个工具并行执行...\n")
+
+    bat_dir = input_dir
+    bat_names = ["服务器文字表导出_替换文本引用.bat", "客户端文字表导出_替换文本引用.bat"]
+    found_tools = []
+    for name in bat_names:
+        p = os.path.join(bat_dir, name)
+        if os.path.isfile(p):
+            found_tools.append(p)
+            put(f"  发现工具: {name}\n")
+        else:
+            put(f"  未找到: {name}\n")
+
+    if not found_tools:
+        put("没有可执行的导出工具\n")
+        return True
+
+    svn = _get_svn_path()
+    upload_svn_dirs = step.get("upload_svn_dir", [])
+    if isinstance(upload_svn_dirs, str):
+        upload_svn_dirs = [d.strip() for d in upload_svn_dirs.split(",") if d.strip()]
+    for d in upload_svn_dirs:
+        d = d.strip()
+        if d and os.path.isdir(d):
+            put(f"正在更新上传目录: {d}\n")
+            _svn_update_with_cleanup(svn, d, put, task_id)
+        elif d:
+            put(f"上传SVN目录无效: {d}\n")
+
+    if input_file and os.path.isfile(input_file):
+        put(f"正在锁定主文件: {os.path.basename(input_file)}\n")
+        _exec_lock_svn({"target_path": input_file, "lock_msg": "导出文字表前锁定", "update_dirs": []}, put, task_id)
+
+    put(f"使用 {len(found_tools)} 个工具并行执行...\n")
 
     def _run_one(tool_path):
         put(f"  正在执行: {os.path.basename(tool_path)}\n")
@@ -956,9 +986,14 @@ def _exec_export_text(step, put, task_id=None):
         finally:
             _unregister_proc(proc, task_id)
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(tools)) as executor:
-        futures = [executor.submit(_run_one, t) for t in tools]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(found_tools)) as executor:
+        futures = [executor.submit(_run_one, t) for t in found_tools]
         concurrent.futures.wait(futures)
+
+    # 导出成功后，如果有配置上传SVN目录，执行上传
+    if upload_svn_dirs:
+        put(f"\n导出完成，执行上传\n")
+        _exec_upload_svn({"dirs": upload_svn_dirs}, put, task_id)
 
     return True
 

@@ -1,11 +1,11 @@
 # 策划工具箱知识图谱报告
-生成时间：2026-06-02 14:03
+生成时间：2026-06-02 14:57
 
 ## 概况
-- 项目文件：196 个
-- 图谱节点：1314 个（代码 813，文档 186）
-- 关系边数：1894 条
-- 社区数：327 个
+- 项目文件：198 个
+- 图谱节点：1335 个（代码 817，文档 188）
+- 关系边数：1912 条
+- 社区数：331 个
 
 ## 核心模块（高连接度节点）
 1. **SVNCompareGUI** — 137 条连接
@@ -19,7 +19,7 @@
 9. **_svn_update_with_cleanup()** — 14 条连接
 10. **_run_wf_task()** — 13 条连接
 
-## 代码文件结构（120 个文件）
+## 代码文件结构（122 个文件）
 - **__check.py** — 1 节点
 - **__git.py** — 2 节点
 - **__test.ps1** — 1 节点
@@ -36,6 +36,7 @@
 - **_create_repo.ps1** — 1 节点
 - **_debug_diffs.py** — 2 节点
 - **_debug_gaps.py** — 2 节点
+- **_debug_sc.py** — 3 节点
 - **_debug_xlsm.py** — 2 节点
 - **_do_push.py** — 3 节点
 - **_dump_comparison.py** — 3 节点
@@ -55,6 +56,7 @@
 - **_push_via_api.py** — 3 节点
 - **_rebuild_html.py** — 1 节点
 - **_reencrypt.py** — 2 节点
+- **_sc_diag.py** — 1 节点
 - **_show_version.py** — 1 节点
 - **_squash_worker.py** — 2 节点
 - **_test_bat_popup.py** — 1 节点
@@ -141,7 +143,7 @@
 - **web_app.py** — 66 节点
 - **web_launcher.py** — 2 节点
 
-## 社区分组（Top 25 / 327 个）
+## 社区分组（Top 25 / 331 个）
 ### Community 61
 - 凝聚度：1.0
 - 节点：_build_dist.py, build(), copytree()
@@ -197,6 +199,11 @@
 - 节点：api_update_check(), _cancel_all_tasks(), Kill all running subprocesses (SVN, Upload, Workflow) before update
 - 文件：web_app.py
 
+### Community 68
+- 凝聚度：0.67
+- 节点：_debug_sc.py, cell_text(), col_str()
+- 文件：_debug_sc.py
+
 ### Community 53
 - 凝聚度：0.5
 - 节点：_test_pipeline.py, collect(), get_cache_path(), 验证 流水线+传路径: 1/2/4 worker 并发测试, run_one()
@@ -217,17 +224,17 @@
 - 节点：Phase ABCDE Progressive Skip Optimization, Row-level Fingerprint (Phase C), Structure Fingerprint (Phase A)
 - 文件：svn_compare_optimization_plan.md
 
-### Community 45
+### Community 44
 - 凝聚度：0.48
 - 节点：_get_version(), main(), make_update_zip(), dist_update.py, 读取版本号：优先用工作区的 update_version.py（源码的版本号总是最新的）...
 - 文件：toolbox_core/dist_update.py
 
-### Community 50
+### Community 49
 - 凝聚度：0.4
 - 节点：parse_error_msg.py, parse_bin_entries(), Extract error code + message pairs from ErrorMessage.bin, Read proper LEB128 little-endian variable-length integer, read_leb128()...
 - 文件：parse_error_msg.py
 
-### Community 51
+### Community 50
 - 凝聚度：0.4
 - 节点：quick_excel_diff.py, cell_value(), col_letter(), extract_strings(), p()...
 - 文件：quick_excel_diff.py
@@ -237,44 +244,39 @@
 - 节点：col_letter(), col_str(), log(), parse_lxml_fast(), calamine_verify.py...
 - 文件：tools/calamine_verify.py
 
-### Community 34
+### Community 35
 - 凝聚度：0.39
 - 节点：_theme_preview.py, ThemePreview, ._build_svn_tab(), ._build_translate_tab(), ._build_ui()...
 - 文件：_theme_preview.py
 
-### Community 44
+### Community 43
 - 凝聚度：0.38
 - 节点：apply_via_excel(), _looks_like_excel_number(), xlsm_zipper.py, xlsm_zipper - Apply data changes to .xlsm files via Excel (VBScript).  Strategy:, Serialize a Python value to VBScript literal, safe for VBS string rules....
 - 文件：backup_toolbox_20260509/xlsm_zipper.py
 
-### Community 47
+### Community 48
 - 凝聚度：0.38
 - 节点：apply_via_excel(), _looks_like_excel_number(), xlsm_zipper.py, xlsm_zipper - Apply data changes to .xlsm files via Excel (VBScript).  Strategy:, Serialize a Python value to VBScript literal, safe for VBS string rules....
 - 文件：toolbox_core/xlsm_zipper.py
+
+### Community 51
+- 凝聚度：0.33
+- 节点：_dict_diff_summary(), _format_list_diff(), _get_dict_item_key(), 从 dict 类型的列表项中提取标识键（m_key、fileID、guid 等），用于按身份匹配, 比较两个 dict，返回变更字段的摘要列表...
+- 文件：_merge_analyzer.py
 
 ### Community 42
 - 凝聚度：0.32
 - 节点：copy2 前确保目标文件可写，避免 .meta 等只读/锁定文件覆盖失败, ._copy2_force(), _copy2_force(), _decode_svn_output(), _exec_copy_files()...
 - 文件：web_app.py, backup_toolbox_20260509/svn_compare_gui.py
 
-### Community 46
-- 凝聚度：0.29
-- 节点：_get_byte_cache_dir(), _load_byte_from_cache(), 从字节缓存加载（命中则跳过 SVN 下载），返回 None 表示未命中。     仅查磁盘缓存，不保留内存副本（临时文件已承担存储职责）, 从字节缓存加载（命中则跳过 SVN 下载），返回 None 表示未命中。     仅查磁盘缓存，不保留内存副本（临时文件已承担存储职责）, 下载成功后写入磁盘字节缓存（不保留内存副本）...
-- 文件：svn_oneclick_compare.py, toolbox_core/svn_oneclick_compare.py
-
-### Community 48
-- 凝聚度：0.29
-- 节点：api_merge_analyze(), 语义分析：对勾选的版本做结构化解构，输出 txt 报告, 语义分析：对勾选的版本做结构化解构，输出 txt 报告, 语义分析：对勾选的版本做结构化解构，输出 txt 报告, 语义分析：对勾选的版本做结构化解构，输出 txt 报告...
-- 文件：web_app.py
-
 ## 跨模块连接（你可能不知道的关联）
 - `main()` → `_cmp_task_proc()` [INFERRED]
-- `_compare_prefab_texts_fast()` → `main()` [INFERRED]
 - `_analyze_revision_data()` → `main()` [INFERRED]
 - `analyze_source_url()` → `_merge_analyze_worker()` [INFERRED]
 - `main()` → `_ensure_frozen_config()` [INFERRED]
+- `_cmp_task_proc()` → `main()` [INFERRED]
 
-## 孤立节点（170 个代码节点仅 0-1 条连接）
+## 孤立节点（173 个代码节点仅 0-1 条连接）
 - __check.py (__check.py)
 - __git.py (__git.py)
 - git() (__git.py)
@@ -294,5 +296,5 @@
 - parse_hd() (_debug_diffs.py)
 - _debug_gaps.py (_debug_gaps.py)
 - parse_hd() (_debug_gaps.py)
-- _debug_xlsm.py (_debug_xlsm.py)
-- ... 还有 150 个
+- cell_text() (_debug_sc.py)
+- ... 还有 153 个

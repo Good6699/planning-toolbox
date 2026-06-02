@@ -1673,6 +1673,13 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **关键经验**：弹窗内文件列表复用已有 CSS 类而非新建，保持了视觉统一；桌面端拖拽用 change 事件而不是 input 事件，需同时监听两者
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### fix(cmp): 对比模式下 ::SC:: 列在某些 sheet 为空——标题行扫描提前 break 遗漏 SC 列头
+- **场景**：2026-06-01 Texts.xlsm 对比结果中 ::SC:: 列在不同 sheet 混合出现空值
+- **根因**：`_parse_excel_lxml` 的标题行扫描有三个分支：`is_numeric_id_col` 分支只找 ID 列就 `break`，未扫描其余列头；`if global_id_col` 分支填充映射但不检测 SC 列头。两者都导致 `found_sc_hdr=None`，后续行扫描时 `cell_vals.get(found_sc_hdr, "")` 永远返回空字符串
+- **解决方案**：① `is_numeric_id_col` 分支改为遍历所有列头，检测 `::SC::`/`SubstituteId` 并构建完整 `header_to_col`/`col_to_hdr`；② `if global_id_col` 分支在遍历列头时新增 SC/SubstituteId 检测，更新 `global_sc_hdr`/`global_sub_hdr`
+- **关键经验**：Excel 解析中 ID 列和 SC 列是独立维度，不能因为找到了 ID 列就停止扫描——所有需要在输出列中出现的列头都必须被注册到 `header_to_col` 映射
+- **涉及文件**：[svn_oneclick_compare.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/svn_oneclick_compare.py)
+
 ### fix(update): 在线更新不成功——VBS 启动 bat 后 APP_DIR 路径缺反斜杠
 - **场景**：2026-06-01 点击一键更新后应用重启但版本号没变，文件修改日期未更新。手动关闭 app 再启动→点击更新则正常
 - **根因**：新旧两种操作走的是同一套 bat 逻辑，唯一的区别是 bat 的调用链路完全一致。最终排查发现 Python 端 `os.startfile(vbs)` → VBS → `cmd.exe /c` → bat 的链路在打包后长期运行的 exe 中偶发不可靠。改用 Python 将 `py_app_dir`（`sys.executable` 的父目录）作为第 4 行参数写入 `_update_args.txt`，bat 直接读取此参数替代 `%~dp0..` 推算。修复过程中发现 `start "" "%APP_DIR%%EXE_NAME%"` 拼接路径时 APP_DIR 末尾缺少 `\`，导致报错 `Windows 找不到文件 'F:\策划工具箱策划工具箱.exe'`

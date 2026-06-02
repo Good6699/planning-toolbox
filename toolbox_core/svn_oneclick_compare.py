@@ -1180,17 +1180,29 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                                 _seen_hdrs.add(val)
                                 header_to_col[_key] = col
                                 col_to_hdr[col] = _key
+                                if val == "::SC::" or val in ("SC", "Sc", "sc"):
+                                    found_sc_hdr = val
+                                    global_sc_hdr = val
+                                elif val in ("SubstituteId", "Substitute_ID"):
+                                    found_sub_hdr = val
+                                    global_sub_hdr = val
                     elif is_numeric_id_col:
                         if id_col_index in col_index_map:
                             found_id_col = col_index_map[id_col_index]
-                            for col, cell in header_cells:
-                                if col == found_id_col:
-                                    val = _cell_text(cell, shared_strings)
-                                    if val:
-                                        found_id_hdr = val
-                                        header_to_col[val] = col
-                                        col_to_hdr[col] = val
-                                    break
+                        for col, cell in header_cells:
+                            val = _cell_text(cell, shared_strings)
+                            if not val:
+                                continue
+                            _key = val if val not in _seen_hdrs else f"{val}__{col}"
+                            _seen_hdrs.add(val)
+                            header_to_col[_key] = col
+                            col_to_hdr[col] = _key
+                            if col == found_id_col:
+                                found_id_hdr = _key
+                            if val == "::SC::" or val in ("SC", "Sc", "sc"):
+                                found_sc_hdr = val
+                            elif val in ("SubstituteId", "Substitute_ID"):
+                                found_sub_hdr = val
                     else:
                         for col, cell in header_cells:
                             val = _cell_text(cell, shared_strings)

@@ -380,8 +380,8 @@
     "hash": "6c3556a0e2e284b84f0f30875fc1f0be"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\svn_oneclick_compare.py": {
-    "mtime": 1780380188.3161817,
-    "hash": "5c027fb8ea92f538453974f9279c956a"
+    "mtime": 1780382395.1838467,
+    "hash": "ad82780d1d794d7c9b077ea7e16407df"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\toolbox_config.py": {
     "mtime": 1780192423.1880891,
@@ -396,8 +396,8 @@
     "hash": "9e6780d61dc6473d153f3854c46a6574"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\update_version.py": {
-    "mtime": 1780378614.9920263,
-    "hash": "4e8728d2b7341ce83bd3cfce14c95fa2"
+    "mtime": 1780383168.906797,
+    "hash": "c816be8bf8680320d014e4806153c08d"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\web_app.py": {
     "mtime": 1780375125.5941162,
@@ -411,9 +411,17 @@
     "mtime": 1779338078.8707502,
     "hash": "3fb4b55c5f6e4354479e01e815191245"
   },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\_debug_sc.py": {
+    "mtime": 1780382864.6230707,
+    "hash": "129ba0fa2097a097b80f6cdc4c00ae89"
+  },
   "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\_export_error_code_erl.py": {
     "mtime": 1780098012.281689,
     "hash": "24a4035b53d4de5505b5bf5c06f30b71"
+  },
+  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\_sc_diag.py": {
+    "mtime": 1780383002.9088788,
+    "hash": "b608fce3fdc0eb221a5bc5d79d4abe47"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\_show_version.py": {
     "mtime": 1780234036.8720882,
@@ -500,8 +508,8 @@
     "hash": "509fecabe3d1237a5fe4930a220739db"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\MEMORY.md": {
-    "mtime": 1780378935.506712,
-    "hash": "deecb47d66bdd5008f523371773cc2c8"
+    "mtime": 1780380255.9015172,
+    "hash": "f0f4d333458bdb55a98a9b522871deb7"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\readme.txt": {
     "mtime": 1779956957.1768234,

@@ -274,9 +274,16 @@ def _cell_text(cell, shared_strings):
 
 
 def _load_cmp_file_settings() -> None:
-    """从 GUI 配置文件加载 cmp_file_settings 到全局变量"""
+    """从 GUI 配置文件加载 cmp_file_settings 到全局变量。
+    优先读 APPDATA 的用户配置（打包模式），回退到脚本目录的默认配置。"""
     global _CMP_FILE_SETTINGS
     config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "svn_gui_config.json")
+    # 打包模式下用户配置保存在 APPDATA/planning-toolbox/，优先使用
+    appdata_dir = os.path.join(os.environ.get('APPDATA', ''), 'planning-toolbox')
+    if appdata_dir:
+        appdata_cfg = os.path.join(appdata_dir, "svn_gui_config.json")
+        if os.path.isfile(appdata_cfg):
+            config_file = appdata_cfg
     if not os.path.isfile(config_file):
         return
     try:

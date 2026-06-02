@@ -434,8 +434,8 @@ input::placeholder,textarea::placeholder{
 .wf-layout .wf-log-body{
   flex:1;
   height:auto;
-  max-height:none;
   min-height:60px;
+  max-height:60vh;
 }
 .wf-tree{
   display:flex;
@@ -2270,7 +2270,7 @@ function buildWorkflowTab(panel) {
     modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
       const key = inp.dataset.key;
       if (!key) return;
-      const arrKeys = ["tools","dirs","input_paths","file_paths","update_dirs","exclude_paths"];
+      const arrKeys = ["tools","dirs","file_paths","update_dirs","exclude_paths"];
       if (arrKeys.includes(key)) {
         step[key] = inp.value.split(",").map(s => s.trim()).filter(Boolean);
       } else {
@@ -2316,11 +2316,10 @@ function buildWorkflowTab(panel) {
       upload_svn: `
         <div class="form-group"><label>源目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_dirs" data-key="dirs" value="${v("dirs")}" placeholder="多个目录用,分隔"></div>`,
       merge_table: `
-        <div class="form-group"><label>输入文件（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_input_paths" data-key="input_paths" value="${v("input_paths")}" placeholder="多个文件用,分隔"></div>
+        ${_fb("输入目录","input_dir","wf_m_input_dir","dir")}
         ${_fb("输出目录","target_dir","wf_m_target_dir","dir")}
-        <div class="form-group"><label>合并前缀</label><input type="text" class="wf-modal-input" id="wf_m_prefixes" data-key="merge_prefixes" value="${v("merge_prefixes")}"></div>
-        <div class="form-group"><label>标题行</label><input type="text" class="wf-modal-input" id="wf_m_title_rows" data-key="title_rows" value="${v("title_rows")}"></div>
-        <div class="form-group"><label>ID列</label><input type="text" class="wf-modal-input" id="wf_m_id_col" data-key="id_col" value="${v("id_col")}"></div>`,
+        <div class="form-group"><label>标题行</label><input type="number" class="wf-modal-input" id="wf_m_title_rows" data-key="title_rows" value="${v("title_rows")||config.cmp_title_rows||"1"}" min="1" step="1"></div>
+        <div class="form-group"><label>ID列</label><input type="number" class="wf-modal-input" id="wf_m_id_col" data-key="id_col" value="${v("id_col")||config.cmp_id_col||"1"}" min="1" step="1"></div>`,
       merge_translation: `
         ${_fb("翻译文件","input_file","wf_m_tr_input","file")}
         ${_fb("原始文件","original_file","wf_m_orig_file","file")}

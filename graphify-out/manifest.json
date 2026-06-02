@@ -396,12 +396,12 @@
     "hash": "9e6780d61dc6473d153f3854c46a6574"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\update_version.py": {
-    "mtime": 1780383168.906797,
-    "hash": "c816be8bf8680320d014e4806153c08d"
+    "mtime": 1780388708.3298843,
+    "hash": "d4fd3f97dde6644e10e751ea524a2156"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\web_app.py": {
-    "mtime": 1780375125.5941162,
-    "hash": "2cb3bb92b43d33ab5497d28e7d724a44"
+    "mtime": 1780388311.5778253,
+    "hash": "6cfd2bc823d78bcf0d4c16ae5658b763"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\xlsm_zipper.py": {
     "mtime": 1777558755.0531862,
@@ -411,17 +411,9 @@
     "mtime": 1779338078.8707502,
     "hash": "3fb4b55c5f6e4354479e01e815191245"
   },
-  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\_debug_sc.py": {
-    "mtime": 1780382864.6230707,
-    "hash": "129ba0fa2097a097b80f6cdc4c00ae89"
-  },
   "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\_export_error_code_erl.py": {
     "mtime": 1780098012.281689,
     "hash": "24a4035b53d4de5505b5bf5c06f30b71"
-  },
-  "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\_sc_diag.py": {
-    "mtime": 1780383002.9088788,
-    "hash": "b608fce3fdc0eb221a5bc5d79d4abe47"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\_show_version.py": {
     "mtime": 1780234036.8720882,
@@ -508,8 +500,8 @@
     "hash": "509fecabe3d1237a5fe4930a220739db"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\MEMORY.md": {
-    "mtime": 1780380255.9015172,
-    "hash": "f0f4d333458bdb55a98a9b522871deb7"
+    "mtime": 1780383501.598833,
+    "hash": "b7f6893e25b0884014af91d52cbd1c2a"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\readme.txt": {
     "mtime": 1779956957.1768234,
@@ -784,8 +776,8 @@
     "hash": "e001e269ab59a890fe5fe1df284ac742"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\toolbox_core\\templates\\index.html": {
-    "mtime": 1780377217.7587962,
-    "hash": "2249d52b94de4ff9fb5e610262b94222"
+    "mtime": 1780388261.8623044,
+    "hash": "3cada35c937374bcff2f9484a9a2f2b9"
   },
   "C:\\Users\\admin\\.qclaw\\workspace\\tools\\calamine_verify_result.txt": {
     "mtime": 1778576010.684816,

@@ -1821,8 +1821,125 @@ def _exec_merge_translation(step, put):  # noqa: C901
 
 
 def _exec_merge_table(step, put):
-    put("合并表格功能请使用桌面版\n")
-    return True
+    from toolbox_config import load_config
+    cfg = load_config()
+    input_dir = (step.get("input_dir") or "").strip()
+    target_dir = (step.get("target_dir") or "").strip()
+    title_rows = int(step.get("title_rows") or cfg.get("cmp_title_rows") or "1")
+    id_col = int(step.get("id_col") or cfg.get("cmp_id_col") or "1")
+
+    if not input_dir or not os.path.isdir(input_dir):
+        put(f"输入目录无效: {input_dir}\n")
+        return False
+
+    if not target_dir or not os.path.isdir(target_dir):
+        put(f"目标目录无效: {target_dir}\n")
+        return False
+
+    import openpyxl
+
+    excel_ext = (".xlsx", ".xlsm")
+    src_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir)
+                 if f.lower().endswith(excel_ext) and os.path.isfile(os.path.join(input_dir, f))]
+    src_files.sort()
+    if not src_files:
+        put(f"输入目录下没有 Excel 文件: {input_dir}\n")
+        return True
+
+    put(f"输入目录: {input_dir} ({len(src_files)} 个 Excel)\n")
+    put(f"目标目录: {target_dir}\n\n")
+
+    id_col_idx = id_col - 1
+    merged = skipped = failed = 0
+
+    for src_path in src_files:
+        fname = os.path.basename(src_path)
+        target_path = os.path.join(target_dir, fname)
+
+        if not os.path.isfile(target_path):
+            put(f"⏭ 跳过(目标无同名文件): {fname}\n")
+            skipped += 1
+            continue
+
+        put(f"{'='*50}\n")
+        put(f"处理: {fname}\n")
+
+        # 读取输入文件
+        try:
+            wb_in = openpyxl.load_workbook(src_path, read_only=True, data_only=True)
+            ws_in = wb_in.active
+            in_rows = list(ws_in.iter_rows(values_only=True))
+            wb_in.close()
+        except Exception as e:
+            put(f"✗ 读取输入失败: {e}\n")
+            failed += 1
+            continue
+
+        if not in_rows:
+            put(f"⚠ 空文件\n")
+            skipped += 1
+            continue
+
+        header_row_idx = title_rows - 1
+        if header_row_idx >= len(in_rows):
+            put(f"⚠ 标题行超出范围\n")
+            skipped += 1
+            continue
+
+        headers = [str(c) if c is not None else "" for c in in_rows[header_row_idx]]
+
+        # 读取目标文件
+        target_data = {}
+        try:
+            wb_tgt = openpyxl.load_workbook(target_path, data_only=True)
+            ws_tgt = wb_tgt.active
+            tgt_rows = list(ws_tgt.iter_rows(values_only=True))
+            wb_tgt.close()
+
+            if tgt_rows and len(tgt_rows) > header_row_idx:
+                tgt_headers = [str(c) if c is not None else "" for c in tgt_rows[header_row_idx]]
+                for ci_t, h_t in enumerate(tgt_headers):
+                    if h_t and h_t not in headers:
+                        headers.append(h_t)
+
+                for row in tgt_rows[title_rows:]:
+                    vals = [str(c) if c is not None else "" for c in row]
+                    if id_col_idx < len(vals):
+                        sid = vals[id_col_idx].strip()
+                        if sid and sid not in ("::ID::", "ID"):
+                            target_data[sid] = {tgt_headers[i]: vals[i] for i in range(len(tgt_headers)) if i < len(vals)}
+            put(f"  目标文件: {len(target_data)} 行\n")
+        except Exception as e:
+            put(f"  ⚠ 目标文件读取失败, 按空文件处理: {e}\n")
+
+        # 合并：输入数据覆盖/追加
+        input_count = 0
+        for row in in_rows[title_rows:]:
+            vals = [str(c) if c is not None else "" for c in row]
+            if id_col_idx < len(vals):
+                sid = vals[id_col_idx].strip()
+                if sid and sid not in ("::ID::", "ID"):
+                    target_data[sid] = {headers[i]: vals[i] for i in range(len(headers)) if i < len(vals)}
+                    input_count += 1
+
+        # 写回
+        wb_out = openpyxl.Workbook()
+        ws_out = wb_out.active
+        ws_out.title = os.path.splitext(fname)[0] or "Sheet1"
+
+        ws_out.append(headers)
+        for sid in sorted(target_data.keys(), key=lambda x: (x.partition("_")[0].isalpha(), int("".join(c for c in x if c.isdigit()) or 0) if any(c.isdigit() for c in x) else 0)):
+            rec = target_data[sid]
+            ws_out.append([rec.get(h, "") for h in headers])
+
+        wb_out.save(target_path)
+        wb_out.close()
+        merged += 1
+        put(f"✓ 合并完成: {len(target_data)} 行 (输入 {input_count} 行)\n")
+
+    put(f"\n── 合并完成: {merged} 成功, {skipped} 跳过(无同名), {failed} 失败 ──\n")
+    return failed == 0
+
 
 # ═══════════════════════════════════════════════════════════
 # 语言ID映射 API

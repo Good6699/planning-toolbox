@@ -1673,6 +1673,12 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **关键经验**：弹窗内文件列表复用已有 CSS 类而非新建，保持了视觉统一；桌面端拖拽用 change 事件而不是 input 事件，需同时监听两者
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### fix(wf): 工作流合并表格步骤重写——从文件列表改为目录扫描+同名文件匹配合并
+- **场景**：2026-06-01 合并表格工作流报错 `'list' object has no attribute 'strip'`，且旧方案（文件列表+共同父目录）无法处理输入是目录的场景
+- **根因**：① `_wfModalDoSave` 将 `input_paths` 按数组保存（arrKeys），后端 `step.get("input_paths", "").strip()` 对列表调用 `.strip()` 报错；② 共同父目录算法要求文件必须有共同根路径，目录+文件混合场景无法计算
+- **解决方案**：① 前端 `input_paths` → 目录选择器 `input_dir`，`merge_prefixes` 移除；② `arrKeys` 中去掉 `input_paths`；③ 后端改为扫描输入目录根层 xlsx/xlsm，按文件名匹配目标目录，同名才合并（ID 覆盖/追加），不同名跳过
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
 ### fix(cmp): 对比模式下 ::SC:: 列在某些 sheet 为空——标题行扫描提前 break 遗漏 SC 列头
 - **场景**：2026-06-01 Texts.xlsm 对比结果中 ::SC:: 列在不同 sheet 混合出现空值
 - **根因**：`_parse_excel_lxml` 的标题行扫描有三个分支：`is_numeric_id_col` 分支只找 ID 列就 `break`，未扫描其余列头；`if global_id_col` 分支填充映射但不检测 SC 列头。两者都导致 `found_sc_hdr=None`，后续行扫描时 `cell_vals.get(found_sc_hdr, "")` 永远返回空字符串

@@ -1156,6 +1156,12 @@ while (true):
 - **关键教训**：① `--noconsole` 下子进程启动必须使用 `os.startfile`（ShellExecute），`subprocess.Popen` 系列全部靠不住；② Windows bat 文件存在中文必须用 GBK/ANSI 编码保存或者纯 ASCII，UTF-8 必定在 GBK 系统上解析失败；③ `for /f type` 读取文件不受 `chcp` 影响，永远走系统默认编码，必须与写入编码一致；④ 更新链路涉及 4 个独立环节（版本检测、URL 编码、bat 启动、文件覆盖），每个环节分别调试不可靠，最好一次性完整模拟
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[_updater.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/_updater.bat)
 
+### fix(wf): 工作流 copy_files 步骤目标路径缺少 src_dir 的 basename
+- **场景**：2026-06-01 工作流 copy_files 步骤执行后文件复制到了 `tgt_dir/Texts.xlsm`，但期望是 `tgt_dir/Text/Texts.xlsm`（保留源目录的 basename）
+- **根因**：`_exec_copy_files` 中 `rel = os.path.relpath(sp, src_dir)` 算出的相对路径不包含源目录本身的 basename，文件被拍到目标根目录
+- **解决方案**：新增 `dst_base = os.path.join(tgt_dir, os.path.basename(src_dir.rstrip("\\/")))`，文件和文件夹的目标路径都基于 `dst_base` 而非 `tgt_dir` 计算
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
 ### bat 文件中的 UTF-8 中文在 cmd.exe 下乱码
 - **场景**：双击 bat，输出全部变成乱码，命令解析失败（'寘' 不是内部或外部命令）；中文显示为 `????????`
 - **根因**：cmd.exe 默认代码页是 GBK（936），bat 文件保存为 UTF-8 时中文会被错误解码。即使 `chcp 65001` 也无法完全避免

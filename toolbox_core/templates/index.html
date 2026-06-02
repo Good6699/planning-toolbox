@@ -2428,7 +2428,7 @@ function buildWorkflowTab(panel) {
       return;
     }
     container.innerHTML = _wfCfEntries.map((f, i) =>
-      `<div class="file-item ${f._sel?'selected':''}" data-idx="${i}" onclick="_wfCfToggle(${i})">
+      `<div class="file-item ${f._sel?'selected':''}" data-idx="${i}">
         <input type="checkbox" ${f._sel?'checked':''}>
         <div style="flex:1">${f.is_dir?'📁':'📄'} ${escapeHtml(f.name)}</div>
         <div style="color:var(--dim);font-size:0.8125rem">${f.size} ${f.date||''}</div>
@@ -2438,6 +2438,7 @@ function buildWorkflowTab(panel) {
   }
 
   function _wfCfToggle(i) {
+    if (i < 0 || i >= _wfCfEntries.length) return;
     _wfCfEntries[i]._sel = !_wfCfEntries[i]._sel;
     _wfCfRender();
   }
@@ -2481,6 +2482,16 @@ function buildWorkflowTab(panel) {
         };
         src.addEventListener("input", _cfRefreshDebounced);
         src.addEventListener("change", _cfRefreshDebounced);
+      }
+      const fileList = document.getElementById("wf_cf_file_list");
+      if (fileList) {
+        fileList.addEventListener("click", (e) => {
+          const item = e.target.closest(".file-item");
+          if (!item) return;
+          if (e.target.matches("input[type=checkbox]")) return;
+          const idx = Number(item.dataset.idx);
+          if (!isNaN(idx)) _wfCfToggle(idx);
+        });
       }
     }
   }

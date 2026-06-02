@@ -1046,21 +1046,25 @@ def _exec_copy_files(step, put, task_id=None):
             put(f"✗ 路径不存在: {sp}\n")
             fail += 1
             continue
+        rel = os.path.relpath(sp, src_dir)
+        dst_base = os.path.join(tgt_dir, os.path.basename(src_dir.rstrip("\\/")))
         try:
             if is_dir:
-                target_dir = os.path.join(tgt_dir, name)
+                target_dir = os.path.join(dst_base, rel)
                 if os.path.isdir(target_dir):
-                    put(f"📂 {name}/ 合并到目标目录...\n")
+                    put(f"📂 {rel}/ 合并到目标目录...\n")
+                os.makedirs(target_dir, exist_ok=True)
                 shutil.copytree(sp, target_dir, dirs_exist_ok=True, copy_function=_copy2_force)
-                put(f"✓ {name}/ 文件夹已复制\n")
+                put(f"✓ {rel}/ 文件夹已复制\n")
             else:
-                dst = os.path.join(tgt_dir, name)
+                dst = os.path.join(dst_base, rel)
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
                 _copy2_force(sp, dst)
-                put(f"✓ {name}\n")
+                put(f"✓ {rel}\n")
             success += 1
         except Exception as e:
             fail += 1
-            put(f"✗ {name}: {e}\n")
+            put(f"✗ {rel}: {e}\n")
 
     put(f"\n── 复制完成: {success} 成功, {fail} 失败 ──\n")
     return fail == 0

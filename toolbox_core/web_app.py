@@ -96,6 +96,21 @@ _active_tasks = {}
 _cancelled_tasks = set()
 
 
+def _cancel_all_tasks():
+    """Kill all running subprocesses (SVN, Upload, Workflow) before update"""
+    count = 0
+    for proc in list(_active_subprocesses):
+        try:
+            proc.kill()
+            proc.wait(timeout=5)
+            count += 1
+        except Exception:
+            pass
+    _active_tasks.clear()
+    _active_subprocesses.clear()
+    return count
+
+
 def _register_proc(proc, task_id=None):
     _active_subprocesses.append(proc)
     if task_id:
@@ -2900,6 +2915,7 @@ def api_update_check():
         "error": None,
     }
     try:
+        _cancel_all_tasks()
         ver_url = UPDATE_URL.rstrip("/") + "/version.json"
         resp = urllib.request.urlopen(ver_url, timeout=5)
         remote = _json.loads(resp.read().decode("utf-8"))
@@ -2952,12 +2968,15 @@ def api_update_apply():
         if not os.path.isfile(updater):
             return jsonify({"ok": False, "error": "未找到更新器脚本 _updater.bat"}), 500
 
-        # 参数通过文件传递，用 GBK 编码写入（cmd for /f type 仅支持系统默认编码）
         import locale
         app_name = zip_name.rsplit("_v", 1)[0] if "_v" in zip_name else "策划工具箱"
+        if getattr(sys, 'frozen', False):
+            py_app_dir = os.path.dirname(sys.executable)
+        else:
+            py_app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         args_file = os.path.join(os.path.dirname(updater), "_update_args.txt")
         with open(args_file, "w", encoding=locale.getpreferredencoding()) as f:
-            f.write(f"{zip_path}\n{tmp_dir}\n{app_name}\n")
+            f.write(f"{zip_path}\n{tmp_dir}\n{app_name}\n{py_app_dir}\n")
         vbs_path = os.path.join(tmp_dir, "run_update.vbs")
         with open(vbs_path, "w") as f:
             f.write(f'CreateObject("WScript.Shell").Run "cmd.exe /c ""{updater}""", 0, False\n')

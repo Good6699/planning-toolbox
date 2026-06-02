@@ -1656,3 +1656,13 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **关键经验**：弹窗内文件列表复用已有 CSS 类而非新建，保持了视觉统一；桌面端拖拽用 change 事件而不是 input 事件，需同时监听两者
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### fix(update): 在线更新不成功——VBS 启动 bat 后 APP_DIR 路径缺反斜杠
+- **场景**：2026-06-01 点击一键更新后应用重启但版本号没变，文件修改日期未更新。手动关闭 app 再启动→点击更新则正常
+- **根因**：新旧两种操作走的是同一套 bat 逻辑，唯一的区别是 bat 的调用链路完全一致。最终排查发现 Python 端 `os.startfile(vbs)` → VBS → `cmd.exe /c` → bat 的链路在打包后长期运行的 exe 中偶发不可靠。改用 Python 将 `py_app_dir`（`sys.executable` 的父目录）作为第 4 行参数写入 `_update_args.txt`，bat 直接读取此参数替代 `%~dp0..` 推算。修复过程中发现 `start "" "%APP_DIR%%EXE_NAME%"` 拼接路径时 APP_DIR 末尾缺少 `\`，导致报错 `Windows 找不到文件 'F:\策划工具箱策划工具箱.exe'`
+- **解决方案**：
+  1. Python 侧 `api_update_apply`：用 `sys.executable` 计算 `py_app_dir`，写入 `_update_args.txt` 第 4 行
+  2. bat 侧：读取第 4 行作为 APP_DIR，末尾补反斜杠 `if not "!APP_DIR:~-1!"=="\" set APP_DIR=!APP_DIR!\`
+  3. bat 侧加调试日志 `_update_debug.txt`，记录每一步路径和退出码
+- **关键经验**：① bat 中路径拼接不能假设 APP_DIR 末尾有无 `\`，必须显式补全；② `%~dp0..` 在 VBS 启动的 cmd.exe 中解析行为偶发不稳定，用 Python `sys.executable` 硬编码传参更可靠；③ 调试日志只写一次不循环追加，避免被前期测试残留污染
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[_updater.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/_updater.bat)
+

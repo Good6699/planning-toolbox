@@ -476,6 +476,7 @@ def _start_flask():
     from web_app import app
     import web_app as _wa
     _wa._on_notification_click = lambda: _show_window(None, None)
+    _wa._quit_app_callback = _quit_app
     from werkzeug.serving import make_server
     _flask_server = make_server("127.0.0.1", 18123, app, threaded=True)
     _flask_server.serve_forever()
@@ -506,6 +507,11 @@ def _show_window(icon, item=None):
             _window_visible = True
     except Exception:
         pass
+    try:
+        for w in webview.windows:
+            w.evaluate_js("triggerUpdateCheck()")
+    except Exception:
+        pass
     if hwnd:
         if _docker and _docker.docked:
             _undock_and_center(hwnd)
@@ -524,6 +530,7 @@ def _quit_app():
             win32gui.PostMessage(_tray_icon, win32con.WM_CLOSE, 0, 0)
         except Exception:
             pass
+    os._exit(0)
 
 
 def _stop_flask():

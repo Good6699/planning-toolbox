@@ -399,8 +399,43 @@ input::placeholder,textarea::placeholder{
 .wf-rv-check input[type="checkbox"]:checked::after{content:"✓";color:#fff;font-size:18px;line-height:1;position:static;width:auto;height:auto;border:none;transform:none}
 .wf-layout{
   display:flex;
-  flex-direction:column;
+  flex-direction:row;
   gap:16px;
+  align-items:stretch;
+}
+.wf-layout > .card{
+  flex:1;
+  min-width:0;
+}
+.wf-layout .wf-log-wrap{
+  width:460px;
+  flex-shrink:0;
+  display:flex;
+  flex-direction:column;
+}
+.wf-layout .wf-log-wrap > .card{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+}
+.wf-layout #wf_log{
+  flex:1;
+  height:auto;
+  max-height:none;
+  min-height:60px;
+  display:flex;
+  flex-direction:column;
+}
+.wf-layout .wf-log-section{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+}
+.wf-layout .wf-log-body{
+  flex:1;
+  height:auto;
+  max-height:none;
+  min-height:60px;
 }
 .wf-tree{
   display:flex;
@@ -1254,7 +1289,13 @@ input::placeholder,textarea::placeholder{
     grid-template-columns:1fr;
   }
   .wf-layout{
-    grid-template-columns:1fr;
+    flex-direction:column;
+  }
+  .wf-layout .wf-log-wrap{
+    width:auto;
+  }
+  .wf-layout > .card{
+    flex:none;
   }
 }
 @media (max-width:900px){

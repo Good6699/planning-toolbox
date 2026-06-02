@@ -1156,6 +1156,11 @@ while (true):
 - **关键教训**：① `--noconsole` 下子进程启动必须使用 `os.startfile`（ShellExecute），`subprocess.Popen` 系列全部靠不住；② Windows bat 文件存在中文必须用 GBK/ANSI 编码保存或者纯 ASCII，UTF-8 必定在 GBK 系统上解析失败；③ `for /f type` 读取文件不受 `chcp` 影响，永远走系统默认编码，必须与写入编码一致；④ 更新链路涉及 4 个独立环节（版本检测、URL 编码、bat 启动、文件覆盖），每个环节分别调试不可靠，最好一次性完整模拟
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[_updater.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/_updater.bat)
 
+### feat(ui): 工作流页面左右排版 + 日志区等高 + 恢复窗口时触发更新检测
+- **场景**：2026-06-01 ① 工作流日志在底部不方便阅读，改为左侧列表+右侧日志的左右布局；② 日志高度需与左侧列表收缩时的高度一致；③ 从托盘恢复窗口时检查更新
+- **解决方案**：① `.wf-layout` 改为 `flex-direction:row`，日志区 `width:460px; flex-shrink:0`，列表 `flex:1`，`≤1200px` 断点恢复上下；② 通过 `align-items:stretch` + flex 链使日志 body 填满右侧高度；③ `_show_window()` 中调用 `evaluate_js("triggerUpdateCheck()")`，前端已有已显示则跳过逻辑
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)、[desktop_main.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/desktop_main.py)
+
 ### fix(wf): 工作流 copy_files 步骤目标路径缺少 src_dir 的 basename
 - **场景**：2026-06-01 工作流 copy_files 步骤执行后文件复制到了 `tgt_dir/Texts.xlsm`，但期望是 `tgt_dir/Text/Texts.xlsm`（保留源目录的 basename）
 - **根因**：`_exec_copy_files` 中 `rel = os.path.relpath(sp, src_dir)` 算出的相对路径不包含源目录本身的 basename，文件被拍到目标根目录

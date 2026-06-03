@@ -1758,6 +1758,12 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **解决方案**：`_wfModalAutoSave()` 内联保存逻辑（读取表单→写入 step→saveConfig→更新侧边栏名称），去除 `overlay.classList.remove("show")`、不清除 `_modalCtx`、不弹 toast。手动保存按钮行为不变（保存+关闭）
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### fix(wf): work 流日志区域不撑满卡片——.log 通用规则的 max-height 覆盖了 flex:1
+- **场景**：2026-06-03 修复 flex:1 后日志区域仍不撑满卡片，高度锁死在 320px
+- **根因**：`.log` 类（`#wf_log` 的 class）有 `height:320px; max-height:320px`，而 `.wf-layout #wf_log` 虽然加了 `flex:1` 但没有 `max-height:none` 覆盖，浏览器优先应用更具体的 `max-height:320px`。同样 `.wf-log-body` 的通用规则也有 `max-height:320px`
+- **解决方案**：在 `.wf-layout #wf_log` 和 `.wf-layout .wf-log-body` 中各加 `max-height:none`，覆盖通用规则的 320px 限制
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
 ### fix(update): 在线更新不成功——VBS 启动 bat 后 APP_DIR 路径缺反斜杠
 - **场景**：2026-06-01 点击一键更新后应用重启但版本号没变，文件修改日期未更新。手动关闭 app 再启动→点击更新则正常
 - **根因**：新旧两种操作走的是同一套 bat 逻辑，唯一的区别是 bat 的调用链路完全一致。最终排查发现 Python 端 `os.startfile(vbs)` → VBS → `cmd.exe /c` → bat 的链路在打包后长期运行的 exe 中偶发不可靠。改用 Python 将 `py_app_dir`（`sys.executable` 的父目录）作为第 4 行参数写入 `_update_args.txt`，bat 直接读取此参数替代 `%~dp0..` 推算。修复过程中发现 `start "" "%APP_DIR%%EXE_NAME%"` 拼接路径时 APP_DIR 末尾缺少 `\`，导致报错 `Windows 找不到文件 'F:\策划工具箱策划工具箱.exe'`

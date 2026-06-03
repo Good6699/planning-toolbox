@@ -418,6 +418,8 @@ input::placeholder,textarea::placeholder{
 .wf-layout > .card{
   flex:1;
   min-width:0;
+  min-height:0;
+  overflow-y:auto;
 }
 .wf-layout .wf-log-wrap{
   width:460px;
@@ -542,6 +544,7 @@ input::placeholder,textarea::placeholder{
   border-radius:6px;color:var(--accent);
   cursor:pointer;font-size:12px;
   transition:.15s;flex-shrink:0;
+  margin-left:auto;
   padding:0;line-height:1;
 }
 .wf-copy-btn:hover{
@@ -971,7 +974,7 @@ input::placeholder,textarea::placeholder{
 .svn-main,
 .upload-main,
 .tr-main{
-  align-self:start;
+  align-self:stretch;
   display:flex;
   flex-direction:column;
   gap:16px;
@@ -983,6 +986,13 @@ input::placeholder,textarea::placeholder{
   display:flex;
   flex-direction:column;
   gap:16px;
+}
+.upload-files-wrap{
+  grid-column:1 / -1;
+}
+.upload-main>.card{
+  flex:1;
+  min-height:0;
 }
 .svn-side>.card,
 .upload-side>.card,
@@ -1877,16 +1887,6 @@ function buildUploadTab(panel) {
             <button class="btn btn-normal" data-action="refresh-files" title="刷新文件列表"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115.4-5.6L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15.4 5.6L3 16"/></svg></button>
           </div>
         </div>
-        <div class="card">
-          <div class="card-header compact">
-            <div class="card-title">文件列表</div>
-            <div class="flex-row">
-              <button class="btn btn-normal btn-sm" data-action="select-all">全选</button>
-              <button class="btn btn-normal btn-sm" data-action="select-none">取消全选</button>
-            </div>
-          </div>
-          <div class="file-list" id="upload_files"></div>
-        </div>
       </div>
       <div class="upload-side">
         <div class="card">
@@ -1898,6 +1898,18 @@ function buildUploadTab(panel) {
               <button class="btn btn-normal" data-action="browse-upload-tgt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
             </div>
           </div>
+        </div>
+      </div>
+      <div class="upload-files-wrap">
+        <div class="card">
+          <div class="card-header compact">
+            <div class="card-title">文件列表</div>
+            <div class="flex-row">
+              <button class="btn btn-normal btn-sm" data-action="select-all">全选</button>
+              <button class="btn btn-normal btn-sm" data-action="select-none">取消全选</button>
+            </div>
+          </div>
+          <div class="file-list" id="upload_files"></div>
         </div>
       </div>
       <div class="action-center">
@@ -2070,9 +2082,25 @@ function buildWorkflowTab(panel) {
       const wfIdx = Number(el.dataset.idx);
       const orig = JSON.parse(JSON.stringify(config.workflows[wfIdx]));
       orig.name = (orig.name||"工作流") + " (副本)";
-      config.workflows.splice(wfIdx+1, 0, orig);
-      saveConfig({workflows:config.workflows});
-      _wfRebuild();
+      const steps = orig.steps || [];
+      const prefixes = _wfDetectPrefixes(steps);
+      if (!prefixes.length) {
+        config.workflows.splice(wfIdx+1, 0, orig);
+        saveConfig({workflows:config.workflows});
+        _wfRebuild();
+        return;
+      }
+      _wfShowPrefixModal(prefixes, (map) => {
+        if (!map) return;
+        if (Object.keys(map).length) {
+          Object.entries(map).forEach(([oldP, newP]) => {
+            orig.steps = _wfReplacePrefixes(orig.steps, oldP, newP);
+          });
+        }
+        config.workflows.splice(wfIdx+1, 0, orig);
+        saveConfig({workflows:config.workflows});
+        _wfRebuild();
+      });
     });
     const addItem = el.querySelector(".wf-add-step-item");
     addItem.addEventListener("mousedown", (e) => e.stopPropagation());
@@ -2603,6 +2631,69 @@ function buildWorkflowTab(panel) {
 let _wfSortables = [];
 let _wfHistoryDd = null;
 let _wfExpandedIdx = -1;
+function _wfDetectPrefixes(steps) {
+  const prefixes = new Set();
+  const SKIP_KEYS = new Set(["name","type","lock_msg","lang_codes","merge_mode"]);
+  function walk(v) {
+    if (typeof v === "string" && /^[A-Za-z]:\\/.test(v)) {
+      const m = v.match(/^(.+?)\\(?:gameData|Client)(?:\\|$)/i);
+      if (m) prefixes.add(m[1]);
+    } else if (Array.isArray(v)) {
+      v.forEach(walk);
+    } else if (v && typeof v === "object") {
+      for (const [key, val] of Object.entries(v)) {
+        if (!SKIP_KEYS.has(key)) walk(val);
+      }
+    }
+  }
+  (steps||[]).forEach(walk);
+  return [...prefixes].sort();
+}
+function _wfReplacePrefixes(obj, oldP, newP) {
+  if (typeof obj === "string") {
+    if (obj === oldP || obj.startsWith(oldP + "\\")) return newP + obj.substring(oldP.length);
+    return obj;
+  }
+  if (Array.isArray(obj)) return obj.map(v => _wfReplacePrefixes(v, oldP, newP));
+  if (obj && typeof obj === "object") {
+    const r = {};
+    for (const [k, v] of Object.entries(obj)) r[k] = _wfReplacePrefixes(v, oldP, newP);
+    return r;
+  }
+  return obj;
+}
+function _wfShowPrefixModal(prefixes, onConfirm) {
+  const overlay = document.createElement("div");
+  overlay.className = "wf-modal-overlay";
+  overlay.style.display = "flex";
+  overlay.innerHTML = `<div class="wf-modal" style="max-width:560px">
+    <div class="wf-modal-header"><h3>路径前缀替换</h3><button class="wf-modal-close" id="_pfx_close">✕</button></div>
+    <div class="wf-modal-body" style="font-size:13px">
+      <p style="color:var(--dim);margin-bottom:12px">检测到以下路径前缀，输入替换内容后复制（留空则不替换该前缀）：</p>
+      ${prefixes.map(p => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <code style="flex-shrink:0;background:rgba(255,255,255,.04);padding:4px 8px;border-radius:4px;font-size:12px">${escapeHtml(p)}</code>
+        <span style="color:var(--dim)">→</span>
+        <input class="_pfx_input" data-old="${escapeHtml(p)}" type="text" placeholder="新路径（留空不替换）" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:#090b10;color:#e0e0e0;font-size:13px">
+      </div>`).join("")}
+    </div>
+    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-normal" id="_pfx_cancel">取消</button>
+      <button class="btn btn-primary" id="_pfx_confirm">确定</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById("_pfx_close").onclick = () => { overlay.remove(); onConfirm(null); };
+  document.getElementById("_pfx_cancel").onclick = () => { overlay.remove(); onConfirm(null); };
+  document.getElementById("_pfx_confirm").onclick = () => {
+    const map = {};
+    overlay.querySelectorAll("._pfx_input").forEach(inp => {
+      const v = inp.value.trim();
+      if (v) map[inp.dataset.old] = v;
+    });
+    overlay.remove();
+    onConfirm(map);
+  };
+}
 function _wfRebuild() {
   _wfSortables.forEach(s => s.destroy());
   _wfSortables = [];
@@ -2689,7 +2780,6 @@ function buildTranslateTab(panel) {
   const src_lang = config.tr_src_lang||"zh";
   const out = config.tr_out_dir||"";
   const prompt = config.tr_prompt||"请将以下文本翻译为{tgt_lang}，保持格式不变";
-  const savedTgtLangs = config.tr_saved_tgt_langs||[];
   panel.innerHTML = `
     <div class="translate-layout tr-layout">
       <div class="tr-main">
@@ -2794,8 +2884,7 @@ function buildTranslateTab(panel) {
     const names = Object.keys(data).sort();
     const cg = document.getElementById("tr_tgt_langs");
     cg.innerHTML = names.map(n => {
-      const checked = savedTgtLangs.includes(n) ? " checked" : "";
-      return `<label><input type="checkbox" value="${escapeHtml(n)}"${checked}> ${escapeHtml(n)}</label>`;
+      return `<label><input type="checkbox" value="${escapeHtml(n)}"> ${escapeHtml(n)}</label>`;
     }).join("");
   });
 }
@@ -2816,7 +2905,7 @@ function runTranslate() {
     prompt:document.getElementById("tr_prompt").value.trim(),
     batch_size:parseInt(document.getElementById("tr_batch").value)||20
   };
-  saveConfig({tr_api_url:body.api_url,tr_model:body.model,tr_src_lang:body.src_lang,tr_out_dir:body.out_dir,tr_prompt:body.prompt,tr_batch_size:body.batch_size,tr_saved_tgt_langs:tgtLangs,api_key:apiKey});
+  saveConfig({tr_api_url:body.api_url,tr_model:body.model,tr_src_lang:body.src_lang,tr_out_dir:body.out_dir,tr_prompt:body.prompt,tr_batch_size:body.batch_size,api_key:apiKey});
   runTask("/api/translate/run", body, document.querySelector("[data-action='run-translate']"), "tr_log");
 }
 let trLangAdvModal = null;

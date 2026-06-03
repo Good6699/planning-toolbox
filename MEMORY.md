@@ -90,6 +90,27 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 - **解决方案**：在 `_exec_merge_table` 的 `wb_tgt.save()` 之后，用 `win32com.client.Dispatch("Excel.Application")` 后台静默打开刚保存的文件，调用 `Save()` 让 Excel 写入 `<v>` 缓存值。设置 `xl.Visible = False` 和 `xl.DisplayAlerts = False`，异常时静默跳过
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
 
+### feat(wf): 复制工作流时弹窗提示路径前缀替换
+- **场景**：2026-06-03 用户复制工作流到不同工程（如 KR2→EA）时，需要手动修改大量路径字段
+- **解决方案**：① 新增 `_wfDetectPrefixes(steps)`，递归扫描所有步骤配置，提取包含 `\gameData\` 或 `\Client\` 的路径前缀（如 `H:\D3_EA`），跳过 `name/type/lock_msg/lang_codes/merge_mode` 非路径字段；② 新增 `_wfReplacePrefixes(obj, oldP, newP)`，递归替换对象中所有匹配前缀的字符串；③ 新增 `_wfShowPrefixModal(prefixes, onConfirm)` 弹窗，行前缀一一列出让用户输入替换值，留空不替换；④ 复制按钮检测到前缀时弹窗，取消不操作，确定后替换再保存
+- **关键经验**：检测前缀时不能遍历所有字段（`name` 字段可能长得像路径），必须跳过已知非路径字段；替换必须是递归的（路径可能在数组/嵌套对象中）；`_wfReplacePrefixes` 的终止条件是 `startsWith(oldP + "\\")` 确保 `H:\D3_EA` 不会误匹配 `H:\D3_EA_OTHER`
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
+### feat(ui): upload 页签布局重构——文件列表全宽 + 源/目标等高
+- **场景**：2026-06-03 文件列表卡片在右侧 420px 列内，宽度受限不便于浏览
+- **解决方案**：文件列表 card 从 `.upload-main` 移到独立 `.upload-files-wrap { grid-column: 1 / -1 }` 占满整行宽度；`.upload-main` 从 `align-self:start` 改为 `stretch`，配合 `.upload-main>.card { flex:1 }` 使源目录卡片与右侧 SVN 目标设置卡片等高
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
+### fix(ui): 翻译页签目标语言勾选不保存
+- **场景**：2026-06-03 翻译页签的目标语言复选框状态每次启动都保持上次的选择，用户希望默认全部不选中
+- **解决方案**：删除 `config.tr_saved_tgt_langs` 的读取和保存逻辑，复选框全部默认未选中
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
+### feat(skill): 新增 test-logic 逻辑自测 Skill
+- **场景**：2026-06-03 用户需要一个专业的测试 Skill 来验证代码逻辑正确性，而非依赖第三方测试工具
+- **解决方案**：创建 `.trae/skills/test-logic/SKILL.md`，覆盖正则验证、路径替换、配置完整性、自动命名等场景，模板包含 Python 测试脚本示例。同时从 MEMORY.md 提取 9 条常见 Bug 模式（`_esMap` 键冲突、`_tabCount` 硬重置、saveConfig 竞态、路径替换漏嵌套等）写入 Skill，每次修改代码时自动对照自测
+- **涉及文件**：[.trae/skills/test-logic/SKILL.md](file:///c:/Users/admin/.qclaw/workspace/.trae/skills/test-logic/SKILL.md)
+
 ### feat(wf): 同一工作流内步骤改为并行执行 + EventSource 键修复
 - **场景**：2026-06-03 用户要求同一工作流内勾选的多个步骤并行执行，互不影响
 - **根因**：`_run_wf_task()` 用 `for` 循环串行执行步骤，一个失败阻断所有。且 `runTask` 中 `_esMap` 以 `url` 为键，并行时后启动的步骤会 `close()` 前一步的 EventSource（静默关闭不触发 `onerror`），导致前一步的 `_done()` 永不执行，`_runningCount` 永远不归零

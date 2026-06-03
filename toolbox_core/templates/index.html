@@ -2302,8 +2302,32 @@ function buildWorkflowTab(panel) {
   }
 
   function _wfModalAutoSave() {
-    if (!_modalCtx) return;
-    _wfModalDoSave();
+    if (_wfSaving) return;
+    const ctx = _modalCtx || (overlay.dataset.modalCtx ? JSON.parse(overlay.dataset.modalCtx) : null);
+    if (!ctx) return;
+    _wfSaving = true;
+    const { wfIdx, stepIdx } = ctx;
+    const step = config.workflows[wfIdx]?.steps?.[stepIdx];
+    if (!step) { _wfSaving = false; return; }
+    modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
+      const key = inp.dataset.key;
+      if (!key) return;
+      const arrKeys = ["tools","dirs","file_paths","update_dirs","exclude_paths","upload_svn_dir","revert_paths"];
+      if (arrKeys.includes(key)) {
+        step[key] = inp.value.split(",").map(s => s.trim()).filter(Boolean);
+      } else {
+        step[key] = inp.value;
+      }
+    });
+    modalBody.querySelectorAll("input[type=checkbox][data-key]").forEach(inp => {
+      step[inp.dataset.key] = inp.checked;
+    });
+    const autoName = _wfAutoName(step);
+    if (autoName) step.name = autoName;
+    saveConfig({workflows:config.workflows});
+    _wfSaving = false;
+    const childEl = document.querySelector(`.wf-parent[data-idx="${wfIdx}"] .wf-child[data-step="${stepIdx}"] .wf-child-name`);
+    if (childEl) childEl.textContent = step.name;
   }
   window._wfModalAutoSave = _wfModalAutoSave;
 
@@ -2344,7 +2368,7 @@ function buildWorkflowTab(panel) {
       revert_svn: `
         <div class="form-group"><label>回退路径（逗号分隔）</label>
           <div class="flex-row"><input type="text" class="wf-modal-input" id="wf_m_rv_paths" data-key="revert_paths" value="${v("revert_paths")}" style="flex:1" placeholder="多个路径用,分隔">
-          <button class="btn btn-normal btn-sm" onclick="_browseDirAppend('wf_m_rv_paths')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>
+          <button class="btn btn-normal btn-sm" onclick="browseDir('wf_m_rv_paths',null,null,true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>
         <div class="form-group"><label>排除路径（逗号分隔）</label>
           <input type="text" class="wf-modal-input" id="wf_m_rv_exclude" data-key="exclude_paths" value="${v("exclude_paths")}" placeholder="多个路径用,分隔">
         </div>
@@ -3247,11 +3271,17 @@ function _openFolder(path) {
   }
 }
 let dirModal = null;
-async function browseDir(inputId, callback, initialPath) {
+async function browseDir(inputId, callback, initialPath, appendMode) {
   if (window.pywebview && pywebview.api && pywebview.api.browseDir) {
     const path = await pywebview.api.browseDir(initialPath || "");
     if (path) {
-      document.getElementById(inputId).value = path;
+      if (appendMode) {
+        const inp = document.getElementById(inputId);
+        const oldPaths = inp.value.trim().split(",").map(s => s.trim()).filter(Boolean);
+        inp.value = oldPaths.includes(path) ? oldPaths.join(", ") : [...oldPaths, path].join(", ");
+      } else {
+        document.getElementById(inputId).value = path;
+      }
       if (typeof window._wfModalAutoSave === "function") window._wfModalAutoSave();
       if (callback) callback();
     }
@@ -3338,9 +3368,7 @@ function closeDirModal() {
   dirModal.style.display = "none";
 }
 function _browseDirAppend(inputId) {
-  const inp = document.getElementById(inputId);
-  dirModal._oldPaths = inp.value.trim().split(",").map(s => s.trim()).filter(Boolean);
-  browseDir(inputId, null, null);
+  browseDir(inputId, null, null, true);
 }
 let advModal = null;
 function openAdvSettings() {

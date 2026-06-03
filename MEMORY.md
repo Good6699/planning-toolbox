@@ -1746,6 +1746,18 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **关键经验**：Excel 解析中 ID 列和 SC 列是独立维度，不能因为找到了 ID 列就停止扫描——所有需要在输出列中出现的列头都必须被注册到 `header_to_col` 映射
 - **涉及文件**：[svn_oneclick_compare.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/svn_oneclick_compare.py)
 
+### fix(wf): revert_svn 浏览按钮点击无响应——dirModal 空指针 + pywebview 追加逻辑缺失
+- **场景**：2026-06-03 工作流 revert_svn 步骤设置弹窗中，点击回退路径旁的浏览按钮（SVG 图标）无反应，文件对话框不弹出
+- **根因**：两个独立 bug 叠加：① `_browseDirAppend()` 在 pywebview 环境中直接访问 `dirModal._oldPaths`，但 `dirModal` 仅在 Web 回退路径中初始化，桌面端永远是 `null`，抛出 TypeError 被 onclick 静默吞掉；② pywebview 的 `browseDir` 分支没有增量追加逻辑，且 `_browseDirAppend` 调用的 `browseDir(id, null, null)` 不传 appendMode 参数
+- **解决方案**：① `browseDir()` 新增 `appendMode` 参数，pywebview 分支检测到 `appendMode=true` 时，对输入框现有值做拆分→去重→追加→合并回写入；② `_browseDirAppend()` 简化为 `browseDir(id, null, null, true)` 直接委托；③ revert_svn 浏览按钮 onclick 从 `_browseDirAppend` 改为直接调 `browseDir`。CSS 规则 `.btn svg { pointer-events: none }` 已存在，无需处理
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
+### fix(wf): revert_svn 浏览增量追加后自动关闭弹窗——改为只保存不关闭
+- **场景**：2026-06-03 点击浏览按钮选目录后路径追加到输入框，但弹窗自动关闭，用户需重新打开才能继续追加
+- **根因**：`_wfModalAutoSave()` 委托给 `_wfModalDoSave()`，后者执行 `overlay.classList.remove("show")` 关闭弹窗并清除 `_modalCtx`
+- **解决方案**：`_wfModalAutoSave()` 内联保存逻辑（读取表单→写入 step→saveConfig→更新侧边栏名称），去除 `overlay.classList.remove("show")`、不清除 `_modalCtx`、不弹 toast。手动保存按钮行为不变（保存+关闭）
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
 ### fix(update): 在线更新不成功——VBS 启动 bat 后 APP_DIR 路径缺反斜杠
 - **场景**：2026-06-01 点击一键更新后应用重启但版本号没变，文件修改日期未更新。手动关闭 app 再启动→点击更新则正常
 - **根因**：新旧两种操作走的是同一套 bat 逻辑，唯一的区别是 bat 的调用链路完全一致。最终排查发现 Python 端 `os.startfile(vbs)` → VBS → `cmd.exe /c` → bat 的链路在打包后长期运行的 exe 中偶发不可靠。改用 Python 将 `py_app_dir`（`sys.executable` 的父目录）作为第 4 行参数写入 `_update_args.txt`，bat 直接读取此参数替代 `%~dp0..` 推算。修复过程中发现 `start "" "%APP_DIR%%EXE_NAME%"` 拼接路径时 APP_DIR 末尾缺少 `\`，导致报错 `Windows 找不到文件 'F:\策划工具箱策划工具箱.exe'`

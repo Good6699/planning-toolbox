@@ -534,37 +534,7 @@ input::placeholder,textarea::placeholder{
   height:28px;
   min-width:60px;
 }
-.wf-play-btn{
-  margin-left:auto;
-  width:26px;
-  height:26px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border:none;
-  background:rgba(94,162,255,.1);
-  border-radius:6px;
-  color:var(--accent);
-  cursor:pointer;
-  font-size:12px;
-  transition:.15s;
-  flex-shrink:0;
-  padding:0;
-  line-height:1;
-}
-.wf-play-btn:hover{
-  background:rgba(94,162,255,.25);
-  color:#fff;
-  transform:scale(1.12);
-}
-.wf-play-btn.stop{
-  color:#ff6b6b;
-}
-.wf-play-btn.stop:hover{
-  background:rgba(255,107,107,.25);
-  color:#ff6b6b;
-  transform:scale(1.12);
-}
+
 .wf-copy-btn{
   width:26px;height:26px;
   display:flex;align-items:center;justify-content:center;
@@ -2007,7 +1977,7 @@ function buildWorkflowTab(panel) {
                 <span class="wf-arrow">▶</span>
                 <input type="checkbox" class="wf-parent-check">
                 <span class="wf-parent-name">${escapeHtml(wf.name)}&nbsp;&nbsp;<span style="color:var(--dim);font-weight:400">${(wf.steps||[]).filter(Boolean).length}步骤</span><span class="wf-edit-icon"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5L10.5 3.5"/><path d="M2 10L3.5 6.5L8.5 1.5L10.5 3.5L5.5 8.5L2 10Z"/></svg></span></span>
-                <button class="wf-play-btn" title="执行本工作流勾选的步骤">${_WF_ICONS.play}</button>
+                <span class="wf-status-dot" data-idx="${i}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green,#4caf50);margin:0 4px"></span></span>
                 <button class="wf-copy-btn" title="复制工作流"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M10 4H11V11.5C11 12.328 10.328 13 9.5 13H3.5C2.672 13 2 12.328 2 11.5V5C2 4.172 2.672 3.5 3.5 3.5H4" stroke="currentColor" stroke-width="1.2"/></svg></button>
               </div>
               <button class="wf-del-btn" title="删除工作流">✕</button>
@@ -2065,7 +2035,7 @@ function buildWorkflowTab(panel) {
   parents.forEach((el, i) => {
     const header = el.querySelector(".wf-parent-header");
     header.addEventListener("click", (e) => {
-      if (e.target.closest(".wf-parent-check,.wf-play-btn,.wf-copy-btn")) return;
+      if (e.target.closest(".wf-parent-check,.wf-copy-btn")) return;
       if (expandedIdx === i) {
         el.classList.remove("expanded");
         expandedIdx = -1;
@@ -2093,66 +2063,7 @@ function buildWorkflowTab(panel) {
         parentCheck.indeterminate = !allChecked && !noneChecked;
       });
     });
-    const playBtn = el.querySelector(".wf-play-btn");
-    playBtn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      triggerUpdateCheck();
-      const wfIdx = Number(el.dataset.idx);
-      const state = _wfPlayState[wfIdx];
-      if (state) {
-        if (!(await showConfirm({title:"确认", message:"确定要结束本工作流吗？"}))) return;
-        fetch("/api/task/cancel", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task_id: state.taskId})}).catch(()=>{});
-        delete _wfPlayState[wfIdx];
-        playBtn.innerHTML = _WF_ICONS.play;
-        playBtn.classList.remove("stop");
-        playBtn.title = "执行本工作流勾选的步骤";
-        return;
-      }
-      const children = el.querySelector(".wf-children");
-      const checkedSteps = el.querySelectorAll(".wf-child-check:checked");
-      const stepIndices = [];
-      checkedSteps.forEach(cb => {
-        const child = cb.closest(".wf-child");
-        const stepIdx = [...children.children].indexOf(child);
-        if (stepIdx >= 0) stepIndices.push(stepIdx);
-      });
-      if (!stepIndices.length) { _showToast("请先勾选要执行的步骤"); return; }
-      const wfName = config.workflows[wfIdx]?.name || "工作流";
-      const logContainer = document.getElementById("wf_log");
-
-      // 清理已完成的工作流日志
-      logContainer.querySelectorAll(".wf-log-section").forEach(sec => {
-        const bodyEl = sec.querySelector(".wf-log-body");
-        if (bodyEl?.id) {
-          let done = false;
-          let m = bodyEl.id.match(/^wf_log_step_(\d+)_(\d+)_/);
-          if (m) { done = !_wfPlayState["step_" + m[1] + "_" + m[2]]; }
-          else {
-            m = bodyEl.id.match(/^wf_log_(\d+)_/);
-            if (m) { done = !_wfPlayState[Number(m[1])]; }
-          }
-          if (done) sec.remove();
-        }
-      });
-
-      const bodyId = "wf_log_" + wfIdx + "_" + Date.now();
-      const section = document.createElement("div");
-      section.className = "wf-log-section";
-      section.innerHTML = `<div class="wf-log-section-header">${escapeHtml(wfName)}</div><div class="wf-log-body" id="${bodyId}"></div>`;
-      logContainer.appendChild(section);
-      playBtn.innerHTML = _WF_ICONS.stop;
-      playBtn.classList.add("stop");
-      playBtn.title = "点击停止本工作流";
-      _wfPlayState[wfIdx] = {taskId: ""};
-      runTask("/api/workflow/run", {wf_idx: wfIdx, step_indices: stepIndices}, null, bodyId, wfName, () => {
-        if (_wfPlayState[wfIdx]) {
-          delete _wfPlayState[wfIdx];
-          playBtn.innerHTML = _WF_ICONS.play;
-          playBtn.classList.remove("stop");
-          playBtn.title = "执行本工作流勾选的步骤";
-        }
-      });
-    });
+    // 父级批量执行已移除，请使用每个步骤独立的 ▶ 按钮
     const copyBtn = el.querySelector(".wf-copy-btn");
     copyBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -2628,6 +2539,7 @@ function buildWorkflowTab(panel) {
       btn.classList.add("stop");
       btn.title = "点击停止本步骤";
       _wfPlayState[stateKey] = {taskId: ""};
+      _updateWfDot(wfIdx);
       runTask("/api/workflow/run", {wf_idx: wfIdx, step_indices: [stepIdx], _stateKey: stateKey}, null, bodyId, wfName, () => {
         if (_wfPlayState[stateKey]) {
           delete _wfPlayState[stateKey];
@@ -2635,6 +2547,7 @@ function buildWorkflowTab(panel) {
           btn.classList.remove("stop");
           btn.title = "执行本步骤";
         }
+        _updateWfDot(wfIdx);
       });
     });
   });
@@ -3026,6 +2939,12 @@ let _runningCount = 0;
 const _esMap = {};
 let _tabCount = {svn:0, merge:0, upload:0, workflow:0, translate:0};
 let _wfPlayState = {};
+function _updateWfDot(wfIdx) {
+  const dot = document.querySelector(`.wf-status-dot[data-idx="${wfIdx}"] span`);
+  if (!dot) return;
+  const running = Object.keys(_wfPlayState).some(k => k.startsWith("step_" + wfIdx + "_"));
+  dot.style.background = running ? "var(--yellow,#f0c040)" : "var(--green,#4caf50)";
+}
 function _incRunning() {
   if (_runningCount === 0) {
     const sb = document.getElementById("status_bar");
@@ -3223,7 +3142,7 @@ async function runTask(url, body, btn, logId, label, onDone) {
 
   function _done() {
     _decRunning();
-    if (tabKey) { _tabCount[tabKey] = 0; _setTabDot(tabKey, false); }
+    if (tabKey) { _tabCount[tabKey] = Math.max(0, _tabCount[tabKey] - 1); if (_tabCount[tabKey] === 0) _setTabDot(tabKey, false); }
     if (label) {
       if (onDone) onDone();
     } else {
@@ -3238,15 +3157,16 @@ async function runTask(url, body, btn, logId, label, onDone) {
     _done();
     return;
   }
-  if (_esMap[url]) _esMap[url].close();
+  const esKey = body._stateKey || url;
+  if (_esMap[esKey]) _esMap[esKey].close();
   const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
-  _esMap[url] = evtSrc;
+  _esMap[esKey] = evtSrc;
   evtSrc.onmessage = (e) => {
     if (e.data === "[DONE]") {
       _logStopTimer();
       _logFlush();
       evtSrc.close();
-      _esMap[url] = null;
+      _esMap[esKey] = null;
       _done();
       if (_outputPath) {
         const _hint = document.createElement("div");
@@ -3267,7 +3187,7 @@ async function runTask(url, body, btn, logId, label, onDone) {
     _logStopTimer();
     _logFlush();
     evtSrc.close();
-    _esMap[url] = null;
+    _esMap[esKey] = null;
     _done();
     logEl.innerHTML += "\n⚠ 日志连接中断\n";
     _focusAppOnError(tabKey, logEl);

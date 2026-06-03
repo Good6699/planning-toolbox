@@ -1088,6 +1088,20 @@ def _exec_copy_files(step, put, task_id=None):
     put("正在更新源目录的 gameData...\n")
     _find_and_update_gamedata(src_dir, put, task_id)
 
+    # ── 3b. 回退源目录中要复制的文件到最新版本，确保没有本地修改 ──
+    put("回退源文件到 SVN 最新版本...\n")
+    for fp in found_files:
+        try:
+            r = subprocess.run([svn, "revert", fp],
+                               capture_output=True, text=True,
+                               timeout=30, **_get_subprocess_kwargs())
+            if r.returncode == 0:
+                put(f"  ✓ {os.path.basename(fp)}\n")
+            else:
+                put(f"  ⚠ {os.path.basename(fp)}: {r.stderr.strip()[-100:]}\n")
+        except Exception as e:
+            put(f"  ⚠ {os.path.basename(fp)} 回退异常: {e}\n")
+
     upload_paths = [
         os.path.join(base_path, "Client", "Assets", "StreamingAssets"),
         os.path.join(base_path, "gameData"),

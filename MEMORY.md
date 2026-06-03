@@ -90,6 +90,27 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 - **解决方案**：在 `_exec_merge_table` 的 `wb_tgt.save()` 之后，用 `win32com.client.Dispatch("Excel.Application")` 后台静默打开刚保存的文件，调用 `Save()` 让 Excel 写入 `<v>` 缓存值。设置 `xl.Visible = False` 和 `xl.DisplayAlerts = False`，异常时静默跳过
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
 
+### feat(wf): 同一工作流内步骤改为并行执行 + EventSource 键修复
+- **场景**：2026-06-03 用户要求同一工作流内勾选的多个步骤并行执行，互不影响
+- **根因**：`_run_wf_task()` 用 `for` 循环串行执行步骤，一个失败阻断所有。且 `runTask` 中 `_esMap` 以 `url` 为键，并行时后启动的步骤会 `close()` 前一步的 EventSource（静默关闭不触发 `onerror`），导致前一步的 `_done()` 永不执行，`_runningCount` 永远不归零
+- **解决方案**：
+  1. 父工作流 ▶ 播放按钮改为每勾选步骤各自独立调 `runTask`，各自独立日志区，各自独立 stateKey `step_{wfIdx}_{stepIdx}`
+  2. `_esMap` 键从 `url` 改为 `body._stateKey || url`，并行步骤互不冲突
+  3. `_done()` 中 `_tabCount[tabKey] = 0` 改为 `_decTabRunning(tabKey)` 引用计数递减
+  4. 取消父工作流时遍历所有 `step_{wfIdx}_` 的 task_id 逐个取消
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
+### feat(wf): 移除父工作流批量执行按钮 + 父名称后加状态指示灯
+- **场景**：2026-06-03 用户要求彻底移除父工作流 header 的 ▶ 按钮（改为只用步骤级独立 ▶），并在父工作流名称后加绿/黄状态指示灯
+- **解决方案**：① `buildWorkflowTab` 模板中删除 `wf-play-btn` 按钮 HTML；② 删除整个父 play 按钮事件监听器（~82行）；③ 删除 `.wf-play-btn` CSS 规则；④ 在名称后加 `.wf-status-dot` HTML 结构；⑤ 新增 `_updateWfDot(wfIdx)` 函数，检查 `_wfPlayState` 中是否有 `step_{wfIdx}_` 的活跃 key，有则黄色、无则绿色；⑥ 步骤 ▶ 按钮开始/完成时调 `_updateWfDot`
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
+### fix(wf): copy_files 整合文字表导出结果不对——先 revert 源文件再复制
+- **场景**：2026-06-03 用户发现 copy_files 执行后导出结果没变化。源文件 `G:\D3_KR2\gameData\Text\Texts.xlsm` 对应 SVN last changed rev=344876，目标 `F:\D3_KR2_DEV\gameData\Text\Texts.xlsm` rev=344860，但两个文件 MD5 完全一致（不同分支同一内容）。用户期望复制带有本地修改的源版本
+- **根因**：功能本意是"用源目录的最新 SVN 版本覆盖目标"，但如果源文件有本地未提交的修改，`svn update` 可能混入本地修改，或源文件已在之前被用户手动修改过但未提交。为确保复制到目标的是真正的"SVN 最新提交版本"，需要在源 update 之后对要复制的文件执行 `svn revert`，丢弃本地修改
+- **解决方案**：在 `_exec_copy_files` 的 step 3（源 svn update）后新增 step 3b，用 `subprocess.run([svn, "revert", fp])` 逐文件回退 `found_files`（文字引用处理.xlsm、Texts.xlsm），确保复制的是仓库最新提交版本。回退失败不阻断（日志 ⚠ 警告），不阻塞后续流程
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
 ### fix(wf): export_error_code 先更新再导出 + 失败不上传
 - **场景**：2026-06-03 export_error_code 导出失败（0/2）后仍然执行了 svn update 和 TortoiseSVN 弹窗
 - **根因**：svn update 和上传逻辑写在函数末尾，只判断了 `upload_svn_dirs` 是否配了，没判断导出是否成功

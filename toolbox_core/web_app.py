@@ -2002,25 +2002,36 @@ def _exec_merge_table(step, put):
     title_rows = int(step.get("title_rows") or cfg.get("cmp_title_rows") or "1")
     id_col = int(step.get("id_col") or cfg.get("cmp_id_col") or "1")
 
-    if not input_dir or not os.path.isdir(input_dir):
-        put(f"输入目录无效: {input_dir}\n")
-        return False
-
-    if not target_dir or not os.path.isdir(target_dir):
-        put(f"目标目录无效: {target_dir}\n")
+    # ── 输入路径解析：支持文件或目录 ──
+    if not input_dir or not os.path.exists(input_dir):
+        put(f"输入路径无效: {input_dir}\n")
         return False
 
     import openpyxl
 
     excel_ext = (".xlsx", ".xlsm")
-    src_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir)
-                 if f.lower().endswith(excel_ext) and os.path.isfile(os.path.join(input_dir, f))]
-    src_files.sort()
+    if os.path.isfile(input_dir):
+        src_files = [input_dir]
+        input_label = os.path.dirname(input_dir)
+    else:
+        src_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir)
+                     if f.lower().endswith(excel_ext) and os.path.isfile(os.path.join(input_dir, f))]
+        src_files.sort()
+        input_label = input_dir
+
     if not src_files:
-        put(f"输入目录下没有 Excel 文件: {input_dir}\n")
+        put(f"{'文件' if os.path.isfile(input_dir) else '目录'}下没有 Excel 文件: {input_dir}\n")
         return True
 
-    put(f"输入目录: {input_dir} ({len(src_files)} 个 Excel)\n")
+    # ── 目标路径解析：文件 → 取其所在目录 ──
+    if not target_dir or not os.path.exists(target_dir):
+        put(f"目标路径无效: {target_dir}\n")
+        return False
+
+    if os.path.isfile(target_dir):
+        target_dir = os.path.dirname(target_dir)
+
+    put(f"输入: {input_label} ({len(src_files)} 个 Excel)\n")
     put(f"目标目录: {target_dir}\n\n")
 
     # 合并前更新 gameData 目录

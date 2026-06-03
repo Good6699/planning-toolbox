@@ -1764,6 +1764,23 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **解决方案**：在 `.wf-layout #wf_log` 和 `.wf-layout .wf-log-body` 中各加 `max-height:none`，覆盖通用规则的 320px 限制
 - **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
 
+### feat(wf): merge_table 输入输出从目录改为文件 + 后端支持文件路径
+- **场景**：2026-06-03 merge_table 步骤用户需要选择具体文件而非目录，避免目录下有多个文件时处理了非预期的文件
+- **根因**：前端用 `_fb("输入目录","input_dir","dir")` 目录选择器，后端 `os.path.isdir()` 校验
+- **解决方案**：前端改为 `_fb("输入文件","input_dir","file")` 文件选择器；后端 `_exec_merge_table` 中校验改为 `os.path.exists()`，检测到文件路径则直接使用（目录路径仍保持目录扫描逻辑），目标路径同样支持文件（自动取父目录）。同时 `_wfAutoName` 改为取输入文件的父目录名（如 `专武_腐败秘境_职业\Texts.xlsm` → `专武_腐败秘境_职业`）
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)、[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
+### feat(wf): revert_svn 新建步骤默认排除三项路径
+- **场景**：2026-06-03 用户每次新建 revert_svn 步骤都需要手动填入排除路径，高频重复操作
+- **解决方案**：在 `wfAddStep` 的 `revert_svn` 分支中，新建 step 时预填 `step.exclude_paths = ["Assets/Code_Lua/test/test.lua", "Assets/StreamingAssets/LocalVersion.xml", "InstallClient.bat"]`
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
+### fix(wf): merge_table 默认标题行/ID列改为硬编码 1
+- **场景**：2026-06-03 merge_table 新步骤的标题行/ID列显示的不是 1，而是全局配置 config.cmp_* 的值
+- **根因**：`${v("title_rows")||config.cmp_title_rows||"1"}` 中 `config.cmp_title_rows` 的 fallback 优先级高于 `"1"`
+- **解决方案**：去掉 `config.cmp_*` fallback，直接 `"${v("title_rows")||"1"}"`
+- **涉及文件**：[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
 ### fix(update): 在线更新不成功——VBS 启动 bat 后 APP_DIR 路径缺反斜杠
 - **场景**：2026-06-01 点击一键更新后应用重启但版本号没变，文件修改日期未更新。手动关闭 app 再启动→点击更新则正常
 - **根因**：新旧两种操作走的是同一套 bat 逻辑，唯一的区别是 bat 的调用链路完全一致。最终排查发现 Python 端 `os.startfile(vbs)` → VBS → `cmd.exe /c` → bat 的链路在打包后长期运行的 exe 中偶发不可靠。改用 Python 将 `py_app_dir`（`sys.executable` 的父目录）作为第 4 行参数写入 `_update_args.txt`，bat 直接读取此参数替代 `%~dp0..` 推算。修复过程中发现 `start "" "%APP_DIR%%EXE_NAME%"` 拼接路径时 APP_DIR 末尾缺少 `\`，导致报错 `Windows 找不到文件 'F:\策划工具箱策划工具箱.exe'`

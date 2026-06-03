@@ -2196,6 +2196,9 @@ function buildWorkflowTab(panel) {
           const wf = config.workflows[wfIdx];
           if (!wf) return;
           const step = {type: k, name: ""};
+          if (k === "revert_svn") {
+            step.exclude_paths = ["Assets/Code_Lua/test/test.lua", "Assets/StreamingAssets/LocalVersion.xml", "InstallClient.bat"];
+          }
           const autoName = _wfAutoName(step);
           if (autoName) step.name = autoName;
           wf.steps.push(step);
@@ -2348,10 +2351,10 @@ function buildWorkflowTab(panel) {
       upload_svn: `
         <div class="form-group"><label>源目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_dirs" data-key="dirs" value="${v("dirs")}" placeholder="多个目录用,分隔"></div>`,
       merge_table: `
-        ${_fb("输入目录","input_dir","wf_m_input_dir","dir")}
-        ${_fb("输出目录","target_dir","wf_m_target_dir","dir")}
-        <div class="form-group"><label>标题行</label><input type="number" class="wf-modal-input" id="wf_m_title_rows" data-key="title_rows" value="${v("title_rows")||config.cmp_title_rows||"1"}" min="1" step="1"></div>
-        <div class="form-group"><label>ID列</label><input type="number" class="wf-modal-input" id="wf_m_id_col" data-key="id_col" value="${v("id_col")||config.cmp_id_col||"1"}" min="1" step="1"></div>`,
+        ${_fb("输入文件","input_dir","wf_m_input_dir","file")}
+        ${_fb("输出文件","target_dir","wf_m_target_dir","file")}
+        <div class="form-group"><label>标题行</label><input type="number" class="wf-modal-input" id="wf_m_title_rows" data-key="title_rows" value="${v("title_rows")||"1"}" min="1" step="1"></div>
+        <div class="form-group"><label>ID列</label><input type="number" class="wf-modal-input" id="wf_m_id_col" data-key="id_col" value="${v("id_col")||"1"}" min="1" step="1"></div>`,
       merge_translation: `
         ${_fb("翻译文件","input_file","wf_m_tr_input","file")}
         ${_fb("原始文件","original_file","wf_m_orig_file","file")}`,
@@ -2749,8 +2752,11 @@ function _wfAutoName(step) {
     return step.lang_codes || "";
   }
   if (t === "merge_table") {
-    const paths = step.input_paths || [];
-    return paths.map(p => { const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/")); return i >= 0 ? p.substring(i+1) : p; }).filter(Boolean).join(",");
+    const p = step.input_dir || "";
+    const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
+    const dir = i >= 0 ? p.substring(0, i) : p;
+    const j = Math.max(dir.lastIndexOf("\\"), dir.lastIndexOf("/"));
+    return j >= 0 ? dir.substring(j+1) : dir;
   }
   if (t === "revert_svn") {
     const paths = Array.isArray(step.revert_paths) ? step.revert_paths : (step.target_path || "").split(",");

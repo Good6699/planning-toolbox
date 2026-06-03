@@ -1420,6 +1420,10 @@ def _revert_one_path(svn, target_path, step, put, task_id):
     except Exception:
         pass
 
+    # 更新到服务器最新版本
+    put("正在更新工作副本至最新版本...\n")
+    _svn_update_with_cleanup(svn, target_path, put, task_id)
+
     # 解析排除路径
     raw_exclude = step.get("exclude_paths", [])
     if isinstance(raw_exclude, str):
@@ -1605,6 +1609,18 @@ def _exec_export_error_code(step, put, task_id=None):
     put("Language 目录: " + lang_dir + "\n")
     put("处理语言: " + ", ".join(codes) + "\n")
 
+    # ── 导出前更新配置的上传SVN目录 ──
+    upload_svn_dirs = step.get("upload_svn_dir", [])
+    if isinstance(upload_svn_dirs, str):
+        upload_svn_dirs = [d.strip() for d in upload_svn_dirs.split(",") if d.strip()]
+    if upload_svn_dirs:
+        svn = _get_svn_path()
+        for d in upload_svn_dirs:
+            d = d.strip()
+            if d and os.path.isdir(d):
+                put(f"正在更新上传目录: {d}\n")
+                _svn_update_with_cleanup(svn, d, put, task_id)
+
     import subprocess as _sp
     script_dir = os.path.dirname(os.path.abspath(__file__))
     erl_script = os.path.join(script_dir, "..", "_export_error_code_erl.py")
@@ -1719,18 +1735,11 @@ def _exec_export_error_code(step, put, task_id=None):
     if ok_count == len(codes):
         put("全部语言导出成功\n")
 
-    # 导出成功后，如果有配置上传SVN目录，执行svn update + 上传
+    # 导出成功后执行上传
     upload_svn_dirs = step.get("upload_svn_dir", [])
     if isinstance(upload_svn_dirs, str):
         upload_svn_dirs = [d.strip() for d in upload_svn_dirs.split(",") if d.strip()]
-    if upload_svn_dirs:
-        svn = _get_svn_path()
-        for d in upload_svn_dirs:
-            d = d.strip()
-            if d and os.path.isdir(d):
-                put(f"正在更新上传目录: {d}\n")
-                _svn_update_with_cleanup(svn, d, put, task_id)
-
+    if ok_count > 0 and upload_svn_dirs:
         put(f"\n导出完成，执行上传\n")
         _exec_upload_svn({"dirs": upload_svn_dirs}, put, task_id)
 

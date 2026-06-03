@@ -90,6 +90,18 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 - **解决方案**：在 `_exec_merge_table` 的 `wb_tgt.save()` 之后，用 `win32com.client.Dispatch("Excel.Application")` 后台静默打开刚保存的文件，调用 `Save()` 让 Excel 写入 `<v>` 缓存值。设置 `xl.Visible = False` 和 `xl.DisplayAlerts = False`，异常时静默跳过
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
 
+### fix(wf): export_error_code 先更新再导出 + 失败不上传
+- **场景**：2026-06-03 export_error_code 导出失败（0/2）后仍然执行了 svn update 和 TortoiseSVN 弹窗
+- **根因**：svn update 和上传逻辑写在函数末尾，只判断了 `upload_svn_dirs` 是否配了，没判断导出是否成功
+- **解决方案**：① 将 svn update 移到导出之前执行；② 导出成功后（`ok_count > 0`）才执行上传；③ 末端删除重复的 svn update 代码
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
+### fix(wf): revert_svn 增加 svn update 先于 revert
+- **场景**：2026-06-03 revert_svn 步骤缺少 update，直接 revert 可能回退的不是最新版本
+- **根因**：`_revert_one_path` 只做了 cleanup，没有 update
+- **解决方案**：在 cleanup 之后、解析排除路径之前插入 `_svn_update_with_cleanup(svn, target_path, put, task_id)`
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
 ### 工作流日志显示区域固定上限导致内容截断
 - **场景**：工作流日志内容较多时，`.wf-log-body` 的 `max-height:60vh` 限制了最大高度，超出部分被截断不可见
 - **根因**：`.wf-layout .wf-log-body` 在 flex 布局中同时设置了 `flex:1` 和 `max-height:60vh`，`max-height` 优先级高于 `flex:1` 的拉伸，导致日志区域上限被封死

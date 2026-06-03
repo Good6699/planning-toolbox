@@ -223,6 +223,9 @@ button,input,textarea,select{
 }
 .content{
   flex:1;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
   overflow:auto;
   padding:20px;
   width:100%;
@@ -232,12 +235,19 @@ button,input,textarea,select{
   width:100%;
   max-width:1800px;
   margin:0 auto;
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
 }
 .tab-panel{
+  flex:1;
+  min-height:0;
   display:none;
 }
 .tab-panel.active{
-  display:block;
+  display:flex;
+  flex-direction:column;
 }
 .workbench{
   display:grid;
@@ -412,26 +422,30 @@ input::placeholder,textarea::placeholder{
   flex-shrink:0;
   display:flex;
   flex-direction:column;
+  min-height:0;
 }
 .wf-layout .wf-log-wrap > .card{
   flex:1;
   display:flex;
   flex-direction:column;
+  min-height:0;
 }
 .wf-layout #wf_log{
   flex:1;
-  height:auto;
-  max-height:none;
-  min-height:60px;
-  overflow-y:auto;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
 }
 .wf-layout .wf-log-section{
+  flex:1;
+  min-height:0;
   display:flex;
   flex-direction:column;
 }
 .wf-layout .wf-log-body{
-  height:auto;
-  min-height:40px;
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
 }
 .wf-tree{
   display:flex;
@@ -1974,8 +1988,8 @@ function runUpload() {
 }
 function buildWorkflowTab(panel) {
   const wfs = config.workflows || [];
-  const typeCn = {export_text:"导出文字表",upload_svn:"上传SVN",merge_table:"合并表格",merge_translation:"合并翻译",export_error_code:"导出错误码",lock_svn:"锁定SVN",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"复制文件"};
-  const typeIcon = {export_text:"📄",upload_svn:"📤",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",lock_svn:"🔒",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📋"};
+  const typeCn = {export_text:"导出文字表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表"};
+  const typeIcon = {export_text:"📄",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📋"};
   const isEmpty = !wfs.length;
   panel.innerHTML = `
     <div class="wf-layout">
@@ -2266,7 +2280,7 @@ function buildWorkflowTab(panel) {
     modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
       const key = inp.dataset.key;
       if (!key) return;
-      const arrKeys = ["tools","dirs","file_paths","update_dirs","exclude_paths","upload_svn_dir"];
+      const arrKeys = ["tools","dirs","file_paths","update_dirs","exclude_paths","upload_svn_dir","revert_paths"];
       if (arrKeys.includes(key)) {
         step[key] = inp.value.split(",").map(s => s.trim()).filter(Boolean);
       } else {
@@ -2276,11 +2290,6 @@ function buildWorkflowTab(panel) {
     modalBody.querySelectorAll("input[type=checkbox][data-key]").forEach(inp => {
       step[inp.dataset.key] = inp.checked;
     });
-    if (step.type === "copy_files") {
-      step.selected_files = _wfCfEntries.filter(f => f._sel).map(f => ({
-        name: f.name, path: f.path, is_dir: f.is_dir
-      }));
-    }
     const autoName = _wfAutoName(step);
     if (autoName) step.name = autoName;
     saveConfig({workflows:config.workflows});
@@ -2300,14 +2309,14 @@ function buildWorkflowTab(panel) {
 
   function _wfModalFields(type, step) {
     const v = (key) => escapeHtml(Array.isArray(step[key]) ? step[key].join(", ") : step[key]||"");
-    const _fb = (label, dataKey, id, browseType) => `
+    const _fb = (label, dataKey, id, browseType, append) => `
       <div class="form-group"><label>${label}</label>
         <div class="flex-row"><input type="text" class="wf-modal-input" id="${id}" data-key="${dataKey}" value="${v(dataKey)}" style="flex:1" placeholder="${browseType==='dir'?'选择目录':'选择文件'}">
-        <button class="btn btn-normal btn-sm" onclick="(function(t,i){var v=document.getElementById(i).value.trim(),d=v.substring(0,v.lastIndexOf('\\\\'));if(!d)d=v;if(t==='file')browseFile(i,d||'');else browseDir(i,null,d||'');})('${browseType.replace(/'/g,"\\'")}','${id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>`;
+        <button class="btn btn-normal btn-sm" onclick="(function(t,i,a){if(a){_browseDirAppend(i)}else{var v=document.getElementById(i).value.trim(),d=v.substring(0,v.lastIndexOf('\\\\'));if(!d)d=v;if(t==='file')browseFile(i,d||'');else browseDir(i,null,d||'');}})('${browseType.replace(/'/g,"\\'")}','${id}',${!!append})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>`;
     const m = {
       export_text: `
         ${_fb("主文件路径","input_file","wf_m_input_file","file")}
-        ${_fb("上传SVN目录","upload_svn_dir","wf_m_upload_svn_dir","dir")}`,
+        ${_fb("上传SVN目录","upload_svn_dir","wf_m_upload_svn_dir","dir", true)}`,
       upload_svn: `
         <div class="form-group"><label>源目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_dirs" data-key="dirs" value="${v("dirs")}" placeholder="多个目录用,分隔"></div>`,
       merge_table: `
@@ -2317,11 +2326,11 @@ function buildWorkflowTab(panel) {
         <div class="form-group"><label>ID列</label><input type="number" class="wf-modal-input" id="wf_m_id_col" data-key="id_col" value="${v("id_col")||config.cmp_id_col||"1"}" min="1" step="1"></div>`,
       merge_translation: `
         ${_fb("翻译文件","input_file","wf_m_tr_input","file")}
-        ${_fb("原始文件","original_file","wf_m_orig_file","file")}
-        <div class="form-group"><label>Sheet名称</label><input type="text" class="wf-modal-input" id="wf_m_sheet" data-key="sheet_name" value="${v("sheet_name")}"></div>`,
+        ${_fb("原始文件","original_file","wf_m_orig_file","file")}`,
       export_error_code: `
         ${_fb("根目录","root_dir","wf_m_root_dir","dir")}
-        <div class="form-group"><label>语言代码</label><input type="text" class="wf-modal-input" id="wf_m_ec_lang" data-key="lang_codes" value="${v("lang_codes")}"></div>`,
+        <div class="form-group"><label>语言代码</label><input type="text" class="wf-modal-input" id="wf_m_ec_lang" data-key="lang_codes" value="${v("lang_codes")}"></div>
+        ${_fb("上传SVN目录","upload_svn_dir","wf_m_upload_svn_dir_ec","dir", true)}`,
       lock_svn: `
         ${_fb("目标文件路径","target_path","wf_m_target_path","file")}
         <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="多个目录用,分隔"></div>
@@ -2333,30 +2342,16 @@ function buildWorkflowTab(panel) {
       open_tables: `
         <div class="form-group"><label>文件路径（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_file_paths" data-key="file_paths" value="${v("file_paths")}" placeholder="多个文件用,分隔"></div>`,
       revert_svn: `
-        ${_fb("回退路径","target_path","wf_m_rv_path","dir")}
+        <div class="form-group"><label>回退路径（逗号分隔）</label>
+          <div class="flex-row"><input type="text" class="wf-modal-input" id="wf_m_rv_paths" data-key="revert_paths" value="${v("revert_paths")}" style="flex:1" placeholder="多个路径用,分隔">
+          <button class="btn btn-normal btn-sm" onclick="_browseDirAppend('wf_m_rv_paths')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>
         <div class="form-group"><label>排除路径（逗号分隔）</label>
           <input type="text" class="wf-modal-input" id="wf_m_rv_exclude" data-key="exclude_paths" value="${v("exclude_paths")}" placeholder="多个路径用,分隔">
         </div>
         <label class="wf-rv-check"><input type="checkbox" data-key="delete_unversioned" ${step.delete_unversioned?'checked':''}> 永久删除未版本控制的文件</label>`,
       copy_files: `
-        <div class="form-group"><label>源目录</label>
-          <div class="flex-row"><input type="text" class="wf-modal-input" id="wf_m_cf_src" data-key="src_dir" value="${v("src_dir")}" style="flex:1" placeholder="选择目录">
-          <button class="btn btn-normal btn-sm" onclick="browseDir('wf_m_cf_src',_wfCfRefresh)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>
-        <div class="card-header compact" style="margin:8px 0 4px;padding:0">
-          <span style="font-weight:600;font-size:13px">文件列表</span>
-          <div style="display:inline-flex;gap:6px">
-            <a href="#" onclick="_wfCfSelAll();return false" style="color:var(--accent);font-size:13px">全选</a>
-            <a href="#" onclick="_wfCfSelNone();return false" style="color:var(--dim);font-size:13px">取消全选</a>
-            <a href="#" onclick="_wfCfSelInv();return false" style="color:var(--dim);font-size:13px">反选</a>
-          </div>
-        </div>
-        <div class="file-list" id="wf_cf_file_list">
-          <div class="empty-state" style="padding:16px;color:var(--dim);text-align:center">请先选择源目录</div>
-        </div>
-        <div id="wf_cf_count" style="font-size:13px;color:var(--dim);margin:4px 0 8px">已选 0 个文件</div>
-        <div class="form-group"><label>目标目录</label>
-          <div class="flex-row"><input type="text" class="wf-modal-input" id="wf_m_cf_tgt" data-key="tgt_dir" value="${v("tgt_dir")}" style="flex:1" placeholder="选择目录">
-          <button class="btn btn-normal btn-sm" onclick="browseDir('wf_m_cf_tgt',null)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>`,
+        ${_fb("源目录","src_dir","wf_m_cf_src","dir")}
+        ${_fb("目标目录","tgt_dir","wf_m_cf_tgt","dir")}`,
     };
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
   }
@@ -2505,30 +2500,6 @@ function buildWorkflowTab(panel) {
       });
     });
     const step = _modalCtx ? config.workflows[_modalCtx.wfIdx]?.steps?.[_modalCtx.stepIdx] : null;
-    if (step?.type === "copy_files") {
-      const src = document.querySelector("#wf_m_cf_src");
-      if (src) {
-        _wfCfLastSrcDir = "";
-        if (src.value.trim()) _wfCfRefresh();
-        let _cfTimer;
-        const _cfRefreshDebounced = () => {
-          clearTimeout(_cfTimer);
-          _cfTimer = setTimeout(_wfCfRefresh, 300);
-        };
-        src.addEventListener("input", _cfRefreshDebounced);
-        src.addEventListener("change", _cfRefreshDebounced);
-      }
-      const fileList = document.getElementById("wf_cf_file_list");
-      if (fileList) {
-        fileList.addEventListener("click", (e) => {
-          const item = e.target.closest(".file-item");
-          if (!item) return;
-          if (e.target.matches("input[type=checkbox]")) return;
-          const idx = Number(item.dataset.idx);
-          if (!isNaN(idx)) _wfCfToggle(idx);
-        });
-      }
-    }
   }
 
   document.getElementById("wf_modal_close").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } });
@@ -2754,9 +2725,8 @@ function _wfAutoName(step) {
     return paths.map(p => { const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/")); return i >= 0 ? p.substring(i+1) : p; }).filter(Boolean).join(",");
   }
   if (t === "revert_svn") {
-    const p = step.target_path || "";
-    const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
-    return i >= 0 ? p.substring(i+1) : p;
+    const paths = Array.isArray(step.revert_paths) ? step.revert_paths : (step.target_path || "").split(",");
+    return paths.map(p => { const s = p.trim().replace(/[\/\\]$/,""); const i = Math.max(s.lastIndexOf("\\"), s.lastIndexOf("/")); return i >= 0 ? s.substring(i+1) : s; }).filter(Boolean).join(",");
   }
   if (t === "copy_files") {
     const p = step.src_dir || "";
@@ -3348,13 +3318,29 @@ async function dirNavigate(path) {
 function confirmDir() {
   const path = dirModal._selected || document.getElementById("dir_path").textContent;
   if (path) {
-    document.getElementById(dirModal._targetInput).value = path;
+    const inp = document.getElementById(dirModal._targetInput);
+    if (dirModal._oldPaths) {
+      // 增量追加模式：合并旧路径，去重
+      const allPaths = [...dirModal._oldPaths];
+      if (!allPaths.includes(path)) {
+        allPaths.push(path);
+      }
+      inp.value = allPaths.join(", ");
+      dirModal._oldPaths = null;
+    } else {
+      inp.value = path;
+    }
     if (dirModal._callback) dirModal._callback();
   }
   closeDirModal();
 }
 function closeDirModal() {
   dirModal.style.display = "none";
+}
+function _browseDirAppend(inputId) {
+  const inp = document.getElementById(inputId);
+  dirModal._oldPaths = inp.value.trim().split(",").map(s => s.trim()).filter(Boolean);
+  browseDir(inputId, null, null);
 }
 let advModal = null;
 function openAdvSettings() {

@@ -114,6 +114,30 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 - **解决方案**：前端将 `upload_svn_dir` 加入 `arrKeys` 数组字段列表，保存时自动按逗号拆分为数组。后端 `_exec_export_text` 遍历数组逐一 svn update，并添加 `isinstance(str)` 兼容旧版字符串格式
 - **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)，[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
 
+### flex 日志区域不拉伸：需要完整 flex 链 + 每层 min-height:0
+- **场景**：工作流日志区域始终只占卡片一小块，底部大量留白，多次 CSS 改动无效
+- **根因**：① `#wf_log` 没有恢复 `display:flex`（被 `overflow-y:auto` 覆盖），子元素不能弹性拉伸；② `.tab-panel.active` 是 `display:block`，无法限制子元素高度，导致无限拉伸；③ Chromium 中 `overflow:auto` 的 flex 子元素默认 `min-height:auto`，阻止收缩
+- **解决方案**：完整 flex 链 `.content → .content-inner → .tab-panel.active → .wf-layout → .wf-log-wrap → .card → #wf_log → .wf-log-section → .wf-log-body` 每层加 `display:flex; flex-direction:column; min-height:0`，body 内部 `overflow-y:auto`。`min-height:0` 覆盖 Chromium 自动最小尺寸
+- **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
+### svn lock 不应使用 --force（避免强行抢夺他人锁）
+- **场景**：open_tables/export_text/merge_table 等步骤自动锁文件时，若文件已被他人锁定，`svn lock --force` 会强行抢夺锁，导致他人丢失锁
+- **根因**：`_exec_lock_svn` 一直使用 `--force` 参数，SVN 会无视已有锁直接抢占。这是设计疏忽，不是有意行为
+- **解决方案**：去掉 `svn lock` 命令的 `--force` 参数。锁定失败时自然报错并日志输出，不强行抢夺。调用方也不检查返回值，锁定失败不阻断流程
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
+### Excel COM Dispatch vs DispatchEx：关闭时不应影响用户已打开的 Excel
+- **场景**：合并表格后用 Excel COM 刷新公式缓存值，`xl.Quit()` 会把用户自己打开的 Excel 也关掉
+- **根因**：`win32com.client.Dispatch("Excel.Application")` 连接到已有的 Excel 实例，`Quit()` 关闭整个进程
+- **解决方案**：改用 `DispatchEx("Excel.Application")`，创建独立的后台 Excel 进程，只操作目标文件，`Quit()` 不影响用户打开的表格
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+
+### 目录浏览器增量追加方案：用 dirModal._oldPaths 而非闭包回调
+- **场景**：设置弹窗中点击浏览按钮增量添加路径时，`confirmDir()` 先覆盖输入框再调没用参数的回调，导致旧路径丢失
+- **根因**：`confirmDir()` 写入 `input.value = path`（覆盖）后调 `callback()` 不带参数。闭包中读取的已是覆盖后的值，无法合并旧路径。同时 `confirmDir()` 里调了 `closeDirModal()` 关闭目录浏览器后，回调中又通过 `dispatchEvent(new Event('input'))` 意外触发了 `_wfModalDoSave`
+- **解决方案**：在 `dirModal` 对象上设 `_oldPaths` 属性存储增量前的路径列表；`confirmDir()` 检测到 `_oldPaths` 存在时执行合并去重而非覆盖；`_browseDirAppend` 只负责设标记和打开浏览器，不设回调；不用 `input` 事件触发保存
+- **涉及文件**：[index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)
+
 ### SSE 错误日志不滚动：DocumentFragment children 在 append 后变空
 - **场景**：工作流执行报错（翻译文件不存在），后端已推送 `❌ 步骤执行失败` 错误日志，但前端不滚动到日志区域，用户看不到错误
 - **根因**：`_logFlush()` 中用 `DocumentFragment` 收集日志行，`frag.appendChild(div)` 后 `frag.children` 有内容，但调用 `_logAppend(logEl, frag)` 后 **frag 的 children 被移入 DOM 变为空**，紧接着的 `for (const c of frag.children)` 循环永远执行 0 次，`_focusAppOnError()` 永不触发。以下所有修复均因此失效：① ❌ 字符检测 + ② block:end + ③ .content 滚动

@@ -852,7 +852,7 @@ def _run_wf_task(q, wf, steps, task_id):
             elif stype == "unlock_svn":
                 ok = _exec_unlock_svn(step, _put, task_id)
             elif stype == "open_tables":
-                ok = _exec_open_tables(step, _put)
+                ok = _exec_open_tables(step, _put, task_id)
             elif stype == "revert_svn":
                 ok = _exec_revert_svn(step, _put, task_id)
             elif stype == "copy_files":
@@ -1048,61 +1048,138 @@ def _exec_upload_svn(step, put, task_id=None):
 
 
 def _exec_copy_files(step, put, task_id=None):
+    """整合文字表 — 自动检测文件→svn update→复制→lock→导出→上传"""
     src_dir = step.get("src_dir", "").strip()
     tgt_dir = step.get("tgt_dir", "").strip()
-    files = step.get("selected_files", [])
     if not src_dir or not os.path.isdir(src_dir):
         put(f"源目录无效: {src_dir}\n")
         return False
     if not tgt_dir or not os.path.isdir(tgt_dir):
         put(f"目标目录无效: {tgt_dir}\n")
         return False
-    if not files:
-        put("未选择文件\n")
-        return True
 
     put(f"{'='*50}\n")
-    put(f"复制文件: {os.path.basename(src_dir)}\n")
-    put(f"源: {src_dir}\n")
-    put(f"目标: {tgt_dir}\n\n")
+    put(f"整合文字表\n")
+    put(f"源目录: {src_dir}\n")
+    put(f"目标目录: {tgt_dir}\n\n")
 
+    # ── 1. 自动检测源文件 ──
+    src_text_dir = src_dir if os.path.basename(src_dir).lower() == "text" else os.path.join(src_dir, "Text")
+    file_names = ["文字引用处理.xlsm", "Texts.xlsm"]
+    found_files = []
+    for fn in file_names:
+        fp = os.path.join(src_text_dir, fn)
+        if os.path.isfile(fp):
+            found_files.append(fp)
+            put(f"  发现文件: {fn}\n")
+        else:
+            put(f"  未找到: {fn}\n")
+    if not found_files:
+        put("没有需要复制的文件\n")
+        return True
+
+    # ── 2. 提取基础路径 ──
+    base_path = os.path.dirname(tgt_dir)  # F:\D3_KR2_DEV\gameData → F:\D3_KR2_DEV
     svn = _get_svn_path()
-    put("正在更新目标工作副本...\n")
-    if not _svn_update_with_cleanup(svn, tgt_dir, put, task_id):
-        put("目标目录不是 SVN 工作副本或更新失败\n但仍继续复制\n")
 
+    # ── 3. svn update（先更新源和目标到最新，再复制） ──
+    put("正在更新源目录的 gameData...\n")
+    _find_and_update_gamedata(src_dir, put, task_id)
+
+    upload_paths = [
+        os.path.join(base_path, "Client", "Assets", "StreamingAssets"),
+        os.path.join(base_path, "gameData"),
+    ]
+    for up in upload_paths:
+        if os.path.isdir(up):
+            put(f"正在更新: {up}\n")
+            _svn_update_with_cleanup(svn, up, put, task_id)
+        else:
+            put(f"路径不存在，跳过更新: {up}\n")
+
+    # ── 4. 复制文件到目标目录 ──
     put("开始复制...\n")
-    success = fail = 0
-    for fi in files:
-        name = fi.get("name", "")
-        sp = fi.get("path", "")
-        is_dir = fi.get("is_dir", False)
-        if not sp or not os.path.exists(sp):
-            put(f"✗ 路径不存在: {sp}\n")
-            fail += 1
-            continue
-        rel = os.path.relpath(sp, src_dir)
-        dst_base = os.path.join(tgt_dir, os.path.basename(src_dir.rstrip("\\/")))
+    for fp in found_files:
+        dst = os.path.join(tgt_dir, "Text", os.path.basename(fp))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
         try:
-            if is_dir:
-                target_dir = os.path.join(dst_base, rel)
-                if os.path.isdir(target_dir):
-                    put(f"📂 {rel}/ 合并到目标目录...\n")
-                os.makedirs(target_dir, exist_ok=True)
-                shutil.copytree(sp, target_dir, dirs_exist_ok=True, copy_function=_copy2_force)
-                put(f"✓ {rel}/ 文件夹已复制\n")
-            else:
-                dst = os.path.join(dst_base, rel)
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                _copy2_force(sp, dst)
-                put(f"✓ {rel}\n")
-            success += 1
+            _copy2_force(fp, dst)
+            put(f"  ✓ {os.path.basename(fp)}\n")
         except Exception as e:
-            fail += 1
-            put(f"✗ {rel}: {e}\n")
+            put(f"  ✗ {os.path.basename(fp)}: {e}\n")
 
-    put(f"\n── 复制完成: {success} 成功, {fail} 失败 ──\n")
-    return fail == 0
+    # ── 5. svn lock ──
+    lock_file = os.path.join(base_path, "gameData", "Text", "Texts.xlsm")
+    if os.path.isfile(lock_file):
+        put(f"正在锁定: Texts.xlsm\n")
+        _exec_lock_svn({"target_path": lock_file, "lock_msg": "整合文字表前锁定", "update_dirs": []}, put, task_id)
+    else:
+        put(f"锁定文件不存在: {lock_file}\n")
+
+    # ── 6. 导出工具 ──
+    bat_dir = os.path.join(base_path, "gameData", "Text")
+    bat_names = ["服务器文字表导出_替换文本引用.bat", "客户端文字表导出_替换文本引用.bat"]
+    found_bats = []
+    for name in bat_names:
+        p = os.path.join(bat_dir, name)
+        if os.path.isfile(p):
+            found_bats.append(p)
+            put(f"  发现导出工具: {name}\n")
+        else:
+            put(f"  未找到导出工具: {name}\n")
+
+    if found_bats:
+        put(f"使用 {len(found_bats)} 个导出工具并行执行...\n")
+
+        def _run_one(tool_path):
+            put(f"  正在执行: {os.path.basename(tool_path)}\n")
+            proc = subprocess.Popen(
+                ["cmd.exe", "/c", tool_path],
+                cwd=os.path.dirname(tool_path),
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                creationflags=subprocess.CREATE_NO_WINDOW)
+            proc.stdin.close()
+            _register_proc(proc, task_id)
+            try:
+                for line in iter(proc.stdout.readline, b""):
+                    try:
+                        raw = line.rstrip()
+                        try:
+                            text = raw.decode("utf-8")
+                        except UnicodeDecodeError:
+                            text = raw.decode("gbk", errors="replace")
+                        put(f"    {text}\n")
+                    except Exception:
+                        pass
+                proc.wait(timeout=3600)
+                if proc.returncode == 0:
+                    put(f"  {os.path.basename(tool_path)} 已完成\n")
+                else:
+                    put(f"  {os.path.basename(tool_path)} 退出代码: {proc.returncode}\n")
+            except subprocess.TimeoutExpired:
+                try:
+                    proc.kill()
+                    proc.communicate(timeout=5)
+                except Exception:
+                    pass
+                put(f"  {os.path.basename(tool_path)} 超时\n")
+            except Exception as e:
+                put(f"  {os.path.basename(tool_path)} 错误: {e}\n")
+            finally:
+                _unregister_proc(proc, task_id)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(found_bats)) as executor:
+            futures = [executor.submit(_run_one, t) for t in found_bats]
+            concurrent.futures.wait(futures)
+
+    # ── 7. 上传 ──
+    valid_upload = [up for up in upload_paths if os.path.isdir(up)]
+    if valid_upload:
+        put(f"\n导出完成，执行上传\n")
+        _exec_upload_svn({"dirs": valid_upload}, put, task_id)
+
+    return True
 
 
 def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
@@ -1196,7 +1273,7 @@ def _exec_lock_svn(step, put, task_id=None):
 
     proc = None
     try:
-        proc = subprocess.Popen([svn, "lock", "--force", "-m", lock_msg, target_path],
+        proc = subprocess.Popen([svn, "lock", "-m", lock_msg, target_path],
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 **_get_subprocess_kwargs())
         _register_proc(proc, task_id)
@@ -1261,7 +1338,7 @@ def _exec_unlock_svn(step, put, task_id=None):
     return True
 
 
-def _exec_open_tables(step, put):
+def _exec_open_tables(step, put, task_id=None):
     file_paths = step.get("file_paths", [])
     if not file_paths:
         put("没有要打开的文件\n")
@@ -1271,6 +1348,9 @@ def _exec_open_tables(step, put):
         if not fp or not os.path.exists(fp):
             put(f"文件不存在: {fp}\n")
             continue
+        # 打开前更新 gameData 目录并锁定文件
+        _find_and_update_gamedata(fp, put, task_id)
+        _exec_lock_svn({"target_path": fp, "lock_msg": "打开表格前锁定", "update_dirs": []}, put, task_id)
         try:
             os.startfile(fp)
             put(f"打开: {os.path.basename(fp)}\n")
@@ -1287,11 +1367,35 @@ def _svn_decode_output(data):
 
 
 def _exec_revert_svn(step, put, task_id=None):
-    target_path = step.get("target_path", "").strip()
-    if not target_path or not os.path.exists(target_path):
-        put(f"回退路径无效: {target_path}\n")
+    # 兼容新旧格式：revert_paths（新数组）或 target_path（旧单路径）
+    target_paths = []
+    rp = step.get("revert_paths", [])
+    if isinstance(rp, list) and rp:
+        target_paths = [p.strip() for p in rp if p.strip()]
+    else:
+        tp = step.get("target_path", "").strip()
+        if tp:
+            target_paths.append(tp)
+
+    valid_paths = [p for p in target_paths if os.path.exists(p)]
+    if not valid_paths:
+        put("没有有效的回退路径\n")
         return False
+
     svn = _get_svn_path()
+    all_ok = True
+
+    for target_path in valid_paths:
+        ok = _revert_one_path(svn, target_path, step, put, task_id)
+        if not ok:
+            all_ok = False
+
+    put("SVN 回退完成\n")
+    return all_ok
+
+
+def _revert_one_path(svn, target_path, step, put, task_id):
+    put(f"{'='*50}\n")
     put(f"SVN回退: {target_path}\n")
 
     # 先 cleanup 确保无残留锁
@@ -1435,6 +1539,22 @@ def _exec_revert_svn(step, put, task_id=None):
 
     put("SVN 回退完成\n")
     return True
+
+
+def _find_and_update_gamedata(file_path, put, task_id):
+    """从文件路径逐级向上找 gameData 目录，执行 svn update（冲突全量覆盖）"""
+    d = os.path.dirname(file_path) if os.path.isfile(file_path) else file_path
+    while d and len(d) > 3:
+        if os.path.basename(d).lower() == "gamedata":
+            svn = _get_svn_path()
+            put(f"正在更新原文件SVN目录: {d}\n")
+            _svn_update_with_cleanup(svn, d, put, task_id)
+            return
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    put(f"未找到 gameData 目录，跳过更新\n")
 
 
 def _exec_export_error_code(step, put):
@@ -1585,6 +1705,22 @@ def _exec_export_error_code(step, put):
     put("导出错误码完成: " + str(ok_count) + "/" + str(len(codes)) + "\n")
     if ok_count == len(codes):
         put("全部语言导出成功\n")
+
+    # 导出成功后，如果有配置上传SVN目录，执行svn update + 上传
+    upload_svn_dirs = step.get("upload_svn_dir", [])
+    if isinstance(upload_svn_dirs, str):
+        upload_svn_dirs = [d.strip() for d in upload_svn_dirs.split(",") if d.strip()]
+    if upload_svn_dirs:
+        svn = _get_svn_path()
+        for d in upload_svn_dirs:
+            d = d.strip()
+            if d and os.path.isdir(d):
+                put(f"正在更新上传目录: {d}\n")
+                _svn_update_with_cleanup(svn, d, put, task_id)
+
+        put(f"\n导出完成，执行上传\n")
+        _exec_upload_svn({"dirs": upload_svn_dirs}, put, task_id)
+
     return ok_count == len(codes)
 
 
@@ -1602,6 +1738,9 @@ def _exec_merge_translation(step, put):  # noqa: C901
 
     put("翻译文件: " + excel_file + "\n")
     put("原文件: " + original_file + "\n")
+
+    # 合并前更新原文件对应的 gameData 目录
+    _find_and_update_gamedata(original_file, put, task_id)
 
     import openpyxl
 
@@ -1884,6 +2023,9 @@ def _exec_merge_table(step, put):
     put(f"输入目录: {input_dir} ({len(src_files)} 个 Excel)\n")
     put(f"目标目录: {target_dir}\n\n")
 
+    # 合并前更新 gameData 目录
+    _find_and_update_gamedata(target_dir, put, None)
+
     id_col_idx = id_col - 1
     merged = skipped = failed = 0
 
@@ -1895,6 +2037,10 @@ def _exec_merge_table(step, put):
             put(f"⏭ 跳过(目标无同名文件): {fname}\n")
             skipped += 1
             continue
+
+        # 锁定目标文件（非强制，别人锁住时日志输出）
+        put(f"正在锁定目标文件: {fname}\n")
+        _exec_lock_svn({"target_path": target_path, "lock_msg": "合并表格前锁定", "update_dirs": []}, put, None)
 
         put(f"{'='*50}\n")
         put(f"处理: {fname}\n")
@@ -2011,7 +2157,7 @@ def _exec_merge_table(step, put):
         # 用 Excel COM 刷新公式缓存值（让对比工具能读取公式单元格的计算结果）
         try:
             import win32com.client as win32
-            xl = win32.Dispatch("Excel.Application")
+            xl = win32.DispatchEx("Excel.Application")
             xl.Visible = False
             xl.DisplayAlerts = False
             wb = xl.Workbooks.Open(target_path)

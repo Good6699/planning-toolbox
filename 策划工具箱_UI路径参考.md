@@ -208,15 +208,13 @@ app > D > 通知          → Windows原生Toast通知
 
 ```
 📄 export_text      导出文字表   蓝色
-📤 upload_svn       上传SVN      绿色
-🔗 merge_table      合并表格     橙色
+ merge_table      合并文字表   橙色
 🌐 merge_translation合并翻译     紫色
 ⚠  export_error_code导出错误码   红色
-🔒 lock_svn         锁定SVN      深橙
 🔓 unlock_svn       解锁SVN      绿色
 📂 open_tables      打开表格     青色
 ↩ revert_svn        SVN回退     红色
-📋 copy_files       复制文件     青色
+📋 copy_files       整合文字表   青色
 ```
 
 ### 工具栏与日志
@@ -236,16 +234,14 @@ app > D > 通知          → Windows原生Toast通知
 
 | 步骤类型 | 字段 | 说明 |
 |----------|------|------|
-| `export_text` | 主文件路径, 工具目录, 语言列表 | 逗号分隔 |
-| `upload_svn` | 源目录 | 逗号分隔多个 |
-| `merge_table` | 输入文件, 输出目录, 合并前缀, 标题行, ID列 | 逗号分隔 |
-| `merge_translation` | 翻译文件, 原始文件, Sheet名称 | 文件+文本 |
-| `export_error_code` | 根目录, 语言代码 | 目录+文本 |
-| `lock_svn` | 目标文件路径, 更新目录, 锁定消息 | 逗号分隔 |
+| `export_text` | 主文件路径, 上传SVN目录 | 目录浏览增量追加（去重）；工具自动在主文件同目录检测；导出前自动svn update+lock，导出后自动上传 |
+| `merge_table` | 输入目录, 输出目录, 标题行, ID列 | 目录浏览；合并前自动svn update gameData+lock目标文件 |
+| `merge_translation` | 翻译文件, 原始文件 | 文件+文本；合并前自动更新gameData目录 |
+| `export_error_code` | 根目录, 语言代码, 上传SVN目录 | 目录浏览增量追加；导出后自动svn update+上传 |
+| `open_tables` | 文件路径 | 逗号分隔多个；打开前自动svn update gameData+lock文件 |
+| `revert_svn` | 回退路径, 排除路径 | 目录浏览增量追加（去重）逗号分隔；下拉显示已有排除项，每项带×删除；复选框控制是否删除未版本文件 |
+| `copy_files`（整合文字表） | 源目录, 目标目录 | 目录浏览；自动检测文字引用处理.xlsm+Texts.xlsm→svn update→复制→lock→导出→上传 |
 | `unlock_svn` | 目标文件路径, 更新目录, 解锁消息 | 逗号分隔 |
-| `open_tables` | 文件路径 | 逗号分隔多个 |
-| `revert_svn` | 回退路径, 排除路径 | 目录浏览+逗号分隔；下拉显示已有排除项，每项带×删除；复选框控制是否删除未版本文件 |
-| `copy_files` | 源目录, 文件列表(文件列表), 目标目录 | 目录浏览(自动刷新)+文件列表复用上传页签.file-list/.file-item样式+全选/取消全选/反选+自动恢复勾选 |
 
 ---
 

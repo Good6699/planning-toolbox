@@ -15,6 +15,7 @@ import tempfile
 import concurrent.futures
 from datetime import datetime
 import locale
+import re
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _pm = os.path.join(_script_dir, "py_modules")
@@ -842,11 +843,11 @@ def _run_wf_task(q, wf, steps, task_id):
             elif stype == "upload_svn":
                 ok = _exec_upload_svn(step, _put, task_id)
             elif stype == "merge_table":
-                ok = _exec_merge_table(step, _put)
+                ok = _exec_merge_table(step, _put, task_id)
             elif stype == "merge_translation":
-                ok = _exec_merge_translation(step, _put)
+                ok = _exec_merge_translation(step, _put, task_id)
             elif stype == "export_error_code":
-                ok = _exec_export_error_code(step, _put)
+                ok = _exec_export_error_code(step, _put, task_id)
             elif stype == "lock_svn":
                 ok = _exec_lock_svn(step, _put, task_id)
             elif stype == "unlock_svn":
@@ -943,7 +944,8 @@ def _exec_export_text(step, put, task_id=None):
 
     if input_file and os.path.isfile(input_file):
         put(f"正在锁定主文件: {os.path.basename(input_file)}\n")
-        _exec_lock_svn({"target_path": input_file, "lock_msg": "导出文字表前锁定", "update_dirs": []}, put, task_id)
+        if not _exec_lock_svn({"target_path": input_file, "lock_msg": "导出文字表前锁定", "update_dirs": []}, put, task_id):
+            return False
 
     put(f"使用 {len(found_tools)} 个工具并行执行...\n")
 
@@ -1112,7 +1114,8 @@ def _exec_copy_files(step, put, task_id=None):
     lock_file = os.path.join(base_path, "gameData", "Text", "Texts.xlsm")
     if os.path.isfile(lock_file):
         put(f"正在锁定: Texts.xlsm\n")
-        _exec_lock_svn({"target_path": lock_file, "lock_msg": "整合文字表前锁定", "update_dirs": []}, put, task_id)
+        if not _exec_lock_svn({"target_path": lock_file, "lock_msg": "整合文字表前锁定", "update_dirs": []}, put, task_id):
+            return False
     else:
         put(f"锁定文件不存在: {lock_file}\n")
 
@@ -1285,14 +1288,23 @@ def _exec_lock_svn(step, put, task_id=None):
                 put("锁定成功\n")
                 return True
             else:
-                put(f"锁定失败: {stderr[-200:]}\n")
+                # 从错误信息解析锁主，判断是否自己锁的
+                m = re.search(r"locked by user '([^']+)'", stderr)
+                lock_owner = m.group(1) if m else ""
+                cfg = load_config()
+                svn_user = cfg.get("svn_user", "")
+                if lock_owner and svn_user and lock_owner == svn_user:
+                    put("文件已由本人锁定，继续执行\n")
+                    return True
+                else:
+                    put(f"锁定失败，被 '{lock_owner or '?'}' 锁定: {stderr[-200:]}\n")
         finally:
             _unregister_proc(proc, task_id)
     except Exception as e:
         if proc:
             _unregister_proc(proc, task_id)
         put(f"锁定异常: {e}\n")
-    return True
+    return False
 
 
 def _exec_unlock_svn(step, put, task_id=None):
@@ -1350,7 +1362,8 @@ def _exec_open_tables(step, put, task_id=None):
             continue
         # 打开前更新 gameData 目录并锁定文件
         _find_and_update_gamedata(fp, put, task_id)
-        _exec_lock_svn({"target_path": fp, "lock_msg": "打开表格前锁定", "update_dirs": []}, put, task_id)
+        if not _exec_lock_svn({"target_path": fp, "lock_msg": "打开表格前锁定", "update_dirs": []}, put, task_id):
+            continue
         try:
             os.startfile(fp)
             put(f"打开: {os.path.basename(fp)}\n")
@@ -1557,7 +1570,7 @@ def _find_and_update_gamedata(file_path, put, task_id):
     put(f"未找到 gameData 目录，跳过更新\n")
 
 
-def _exec_export_error_code(step, put):
+def _exec_export_error_code(step, put, task_id=None):
     root_dir = step.get("root_dir", "").strip()
     lang_codes = step.get("lang_codes", "").strip()
     if not root_dir:
@@ -1724,7 +1737,7 @@ def _exec_export_error_code(step, put):
     return ok_count == len(codes)
 
 
-def _exec_merge_translation(step, put):  # noqa: C901
+def _exec_merge_translation(step, put, task_id=None):  # noqa: C901
     excel_file = step.get("input_file", "").strip()
     original_file = step.get("original_file", "").strip()
     sheet_name = step.get("sheet_name", "").strip()
@@ -1741,6 +1754,10 @@ def _exec_merge_translation(step, put):  # noqa: C901
 
     # 合并前更新原文件对应的 gameData 目录
     _find_and_update_gamedata(original_file, put, task_id)
+
+    # 合并前锁定目标文件
+    if not _exec_lock_svn({"target_path": original_file, "lock_msg": "合并翻译前锁定", "update_dirs": []}, put, task_id):
+        return False
 
     import openpyxl
 
@@ -1994,7 +2011,7 @@ def _exec_merge_translation(step, put):  # noqa: C901
         return False
 
 
-def _exec_merge_table(step, put):
+def _exec_merge_table(step, put, task_id=None):
     from toolbox_config import load_config
     cfg = load_config()
     input_dir = (step.get("input_dir") or "").strip()
@@ -2035,7 +2052,7 @@ def _exec_merge_table(step, put):
     put(f"目标目录: {target_dir}\n\n")
 
     # 合并前更新 gameData 目录
-    _find_and_update_gamedata(target_dir, put, None)
+    _find_and_update_gamedata(target_dir, put, task_id)
 
     id_col_idx = id_col - 1
     merged = skipped = failed = 0
@@ -2049,9 +2066,11 @@ def _exec_merge_table(step, put):
             skipped += 1
             continue
 
-        # 锁定目标文件（非强制，别人锁住时日志输出）
+        # 锁定目标文件，被他人锁住时跳过该文件
         put(f"正在锁定目标文件: {fname}\n")
-        _exec_lock_svn({"target_path": target_path, "lock_msg": "合并表格前锁定", "update_dirs": []}, put, None)
+        if not _exec_lock_svn({"target_path": target_path, "lock_msg": "合并表格前锁定", "update_dirs": []}, put, task_id):
+            failed += 1
+            continue
 
         put(f"{'='*50}\n")
         put(f"处理: {fname}\n")

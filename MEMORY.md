@@ -1791,3 +1791,9 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **关键经验**：① bat 中路径拼接不能假设 APP_DIR 末尾有无 `\`，必须显式补全；② `%~dp0..` 在 VBS 启动的 cmd.exe 中解析行为偶发不稳定，用 Python `sys.executable` 硬编码传参更可靠；③ 调试日志只写一次不循环追加，避免被前期测试残留污染
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)、[_updater.bat](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/_updater.bat)
 
+### fix(wf): merge_translation 合并前锁定失败阻断 + 自锁判断改解析错误信息
+- **场景**：2026-06-03 merge_translation 步骤需要锁目标文件，被他人锁住时应阻断，被自己锁住应继续执行
+- **根因**：`svn info --show-item lock-owner` 无法获取锁主（本地元数据未缓存锁信息），导致自己锁住时也报错阻断
+- **解决方案**：① `_exec_lock_svn` 锁定失败时，从 `stderr` 正则提取 `locked by user 'xxx'` 对比 `svn_user`，自己锁则继续；② `_exec_lock_svn` 锁定失败返回值从 `True` 改为 `False`（阻断）；③ 补全所有调用处的返回值检查（export_text、copy_files、open_tables、merge_table、merge_translation）
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
+

@@ -140,23 +140,17 @@ def _cleanup_copied_workers(copied):
     pass
 
 
-def _strip_api_key():
-    """读取配置，去掉 API Key"""
+def _get_bundled_config():
+    """读取开发环境的完整配置（去掉 API Key），作为包内置的初始配置。
+    新用户首次运行时使用此配置，已有本地配置的用户不受影响。"""
     config_path = os.path.join(CORE_DIR, "svn_gui_config.json")
     if not os.path.isfile(config_path):
         print("  [跳过] config 文件不存在")
         return None
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = json.load(f)
-    removed = []
-    if "tr_api_key_enc" in cfg:
-        del cfg["tr_api_key_enc"]
-        removed.append("tr_api_key_enc")
-    if "tr_api_key" in cfg:
-        del cfg["tr_api_key"]
-        removed.append("tr_api_key")
-    if removed:
-        print(f"  [清理] 已移除 API Key 字段: {', '.join(removed)}")
+    cfg.pop("tr_api_key", None)
+    cfg.pop("tr_api_key_enc", None)
     return cfg
 
 
@@ -186,6 +180,15 @@ def _get_hidden_imports():
         "--hidden-import=win32timezone",
         "--hidden-import=cffi",
         "--hidden-import=pycparser",
+        "--hidden-import=webview",
+        "--hidden-import=webview.dom",
+        "--hidden-import=webview.platforms",
+        "--hidden-import=webview.platforms.winforms",
+        "--hidden-import=webview.platforms.edgechromium",
+        "--hidden-import=webview.js",
+        "--hidden-import=proxy_tools",
+        "--hidden-import=bottle",
+        "--collect-all=webview",
     ]
 
 
@@ -398,8 +401,8 @@ def build():
     if os.path.isfile(spec_file):
         os.remove(spec_file)
 
-    # ── Step 4: 准备打包配置 ──
-    cfg_safe = _strip_api_key()
+    # ── Step 4: 准备打包配置（用开发环境配置，去掉 API Key） ──
+    cfg_bundled = _get_bundled_config()
 
     entry = os.path.join(WORKSPACE, "main.py")
     icon = os.path.join(CORE_DIR, "assets", "app_icon.ico")
@@ -445,7 +448,24 @@ def build():
         print(f"\n[错误] 输出目录未生成: {dist_app}")
         sys.exit(1)
 
-    # ── 创建时间戳归档（copytree，不改 exe 文件名）──
+    # ── Step 6: 写入包内置的配置文件（先于时间戳归档）──
+    if cfg_bundled is not None:
+        cfg_name = "svn_gui_config.json"
+        dst = os.path.join(dist_app, "_internal", CORE_DIR.split("\\")[-1], cfg_name)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, "w", encoding="utf-8") as f:
+            json.dump(cfg_bundled, f, ensure_ascii=False, indent=2)
+        print(f"  [配置] (无 API Key) → _internal/toolbox_core/{cfg_name}")
+        print(f"  [注意] 含开发环境 SVN 地址、工作流等完整配置")
+
+    # ── Step 7: 复制 update_version.py 到 dist ──
+    ver_src = os.path.join(CORE_DIR, "update_version.py")
+    ver_dst = os.path.join(dist_app, "_internal", CORE_DIR.split("\\")[-1], "update_version.py")
+    if os.path.isfile(ver_src):
+        shutil.copy2(ver_src, ver_dst)
+        print(f"  [版本] update_version.py → _internal/toolbox_core/")
+
+    # ── 创建时间戳归档（copytree，改 exe 文件名）──
     if os.path.exists(ts_app):
         shutil.rmtree(ts_app)
     try:
@@ -455,29 +475,6 @@ def build():
         print(f"  [归档] 跳过 ({e})")
 
     print(f"\n[完成] PyInstaller 打包成功！")
-
-    # ── Step 6: 复制配置文件（无 API Key + 保留窗口尺寸）──
-    if cfg_safe is not None:
-        cfg_name = "svn_gui_config.json"
-        dst = os.path.join(dist_app, "_internal", CORE_DIR.split("\\")[-1], cfg_name)
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        with open(os.path.join(CORE_DIR, cfg_name), "r", encoding="utf-8") as f:
-            orig_cfg = json.load(f)
-        for key in ("window_w", "window_h"):
-            if key in orig_cfg:
-                cfg_safe[key] = orig_cfg[key]
-        with open(dst, "w", encoding="utf-8") as f:
-            json.dump(cfg_safe, f, ensure_ascii=False, indent=2)
-        print(f"  [配置] (无 API Key) → _internal/toolbox_core/{cfg_name}")
-        if "window_w" in cfg_safe:
-            print(f"  [尺寸] {cfg_safe['window_w']}x{cfg_safe['window_h']}")
-
-    # ── Step 7: 复制 update_version.py 到 dist ──
-    ver_src = os.path.join(CORE_DIR, "update_version.py")
-    ver_dst = os.path.join(dist_app, "_internal", CORE_DIR.split("\\")[-1], "update_version.py")
-    if os.path.isfile(ver_src):
-        shutil.copy2(ver_src, ver_dst)
-        print(f"  [版本] update_version.py → _internal/toolbox_core/")
 
     # ── Step 8: 统计 ──
     total_size = 0

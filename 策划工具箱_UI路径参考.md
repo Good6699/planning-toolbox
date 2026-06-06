@@ -236,7 +236,7 @@ app > D > 通知          → Windows原生Toast通知
 |----------|------|------|
 | `export_text` | 主文件路径, 上传SVN目录 | 目录浏览增量追加（去重）；工具自动在主文件同目录检测；导出前自动svn update+lock，导出后自动上传 |
 | `merge_table` | 输入目录, 输出目录, 标题行, ID列 | 目录浏览；合并前自动svn update gameData+lock目标文件 |
-| `merge_translation` | 翻译文件, 原始文件 | 文件+文本；合并前自动更新gameData目录 |
+| `merge_translation` | 翻译文件, 目标文件 | 文件+文本；合并前自动更新gameData目录 |
 | `export_error_code` | 根目录, 语言代码, 上传SVN目录 | 目录浏览增量追加；导出后自动svn update+上传 |
 | `open_tables` | 文件路径 | 逗号分隔多个；打开前自动svn update gameData+lock文件 |
 | `revert_svn` | 回退路径, 排除路径 | 目录浏览增量追加（去重）逗号分隔；下拉显示已有排除项，每项带×删除；复选框控制是否删除未版本文件 |

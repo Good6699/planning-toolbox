@@ -19,8 +19,12 @@ Before starting any task, you MUST complete the following steps in order:
    - `memory/YYYY-MM-DD.md` (yesterday)
    - Used for recent context and continuity.
 
-4. Read `MEMORY.md`
-   - Contains curated long-term memory.
+4. Read these memory and rule files:
+   - `MEMORY.md` - Contains curated long-term memory (项目主记忆)
+   - `.workbuddy/memory/MEMORY.md` - Contains SVN 工具早期项目记忆和踩坑史
+   - `graphify-out/GRAPH_REPORT.md` - 知识图谱报告，提供项目全局代码结构概览
+   - `.trae/rules/project_rules.md` - 项目技术红线、架构决策、Excel 解析核心知识
+   - `.trae/rules/git_workflow_rules.md` - Git 提交规范、代码检查流程、分支策略
 
 5. Run `graphify update`
    - This step is MANDATORY.
@@ -380,6 +384,22 @@ When a capability is needed:
 | **step-by-step** | `.trae/skills/step-by-step/SKILL.md` | 步骤化实施：将实现任务分解为精确变更点，每个变更点包含文件路径、before/after 代码、依赖关系。当实现多步功能或修复复杂 bug 时自动调用。 |
 | **graphify-and-record** | `.trae/skills/graphify-and-record/SKILL.md` | 图谱增量更新 + 经验记录 + Git 提交。改完代码后调用：检测变更→AST提取→图谱合并→记录经验→Git提交。 |
 | **problem-solver** | `.trae/skills/problem-solver/SKILL.md` | 结构化根因分析：Fishbone 图 + 5 Whys。在诊断 bug、分析非预期行为时 PROACTIVELY 调用，不得跳过根因直接改代码。 |
+| **build-dist** | `.trae/skills/build-dist/SKILL.md` | PyInstaller 打包策划工具箱为 exe。用户说"打包/build/编译/生成exe"时调用。调用前必须先调 push-update 更新版本号。 |
+| **push-update** | `.trae/skills/push-update/SKILL.md` | 推送更新：读取已打包版本 → Git 提交 → 启动更新服务器。打包和推送已分离。 |
+| **grill-me** | `.trae/skills/grill-me/SKILL.md` | 结构化需求审问：一次一个决策分支地穷尽思考。写代码前用户说"grill me"时调用。 |
+
+## System Skills (via Skill tool)
+
+| Skill | Purpose |
+|-------|---------|
+| **update-config** | 配置 DGameAI harness 的 settings.json。自动行为（"每次 X 时"、"当 X 时"）需在 settings.json 中配置 hooks。 |
+| **simplify** | 审查已改代码的可复用性、质量和效率，然后修复发现的问题。 |
+| **loop** | 按固定间隔重复执行 prompt 或 slash 命令（如 `/loop 5m /foo`，默认 10m）。用于轮询状态或定时任务。 |
+| **gemini-image-gen** | 通过 Gemini 图片生成模型生成图片。用户说 Gemini 生图/Google 生图时调用。 |
+| **jimeng-image-gen** | 通过即梦 AI 系列模型生成图片（文生图/图生图/多图融合）。用户说即梦生图时调用。 |
+| **build-dist** | `.trae/skills/build-dist/SKILL.md` | PyInstaller 打包策划工具箱为 exe。用户说"打包/build/编译/生成exe"时调用。调用前必须先调 push-update 更新版本号。 |
+| **push-update** | `.trae/skills/push-update/SKILL.md` | 推送更新：读取已打包版本 → Git 提交 → 启动更新服务器。打包和推送已分离。 |
+| **grill-me** | `.trae/skills/grill-me/SKILL.md` | 结构化需求审问：一次一个决策分支地穷尽思考。写代码前用户说"grill me"时调用。 |
 
 Operational/local information such as:
 

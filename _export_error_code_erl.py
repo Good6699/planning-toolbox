@@ -43,33 +43,32 @@ def _write_erl(entries, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     keys = [e[1] for e in entries]
     with open(path, "w", encoding="utf-8", newline="\r\n") as f:
-        f.write("-module(cfg_errorMessage).\r\n")
-        f.write('-include("cfg_errorMessage.hrl").\r\n')
-        f.write("-export([row/1, first_row/0, last_row/0, rows/1, rows/0, keys_length/0]).\r\n")
-        f.write("-export([getRow/1, getKeyList/0]).\r\n")
-        f.write("\r\n%% \\u6307\\u5b9a\\u884c\r\n")
-        f.write("row(Id) -> getRow(Id).\r\n\r\n")
-        f.write("%% \\u7b2c\\u4e00\\u884c\\u3001\\u6700\\u540e\\u4e00\\u884c\r\n")
-        f.write("first_row() -> getRow(0).\r\n")
+        f.write("-module(cfg_errorMessage).\n")
+        f.write('-include("cfg_errorMessage.hrl").\n')
+        f.write("-export([row/1, first_row/0, last_row/0, rows/1, rows/0, keys_length/0]).\n")
+        f.write("-export([getRow/1, getKeyList/0]).\n")
+        f.write("\n%% \u6307\u5b9a\u884c\n")
+        f.write("row(Id) -> getRow(Id).\n\n")
+        f.write("%% \u7b2c\u4e00\u884c\u3001\u6700\u540e\u4e00\u884c\n")
+        f.write("first_row() -> getRow(0).\n")
         if keys:
-            f.write(f"last_row() -> getRow({keys[-1]}).\r\n")
-        f.write("\r\n%% \\u884c\\u5217\\u8868\r\n")
-        f.write("rows(KeyList) -> [row(Key) || Key <- KeyList].\r\n")
-        f.write("rows() -> rows(getKeyList()).\r\n\r\n")
-        f.write("%% Key\\u5217\\u8868\\u957f\\u5ea6\r\n")
-        f.write(f"keys_length() -> {len(keys)}.\r\n\r\n")
+            f.write(f"last_row() -> getRow({keys[-1]}).\n")
+        f.write("\n%% \u884c\u5217\u8868\n")
+        f.write("rows(KeyList) -> [row(Key) || Key <- KeyList].\n")
+        f.write("rows() -> rows(getKeyList()).\n\n")
+        f.write("%% Key\u5217\u8868\u957f\u5ea6\n")
+        f.write(f"keys_length() -> {len(keys)}.\n\n")
         for entry in entries:
             rid, text = entry[1], entry[2]
             escaped = text.replace("\\", "\\\\").replace('"', '\\"')
-            f.write(f"getRow({rid}) -> #errorMessageCfg{{\r\n")
-            f.write(f"\tiD = {rid},\r\n")
-            f.write(f'\terrorString = "{escaped}"}};\r\n')
-        f.write("getKeyList() -> [\r\n")
-        items = [str(k) for k in keys]
-        for i in range(0, len(items), 20):
-            chunk = items[i:i + 20]
-            sep = "].\r\n" if i + 20 >= len(items) else ",\r\n"
-            f.write("\t" + ",".join(chunk) + sep)
+            f.write(f"getRow({rid}) -> #errorMessageCfg{{\n")
+            f.write(f"\tiD = {rid},\n")
+            f.write('\terrorString = "' + escaped + '"};\n')
+        f.write("getRow(_) ->\n\t{}.\n\n")
+        f.write("getKeyList() -> [\n")
+        for i, k in enumerate(keys):
+            sep = "].\n" if i == len(keys) - 1 else ",\n"
+            f.write(f"\t{k}{sep}")
 
 
 def main():
@@ -86,13 +85,13 @@ def main():
     hrl_path = os.path.join(args.lang_dir, "config", "cfg_errorMessage.hrl")
     os.makedirs(os.path.dirname(hrl_path), exist_ok=True)
     with open(hrl_path, "w", encoding="utf-8", newline="\r\n") as f:
-        f.write("-ifndef(cfg_errorMessage_hrl).\r\n")
-        f.write("-define(cfg_errorMessage_hrl, true).\r\n\r\n")
-        f.write("-record(errorMessageCfg, {\r\n")
-        f.write("\tiD,\r\n")
-        f.write("\terrorString\r\n")
-        f.write("}).\r\n\r\n")
-        f.write("-endif.\r\n")
+        f.write("-ifndef(cfg_errorMessage_hrl).\n")
+        f.write("-define(cfg_errorMessage_hrl, true).\n\n")
+        f.write("-record(errorMessageCfg, {\n")
+        f.write("\tiD,\n")
+        f.write("\terrorString\n")
+        f.write("}).\n\n")
+        f.write("-endif.\n")
 
     erl_path = os.path.join(args.lang_dir, "config", "cfg_errorMessage.erl")
     _write_erl(entries, erl_path)

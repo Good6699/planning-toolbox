@@ -7,6 +7,28 @@ import os
 _pm = os.path.join(os.path.dirname(os.path.abspath(__file__)), "py_modules")
 if os.path.isdir(_pm) and _pm not in sys.path:
     sys.path.insert(0, _pm)
+    # 手动添加 pywin32 需要的子目录
+    for subdir in ["win32", "win32\\lib", "pythonwin"]:
+        full_path = os.path.join(_pm, subdir)
+        if os.path.isdir(full_path) and full_path not in sys.path:
+            sys.path.insert(0, full_path)
+
+# 添加 pywin32_system32 到 DLL 搜索路径（Python 3.8+）
+if os.path.isdir(_pm):
+    pywin32_dll = os.path.join(_pm, "pywin32_system32")
+    if os.path.isdir(pywin32_dll):
+        os.add_dll_directory(pywin32_dll)
+    # 添加整个 py_modules 到 DLL 搜索路径
+    os.add_dll_directory(_pm)
+    # 设置 Tcl/Tk 环境变量
+    tcl_dir = os.path.join(_pm, "_tcl_data")
+    tk_dir = os.path.join(_pm, "_tk_data")
+    if os.path.isdir(tcl_dir):
+        os.environ["TCL_LIBRARY"] = tcl_dir
+    if os.path.isdir(tk_dir):
+        os.environ["TK_LIBRARY"] = tk_dir
+    # 把 py_modules 加到 PATH 环境变量
+    os.environ["PATH"] = _pm + os.pathsep + os.environ.get("PATH", "")
 
 import json
 import threading
@@ -920,27 +942,12 @@ def _dnd_on_loaded(window):
 
 
 def _dnd_on_shown(window):
-    try:
-        from webview.platforms.winforms import BrowserView
-        form = BrowserView.instances.get(window.uid)
-        if not form or not hasattr(form, 'browser'):
-            return
-        edge = form.browser
-        wv = getattr(edge, 'webview', None)
-        if wv is None:
-            return
-        try:
-            from System import Action
-            form.Invoke(Action(lambda: setattr(wv, 'AllowDrop', False)))
-        except Exception:
-            pass
-    except Exception:
-        pass
+    pass
 
 
 def _init_dnd(window):
     window.events.loaded += lambda: _dnd_on_loaded(window)
-    window.events.shown += _dnd_on_shown
+    window.events.shown += lambda: _dnd_on_shown(window)
 
 
 def _set_progress(window, pct, text):
@@ -1027,19 +1034,24 @@ def main():
     signal.signal(signal.SIGINT, _sigint_handler)
 
     def _boot_app(window):
+        print("[DEBUG] _boot_app 开始", file=sys.stderr)
         window.events.loaded.wait(timeout=30)
+        print("[DEBUG] 窗口已加载", file=sys.stderr)
         _set_progress(window, 15, "界面就绪")
         _set_window_icon()
+        print("[DEBUG] 图标已设置", file=sys.stderr)
 
         global _docker
         docker = EdgeDocker(window)
         _docker = docker
         docker.start()
         _set_progress(window, 30, "初始化服务中")
+        print("[DEBUG] EdgeDocker 已启动", file=sys.stderr)
 
         if not _wait_for_flask(timeout=15):
             print("[错误] Flask 未能在 15 秒内就绪", file=sys.stderr)
             return
+        print("[DEBUG] Flask 就绪", file=sys.stderr)
         _set_progress(window, 55, "后端就绪")
         _set_progress(window, 90, "准备就绪")
         time.sleep(0.2)
@@ -1047,13 +1059,16 @@ def main():
         time.sleep(0.1)
 
         try:
+            print("[DEBUG] 正在加载 URL...", file=sys.stderr)
             window.load_url("http://127.0.0.1:18123")
+            print("[DEBUG] URL 已加载", file=sys.stderr)
             time.sleep(0.5)
         except Exception as e:
             print(f"[load_url] {e}", file=sys.stderr)
         hwnd = _find_window_hwnd(timeout=0.5)
         if hwnd:
             _show_taskbar_icon(hwnd)
+        print("[DEBUG] _boot_app 完成", file=sys.stderr)
 
     try:
         webview.start(_boot_app, window, debug=False)

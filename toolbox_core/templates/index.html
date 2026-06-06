@@ -122,6 +122,7 @@ button,input,textarea,select{
   min-height:36px;
   font-size:12px;
   border:none;
+  outline:none;
   border-radius:8px;
   background:transparent;
   color:var(--sub);
@@ -3171,6 +3172,7 @@ async function runTask(url, body, btn, logId, label, onDone) {
 
   const _logBuf = [];
   let _logTimer = null;
+  const MAX_LOG_LINES = 2000;
   function _logFlush() {
     if (!_logBuf.length) return;
     const lines = _logBuf.splice(0);
@@ -3199,6 +3201,12 @@ async function runTask(url, body, btn, logId, label, onDone) {
     }
     const hasError = Array.from(frag.children).some(c => c.className === "error");
     _logAppend(logEl, frag);
+    // limit log lines to prevent DOM bloat and UI freeze
+    while (logEl.children.length - 1 > MAX_LOG_LINES) {
+      const first = logEl.firstElementChild;
+      if (!first || first.classList.contains("log-anchor")) break;
+      first.remove();
+    }
     if (hasError) _focusAppOnError(tabKey, logEl);
   }
   function _logStartTimer() {

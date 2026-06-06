@@ -23,7 +23,28 @@ if not os.path.isdir(_pm):
     _pm = os.path.join(os.path.dirname(_script_dir), "py_modules")
 if os.path.isdir(_pm) and _pm not in sys.path:
     sys.path.insert(0, _pm)
+    # 手动添加 pywin32 需要的子目录
+    for subdir in ["win32", "win32\\lib", "pythonwin"]:
+        full_path = os.path.join(_pm, subdir)
+        if os.path.isdir(full_path) and full_path not in sys.path:
+            sys.path.insert(0, full_path)
 sys.path.insert(0, _script_dir)
+
+# 添加 py_modules 到 DLL 搜索路径和 PATH
+if os.path.isdir(_pm):
+    pywin32_dll = os.path.join(_pm, "pywin32_system32")
+    if os.path.isdir(pywin32_dll):
+        os.add_dll_directory(pywin32_dll)
+    os.add_dll_directory(_pm)
+    # 也加到 PATH 环境变量
+    os.environ["PATH"] = _pm + os.pathsep + os.environ.get("PATH", "")
+    # 设置 Tcl/Tk 环境变量
+    tcl_dir = os.path.join(_pm, "_tcl_data")
+    tk_dir = os.path.join(_pm, "_tk_data")
+    if os.path.isdir(tcl_dir):
+        os.environ["TCL_LIBRARY"] = tcl_dir
+    if os.path.isdir(tk_dir):
+        os.environ["TK_LIBRARY"] = tk_dir
 
 from flask import Flask, render_template, request, jsonify, Response, send_from_directory, stream_with_context  # noqa: E402
 from toolbox_config import (  # noqa: E402
@@ -95,51 +116,57 @@ def _get_next_task_id():
 _active_subprocesses = []
 _active_tasks = {}
 _cancelled_tasks = set()
+_procs_lock = threading.Lock()
+_cancel_lock = threading.Lock()
 
 
 def _cancel_all_tasks():
     """Kill all running subprocesses (SVN, Upload, Workflow) before update"""
     count = 0
-    for proc in list(_active_subprocesses):
-        try:
-            proc.kill()
-            proc.wait(timeout=5)
-            count += 1
-        except Exception:
-            pass
-    _active_tasks.clear()
-    _active_subprocesses.clear()
+    with _procs_lock:
+        for proc in list(_active_subprocesses):
+            try:
+                proc.kill()
+                proc.wait(timeout=5)
+                count += 1
+            except Exception:
+                pass
+        _active_tasks.clear()
+        _active_subprocesses.clear()
     return count
 
 
 def _register_proc(proc, task_id=None):
-    _active_subprocesses.append(proc)
-    if task_id:
-        _active_tasks.setdefault(task_id, []).append(proc)
+    with _procs_lock:
+        _active_subprocesses.append(proc)
+        if task_id:
+            _active_tasks.setdefault(task_id, []).append(proc)
 
 
 def _unregister_proc(proc, task_id=None):
-    try:
-        _active_subprocesses.remove(proc)
-    except ValueError:
-        pass
-    if task_id:
-        procs = _active_tasks.get(task_id, [])
+    with _procs_lock:
         try:
-            procs.remove(proc)
+            _active_subprocesses.remove(proc)
         except ValueError:
             pass
-        if not procs and task_id in _active_tasks:
-            del _active_tasks[task_id]
+        if task_id:
+            procs = _active_tasks.get(task_id, [])
+            try:
+                procs.remove(proc)
+            except ValueError:
+                pass
+            if not procs and task_id in _active_tasks:
+                del _active_tasks[task_id]
 
 
 def _handle_shutdown(signum, frame):
-    for proc in list(_active_subprocesses):
-        try:
-            proc.kill()
-            proc.communicate(timeout=5)
-        except Exception:
-            pass
+    with _procs_lock:
+        for proc in list(_active_subprocesses):
+            try:
+                proc.kill()
+                proc.communicate(timeout=5)
+            except Exception:
+                pass
     _log_queues.clear()
     sys.exit(0)
 
@@ -230,6 +257,10 @@ def api_save_config():
 
 
 def _run_svn_task(q, svn_url, mode, start_date, end_date, keyword, author, output, cfg, task_id):
+    # 子进程需要能找到 py_modules 里的依赖（如 lxml）
+    _pm_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "py_modules")
+    _svn_env = {**os.environ, "PYTHONPATH": _pm_path} if os.path.isdir(_pm_path) else None
+
     q.put(f"{'='*50}\n")
     q.put("开始执行\n")
     q.put(f"模式: {mode}\n")
@@ -268,7 +299,8 @@ def _run_svn_task(q, svn_url, mode, start_date, end_date, keyword, author, outpu
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 encoding="utf-8", errors="replace",
-                                bufsize=1, **_get_subprocess_kwargs())
+                                bufsize=1, env=_svn_env,
+                                **_get_subprocess_kwargs())
         _register_proc(proc, task_id)
         try:
             for line in iter(proc.stdout.readline, ""):
@@ -280,10 +312,13 @@ def _run_svn_task(q, svn_url, mode, start_date, end_date, keyword, author, outpu
     except Exception as e:
         q.put(f"\n❌ 执行失败: {e}\n")
     q.put(f"[输出路径] {output}\n")
-    if task_id not in _cancelled_tasks:
+    with _cancel_lock:
+        cancelled = task_id in _cancelled_tasks
+    if not cancelled:
         mode_names = {"compare": "SVN 对比", "export": "SVN 导出", "summary": "SVN 摘要"}
         _notify_task_done(mode_names.get(mode, f"SVN {mode}"))
-    _cancelled_tasks.discard(task_id)
+    with _cancel_lock:
+        _cancelled_tasks.discard(task_id)
     q.put(None)
 
 
@@ -339,17 +374,19 @@ def api_task_cancel():
     if not task_id:
         return jsonify({"error": "缺少 task_id"}), 400
 
-    procs = _active_tasks.pop(task_id, [])
+    with _procs_lock:
+        procs = _active_tasks.pop(task_id, [])
     for proc in procs:
         try:
             proc.kill()
             proc.communicate(timeout=5)
         except Exception:
             pass
-        try:
-            _active_subprocesses.remove(proc)
-        except ValueError:
-            pass
+        with _procs_lock:
+            try:
+                _active_subprocesses.remove(proc)
+            except ValueError:
+                pass
 
     q = _log_queues.pop(task_id, None)
     if q:
@@ -359,7 +396,8 @@ def api_task_cancel():
         except Exception:
             pass
 
-    _cancelled_tasks.add(task_id)
+    with _cancel_lock:
+        _cancelled_tasks.add(task_id)
 
     return jsonify({"status": "cancelled", "task_id": task_id})
 
@@ -828,9 +866,10 @@ def _run_wf_task(q, wf, steps, task_id):
 
     blocked = False
     for i, step in enumerate(steps):
-        if task_id in _cancelled_tasks:
-            _put("工作流已被取消\n")
-            break
+        with _cancel_lock:
+            if task_id in _cancelled_tasks:
+                _put("工作流已被取消\n")
+                break
         _put(f"-- [{i+1}/{len(steps)}] {step.get('name', '')} --\n")
         if blocked:
             _put("已阻断，跳过\n")
@@ -870,7 +909,8 @@ def _run_wf_task(q, wf, steps, task_id):
     _put(f"\n{'='*50}\n")
     _put("工作流执行完成\n" if not blocked else "工作流执行完成（有失败步骤）\n")
     _notify_task_done(wf.get('name', '未命名'))
-    _cancelled_tasks.discard(task_id)
+    with _cancel_lock:
+        _cancelled_tasks.discard(task_id)
     _put(None)
     time.sleep(10)
     _log_queues.pop(task_id, None)
@@ -954,13 +994,21 @@ def _exec_export_text(step, put, task_id=None):
         proc = subprocess.Popen(
             ["cmd.exe", "/c", tool_path],
             cwd=os.path.dirname(tool_path) if os.path.isdir(os.path.dirname(tool_path)) else None,
-            stdin=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            creationflags=subprocess.CREATE_NO_WINDOW)
-        proc.stdin.close()
+            stderr=subprocess.PIPE,
+            **_get_subprocess_kwargs())
         _register_proc(proc, task_id)
         try:
+            # 后台线程读取 stderr，防止管道阻塞
+            _stderr_lines = []
+            def _read_stderr():
+                for err_line in iter(proc.stderr.readline, b""):
+                    _stderr_lines.append(err_line)
+                proc.stderr.close()
+            stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+            stderr_thread.start()
+
             for line in iter(proc.stdout.readline, b""):
                 try:
                     raw = line.rstrip()
@@ -972,6 +1020,20 @@ def _exec_export_text(step, put, task_id=None):
                 except Exception:
                     pass
             proc.wait(timeout=3600)
+            stderr_thread.join(timeout=5)
+            # 打印 stderr 内容（如果有）
+            if _stderr_lines:
+                put(f"  --- stderr 输出 ---\n")
+                for err_line in _stderr_lines:
+                    try:
+                        raw = err_line.rstrip()
+                        try:
+                            text = raw.decode("utf-8")
+                        except UnicodeDecodeError:
+                            text = raw.decode("gbk", errors="replace")
+                        put(f"  [stderr] {text}\n")
+                    except Exception:
+                        pass
             if proc.returncode == 0:
                 put(f"  {os.path.basename(tool_path)} 已完成\n")
             else:
@@ -1153,12 +1215,20 @@ def _exec_copy_files(step, put, task_id=None):
             proc = subprocess.Popen(
                 ["cmd.exe", "/c", tool_path],
                 cwd=os.path.dirname(tool_path),
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                creationflags=subprocess.CREATE_NO_WINDOW)
-            proc.stdin.close()
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                **_get_subprocess_kwargs())
             _register_proc(proc, task_id)
             try:
+                # 后台线程读取 stderr，防止管道阻塞
+                _stderr_lines = []
+                def _read_stderr():
+                    for err_line in iter(proc.stderr.readline, b""):
+                        _stderr_lines.append(err_line)
+                    proc.stderr.close()
+                stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+                stderr_thread.start()
+
                 for line in iter(proc.stdout.readline, b""):
                     try:
                         raw = line.rstrip()
@@ -1170,6 +1240,20 @@ def _exec_copy_files(step, put, task_id=None):
                     except Exception:
                         pass
                 proc.wait(timeout=3600)
+                stderr_thread.join(timeout=5)
+                # 打印 stderr 内容（如果有）
+                if _stderr_lines:
+                    put(f"  --- stderr 输出 ---\n")
+                    for err_line in _stderr_lines:
+                        try:
+                            raw = err_line.rstrip()
+                            try:
+                                text = raw.decode("utf-8")
+                            except UnicodeDecodeError:
+                                text = raw.decode("gbk", errors="replace")
+                            put(f"  [stderr] {text}\n")
+                        except Exception:
+                            pass
                 if proc.returncode == 0:
                     put(f"  {os.path.basename(tool_path)} 已完成\n")
                 else:
@@ -1639,6 +1723,9 @@ def _exec_export_error_code(step, put, task_id=None):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     erl_script = os.path.join(script_dir, "..", "_export_error_code_erl.py")
     py_exe = sys.executable
+    # 子进程需要能找到 py_modules 里的依赖（如 openpyxl）
+    _pm_path = os.path.join(script_dir, "py_modules")
+    _erl_env = {**os.environ, "PYTHONPATH": _pm_path} if os.path.isdir(_pm_path) else None
 
     results = []
 
@@ -1709,7 +1796,7 @@ def _exec_export_error_code(step, put, task_id=None):
                         put("    " + line.strip() + "\n")
                 put("  [" + code + "] 客户端导出成功\n")
             else:
-                err = (r.stderr or r.stdout or "").strip()[:300]
+                err = (r.stderr or r.stdout or "").strip()[:1000]
                 put("  [" + code + "] 客户端导出失败: " + err + "\n")
                 ok = False
         except Exception as e:
@@ -1723,7 +1810,7 @@ def _exec_export_error_code(step, put, task_id=None):
                     [py_exe, erl_script, "--xlsm", xlsm_file, "--lang-dir", lang_path],
                     capture_output=True,
                     encoding=locale.getpreferredencoding(), errors="replace",
-                    timeout=60,
+                    timeout=60, env=_erl_env,
                     **_get_subprocess_kwargs()
                 )
                 if r.returncode == 0:
@@ -1731,7 +1818,7 @@ def _exec_export_error_code(step, put, task_id=None):
                         put("    " + line.strip() + "\n")
                     put("  [" + code + "] erlang 导出成功\n")
                 else:
-                    err = (r.stderr or r.stdout or "").strip()[:200]
+                    err = (r.stderr or r.stdout or "").strip()[:1000]
                     put("  [" + code + "] erlang 导出失败: " + err + "\n")
                     ok = False
             except Exception as e:
@@ -2690,27 +2777,29 @@ def api_translate_run():  # noqa: C901
 
             batch_items = []
             ref_matched = 0
-            for row in ws.iter_rows(min_row=2, values_only=False):
-                src_val = row[src_col - 1].value
+            # 一次性读入内存，避免逐行创建 cell 对象
+            rows_data = [list(row) for row in ws.iter_rows(min_row=2, values_only=True)]
+            for ri, vals in enumerate(rows_data, 2):
+                src_val = vals[src_col - 1]
                 if src_val is None or not str(src_val).strip():
                     continue
                 src_text = str(src_val).strip()
 
                 missing_targets = set()
                 for tgt_name, tgt_col in tgt_col_map.items():
-                    tgt_val = row[tgt_col - 1].value
+                    tgt_val = vals[tgt_col - 1]
                     if tgt_val and str(tgt_val).strip():
                         continue
                     if not has_raw:
                         ref_val = all_refs.get(tgt_name, {}).get(src_text)
                         if ref_val:
-                            ws.cell(row=row[0].row, column=tgt_col, value=ref_val)
+                            ws.cell(row=ri, column=tgt_col, value=ref_val)
                             ref_matched += 1
                             continue
                     missing_targets.add(tgt_name)
 
                 if missing_targets:
-                    batch_items.append((row[0].row, src_text, missing_targets))
+                    batch_items.append((ri, src_text, missing_targets))
 
             q.put(f"参考匹配直接填入: {ref_matched} 条\n")
             q.put(f"需要 API 翻译: {len(batch_items)} 条 -> {len(tgt_names)} 个语言\n")
@@ -2742,7 +2831,6 @@ def api_translate_run():  # noqa: C901
                         for tgt_name in missing:
                             ws.cell(row=row_num, column=tgt_col_map[tgt_name], value="【翻译失败】")
                     overall_fail += sum(len(m) for m in missing_sets)
-                    _time.sleep(1)
                     continue
 
                 batch_ok = batch_fail = 0
@@ -2763,7 +2851,6 @@ def api_translate_run():  # noqa: C901
 
                 overall_fail += batch_fail
                 q.put(f"  批次 {batch_num} 完成（成功 {batch_ok}/{batch_ok + batch_fail}）\n")
-                _time.sleep(0.5)
 
             wb.save(out_path)
             wb.close()
@@ -3467,7 +3554,6 @@ def api_update_check():
         "error": None,
     }
     try:
-        _cancel_all_tasks()
         ver_url = UPDATE_URL.rstrip("/") + "/version.json"
         resp = urllib.request.urlopen(ver_url, timeout=5)
         remote = _json.loads(resp.read().decode("utf-8"))

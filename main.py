@@ -15,6 +15,34 @@ else:
 
 sys.path.insert(0, core_dir)
 
+# 配置 py_modules 和 DLL 搜索路径
+if not getattr(sys, 'frozen', False):
+    _pm = os.path.join(core_dir, "py_modules")
+    if os.path.isdir(_pm) and _pm not in sys.path:
+        sys.path.insert(0, _pm)
+        # 手动添加 pywin32 需要的子目录
+        for subdir in ["win32", "win32\\lib", "pythonwin"]:
+            full_path = os.path.join(_pm, subdir)
+            if os.path.isdir(full_path) and full_path not in sys.path:
+                sys.path.insert(0, full_path)
+
+    # 添加 pywin32_system32 到 DLL 搜索路径（Python 3.8+）
+    if os.path.isdir(_pm):
+        pywin32_dll = os.path.join(_pm, "pywin32_system32")
+        if os.path.isdir(pywin32_dll):
+            os.add_dll_directory(pywin32_dll)
+        # 添加整个 py_modules 到 DLL 搜索路径
+        os.add_dll_directory(_pm)
+        # 设置 Tcl/Tk 环境变量
+        tcl_dir = os.path.join(_pm, "_tcl_data")
+        tk_dir = os.path.join(_pm, "_tk_data")
+        if os.path.isdir(tcl_dir):
+            os.environ["TCL_LIBRARY"] = tcl_dir
+        if os.path.isdir(tk_dir):
+            os.environ["TK_LIBRARY"] = tk_dir
+        # 把 py_modules 加到 PATH 环境变量
+        os.environ["PATH"] = _pm + os.pathsep + os.environ.get("PATH", "")
+
 
 # frozen 模式下 sys.executable 指向 exe 本身，子进程调用时会附带脚本名作为第一参数
 # 此处识别并路由到正确的模块，否则 exe 不认识子进程参数会报错

@@ -21,14 +21,19 @@ def _get_config_dir():
 
 
 def _ensure_frozen_config():
-    """用打包内置的完整配置覆盖 APPDATA 配置，仅保留 API Key（如有）"""
+    """首次运行时，用包内置的完整配置初始化 APPDATA 配置；
+    已有本地配置的用户不受影响，完全保留用户数据。"""
     if not getattr(sys, 'frozen', False):
         return
     cfg_path = CONFIG_FILE
-    internal_cfg = os.path.join(SCRIPT_DIR, "toolbox_core", "svn_gui_config.json")
-    alt_internal = os.path.join(os.path.dirname(SCRIPT_DIR), "toolbox_core", "svn_gui_config.json")
+    if os.path.isfile(cfg_path):
+        return  # 已有本地配置，不覆盖
+    # PyInstaller 打包后配置在 _internal/toolbox_core/ 下
+    # sys._MEIPASS 指向 _internal/，sys.executable 所在目录同层
+    _base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable)) if getattr(sys, 'frozen', False) else SCRIPT_DIR
+    internal_cfg = os.path.join(_base, "toolbox_core", "svn_gui_config.json")
     src = None
-    for p in (internal_cfg, alt_internal):
+    for p in (internal_cfg,):
         if os.path.isfile(p):
             src = p
             break
@@ -36,23 +41,9 @@ def _ensure_frozen_config():
         return
     with open(src, "r", encoding="utf-8") as f:
         src_cfg = json.load(f)
-    src_cfg.pop("tr_api_key", None)
-    src_cfg.pop("tr_api_key_enc", None)
-    if not os.path.isfile(cfg_path):
-        with open(cfg_path, "w", encoding="utf-8") as f:
-            json.dump(src_cfg, f, ensure_ascii=False, indent=2)
-        return
-    with open(cfg_path, "r", encoding="utf-8") as f:
-        dst_cfg = json.load(f)
-    for k, v in src_cfg.items():
-        if k == "tr_api_key" or k == "tr_api_key_enc":
-            continue
-        if k in ("window_w", "window_h"):
-            dst_cfg[k] = v
-        elif k not in dst_cfg:
-            dst_cfg[k] = v
+    os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
     with open(cfg_path, "w", encoding="utf-8") as f:
-        json.dump(dst_cfg, f, ensure_ascii=False, indent=2)
+        json.dump(src_cfg, f, ensure_ascii=False, indent=2)
 
 MAIN_SCRIPT = os.path.join(SCRIPT_DIR, "svn_oneclick_compare.py")
 CONFIG_FILE = os.path.join(_get_config_dir(), "svn_gui_config.json")

@@ -212,6 +212,7 @@ def api_get_config():
         "output_dir": cfg.get("output_dir", DEFAULT_OUTPUT_DIR),
         "output_dir_history": cfg.get("output_dir_history", []),
         "merge_target_history": cfg.get("merge_target_history", []),
+        "merge_revert_exclude_paths": cfg.get("merge_revert_exclude_paths", []),
         "svn_keyword_history": cfg.get("svn_keyword_history", []),
         "svn_author_history": cfg.get("svn_author_history", []),
         "exclude_dirs": cfg.get("exclude_dirs", ""),
@@ -1557,21 +1558,6 @@ def _revert_one_path(svn, target_path, step, put, task_id):
                     put(f"  ⚠ 备份失败（跳过排除）: {rel} - {e}\n")
 
         put("正在全量回退本地所有修改...\n")
-        # 先清理所有 changelist 标签，避免回退后残留空分组
-        put("清理 SVN changelist 标签...\n")
-        try:
-            subprocess.run(
-                [svn, "changelist", "--remove", "--changelist", "语义合并",
-                 target_path, "--depth", "infinity"],
-                capture_output=True, timeout=60,
-                **_get_subprocess_kwargs())
-            subprocess.run(
-                [svn, "changelist", "--remove", "--changelist", "本次修改",
-                 target_path, "--depth", "infinity"],
-                capture_output=True, timeout=60,
-                **_get_subprocess_kwargs())
-        except Exception:
-            pass
 
         r = subprocess.run(
             [svn, "revert", "-R", target_path],
@@ -3212,6 +3198,47 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
         if before != len(versions):
             _log(f"日期过滤: 剔除 {before - len(versions)} 个超出范围的版本")
 
+        # 用 svn diff --summarize 过滤纯属性变更（只保留有内容变更的文件）
+        filtered_revs = [v["rev"] for v in versions if isinstance(v.get("rev"), int) and v.get("files")]
+        if filtered_revs:
+            _auth_args = []
+            if svn_user:
+                _auth_args += ["--username", svn_user]
+            if svn_pass:
+                _auth_args += ["--password", svn_pass, "--no-auth-cache"]
+            _log("正在过滤纯属性变更文件...")
+            content_files = set()
+            _svn = _get_svn_path()
+            norm_url = source_url.rstrip("/")
+            for i in range(0, len(filtered_revs), 50):
+                batch = filtered_revs[i:i + 50]
+                rev_args = []
+                for r in batch:
+                    rev_args += ["-c", str(r)]
+                try:
+                    _r = subprocess.run(
+                        [_svn, "diff", "--summarize"] + rev_args + [source_url] + _auth_args,
+                        capture_output=True, timeout=60, **_get_subprocess_kwargs()
+                    )
+                    out = _r.stdout.decode("utf-8", errors="replace") if _r.stdout else ""
+                    for line in out.strip().splitlines():
+                        parts = line.strip().split(None, 1)
+                        if len(parts) >= 2:
+                            path = parts[1]
+                            if path.startswith(norm_url):
+                                path = path[len(norm_url):].lstrip("/")
+                                content_files.add(path)
+                except Exception:
+                    pass
+            if content_files:
+                removed = 0
+                for v in versions:
+                    orig = v.get("files", [])
+                    v["files"] = [f for f in orig if f.get("path", "") in content_files]
+                    removed += len(orig) - len(v.get("files", []))
+                if removed:
+                    _log(f"  已过滤 {removed} 个纯属性变更文件")
+
         if filter_str_verbose:
             for v in versions:
                 if is_file_url:
@@ -3245,14 +3272,20 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
 
 
 def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, files,
-                  svn_user, svn_pass):
+                  svn_user, svn_pass, exclude_paths=None):
     """后台合并任务线程（文件优先循环，每文件多 -c 合并）"""
     q = _log_queues.setdefault(task_id, queue.Queue())
-    ts = datetime.now().strftime("%H:%M:%S")
+
+    def _ts():
+        return datetime.now().strftime("%H:%M:%S")
 
     def _log(msg, level="info"):
-        tag = f"[{ts}][{level}]" if level != "info" else f"[{ts}]"
+        t = _ts()
+        tag = f"[{t}][{level}]" if level != "info" else f"[{t}]"
         q.put(f"{tag} {msg}\n")
+
+    def _put(msg):
+        q.put(f"[{_ts()}] {msg}")
 
     try:
         q.put(f"{'='*50}\n")
@@ -3262,10 +3295,14 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
         q.put(f"涉及版本: {len(revisions)} 个, 文件: {len(files)} 个\n")
         q.put(f"{'='*50}\n")
 
-        q.put("🔄 更新目标工作副本至最新...\n")
-        from toolbox_merge import svn_update_target
-        svn_update_target(target_path, svn_user=svn_user, svn_pass=svn_pass,
-                          log_callback=_log)
+        # 合并前回退目标路径到最新版本（复用工作流 revert_svn 逻辑）
+        q.put("🔄 回退目标工作副本至最新版本（冲突全量覆盖）...\n")
+        svn = _get_svn_path()
+        revert_step = {
+            "exclude_paths": exclude_paths or [],
+            "delete_unversioned": True
+        }
+        _revert_one_path(svn, target_path, revert_step, _put, task_id)
         q.put("\n")
 
         from urllib.parse import urlparse
@@ -3315,79 +3352,48 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
             for cf in all_conflict_files:
                 q.put(f"  - {cf}\n")
 
+        # 清理新增文件的 svn:mime-type（svn add 自动设置，仅影响 A 状态文件）
+        try:
+            sr = subprocess.run([svn, "status", target_path],
+                                capture_output=True, timeout=60, **_get_subprocess_kwargs())
+            status_out = _decode_svn_output(sr.stdout)
+            added_files = []
+            for line in status_out.splitlines():
+                if len(line) >= 8 and line[0] == "A":
+                    added_files.append(os.path.join(target_path, line[7:].strip()))
+            cleared = 0
+            for fp in added_files:
+                try:
+                    r = subprocess.run([svn, "propdel", "svn:mime-type", fp, "--quiet"],
+                                       capture_output=True, timeout=15,
+                                       **_get_subprocess_kwargs())
+                    if r.returncode == 0:
+                        cleared += 1
+                except Exception:
+                    pass
+            if cleared:
+                q.put(f"  已清理 {cleared} 个新增文件的 mime-type\n")
+        except Exception:
+            pass
+
         q.put(f"\n{'='*50}\n")
 
-        # 使用 svn changelist 给合并的文件打上 "语义合并" 分类标签
-        svn_exe = _get_svn_path()
-        merged_abs = set()
-        for f in files:
-            fp = f.get("path", "")
-            if fp:
-                merged_abs.add(os.path.abspath(os.path.join(target_path, fp)))
-        if merged_abs:
-            q.put("🏷️ 正在标记 changelist 分组（语义合并）...\n")
-            # 扫描整个工作副本，按 merged_abs 过滤出有实际变化的文件
-            changed_files = []
-            try:
-                r = subprocess.run(
-                    [svn_exe, "status", target_path],
-                    capture_output=True, timeout=60, **_get_subprocess_kwargs()
-                )
-                status_stdout = _decode_svn_output(r.stdout)
-                changed_flags = {'M', 'A', 'R'}
-                for line in status_stdout.splitlines():
-                    if len(line) < 2:
-                        continue
-                    flag = line[0]
-                    if flag not in changed_flags:
-                        continue
-                    p = line[7:].strip() if len(line) > 7 else ""
-                    if not p:
-                        continue
-                    if not os.path.isabs(p):
-                        p = os.path.join(target_path, p)
-                    p = os.path.abspath(p)
-                    if p in merged_abs:
-                        changed_files.append(p)
-                    else:
-                        # 文件本身不在合并列表中但父目录在（merge 目录时递归创建子文件）
-                        parent = os.path.dirname(p)
-                        if parent in merged_abs:
-                            changed_files.append(p)
-            except Exception as e:
-                q.put(f"   ⚠ svn status 扫描失败: {e}\n")
-            if changed_files:
-                temp_dir = tempfile.mkdtemp()
+        # 清理已删除目录的残留空文件夹
+        deleted_dirs = [f["path"] for f in files
+                        if f.get("action") == "del" and not os.path.splitext(f["path"])[1]]
+        if deleted_dirs:
+            q.put("清理已删除目录残留...\n")
+            removed = 0
+            for d in deleted_dirs:
+                fp = os.path.join(target_path, d)
                 try:
-                    chg_file = os.path.join(temp_dir, "svn_merge_changelist.txt")
-                    with open(chg_file, "w", encoding="utf-8") as tf:
-                        for p in changed_files:
-                            if os.path.exists(p):
-                                tf.write(p + "\n")
-                    subprocess.run(
-                        [svn_exe, "changelist", "--remove", "--changelist", "语义合并",
-                         target_path, "--depth", "infinity"],
-                        capture_output=True, timeout=60,
-                        **_get_subprocess_kwargs()
-                    )
-                    subprocess.run(
-                        [svn_exe, "changelist", "语义合并", "--targets", chg_file],
-                        capture_output=True, timeout=60,
-                        **_get_subprocess_kwargs()
-                    )
-                    q.put(f"   ✅ 已标记 {len(changed_files)} 个文件为「语义合并」分组（排除 {len(merged_abs) - len(changed_files)} 个无变更文件）\n")
-                except Exception as e:
-                    q.put(f"   ⚠ changelist 标记异常: {e}\n")
-                finally:
-                    try:
-                        os.unlink(chg_file)
-                        os.rmdir(temp_dir)
-                    except Exception:
-                        pass
-            else:
-                q.put("   ℹ 合并的文件均无实际变化，跳过 changelist 标记\n")
-        else:
-            q.put("   ℹ 无合并文件，跳过 changelist 标记\n")
+                    if os.path.isdir(fp):
+                        shutil.rmtree(fp, ignore_errors=True)
+                        removed += 1
+                except Exception:
+                    pass
+            if removed:
+                q.put(f"  已清理 {removed} 个空文件夹\n")
 
         q.put("🔄 正在唤起SVN提交弹窗...\n")
         opened = open_commit_dialog(target_path)
@@ -3430,11 +3436,13 @@ def api_merge_run():
     if svn_pass:
         from toolbox_config import decrypt_key
         svn_pass = decrypt_key(svn_pass)
+    exclude_paths = data.get("exclude_paths") or cfg.get("merge_revert_exclude_paths", [])
     task_id = _get_next_task_id()
     t = threading.Thread(target=_merge_worker,
                          args=(task_id, source_url, target_path,
                                revisions, rev_file_map, files,
-                               svn_user or None, svn_pass or None),
+                               svn_user or None, svn_pass or None,
+                               exclude_paths),
                          daemon=True)
     t.start()
     return jsonify({"task_id": task_id})

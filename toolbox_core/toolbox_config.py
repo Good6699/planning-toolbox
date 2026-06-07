@@ -13,37 +13,42 @@ if args.dir and os.path.isdir(args.dir):
     SCRIPT_DIR = args.dir
 
 def _get_config_dir():
-    if getattr(sys, 'frozen', False):
-        d = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'planning-toolbox')
-        os.makedirs(d, exist_ok=True)
-        return d
-    return SCRIPT_DIR
+    d = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'planning-toolbox')
+    os.makedirs(d, exist_ok=True)
+    return d
 
 
 def _ensure_frozen_config():
-    """首次运行时，用包内置的完整配置初始化 APPDATA 配置；
-    已有本地配置的用户不受影响，完全保留用户数据。"""
-    if not getattr(sys, 'frozen', False):
-        return
+    """统一用 APPDATA 目录存配置，不再依赖源码目录。
+    非 frozen 模式检测源码目录的旧配置，自动迁移到 APPDATA。"""
     cfg_path = CONFIG_FILE
     if os.path.isfile(cfg_path):
-        return  # 已有本地配置，不覆盖
-    # PyInstaller 打包后配置在 _internal/toolbox_core/ 下
-    # sys._MEIPASS 指向 _internal/，sys.executable 所在目录同层
-    _base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable)) if getattr(sys, 'frozen', False) else SCRIPT_DIR
-    internal_cfg = os.path.join(_base, "toolbox_core", "svn_gui_config.json")
-    src = None
-    for p in (internal_cfg,):
-        if os.path.isfile(p):
-            src = p
-            break
-    if not src:
-        return
-    with open(src, "r", encoding="utf-8") as f:
-        src_cfg = json.load(f)
-    os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
-    with open(cfg_path, "w", encoding="utf-8") as f:
-        json.dump(src_cfg, f, ensure_ascii=False, indent=2)
+        return  # 已有本地配置，保留
+
+    # 迁移源码目录旧配置 → APPDATA
+    src_old = os.path.join(SCRIPT_DIR, "svn_gui_config.json")
+    if os.path.isfile(src_old):
+        try:
+            with open(src_old, "r", encoding="utf-8") as f:
+                old_cfg = json.load(f)
+            os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(old_cfg, f, ensure_ascii=False, indent=2)
+            print(f"已迁移配置: {src_old} → {cfg_path}")
+            return
+        except Exception:
+            pass
+
+    # frozen 模式：从包内置配置初始化
+    if getattr(sys, 'frozen', False):
+        _base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+        internal_cfg = os.path.join(_base, "toolbox_core", "svn_gui_config.json")
+        if os.path.isfile(internal_cfg):
+            with open(internal_cfg, "r", encoding="utf-8") as f:
+                src_cfg = json.load(f)
+            os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(src_cfg, f, ensure_ascii=False, indent=2)
 
 MAIN_SCRIPT = os.path.join(SCRIPT_DIR, "svn_oneclick_compare.py")
 CONFIG_FILE = os.path.join(_get_config_dir(), "svn_gui_config.json")

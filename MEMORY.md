@@ -1,4 +1,5 @@
 - **2026-04-16**：记忆系统启用
+- **2026-06-07**：语义合并优化——merge 自带 add/mod/del 处理，无需单独走 export/add/delete 分支；新增文件 mime-type 用 `svn propdel svn:mime-type` 清理（A 状态文件安全，不产生 ` M`）；合并前 `svn diff --summarize` 跳过纯属性变更文件；version list 查询阶段也用 `svn diff --summarize` 过滤纯属性变更；空文件夹在合并结束后批量清理；**注意 `svn propdel` 不支持 `--targets`**，必须逐文件执行或分批调用
 
 ## 技术规范偏好
 

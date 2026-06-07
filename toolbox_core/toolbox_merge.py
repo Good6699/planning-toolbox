@@ -414,6 +414,21 @@ def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
     _log(f"  → 合并: {file_path}", "info")
     latest_rev = max(revisions)
     rev_args = _build_merge_c_args(revisions)
+
+    # 检查文件是否有内容变更，跳过纯属性变更（如 mime-type）
+    file_url = source_url.rstrip("/") + "/" + file_path
+    try:
+        dr = subprocess.run(
+            [svn_exe, "diff", "--summarize"] + rev_args + [file_url] + auth_args,
+            capture_output=True, timeout=30, **_get_subprocess_kwargs())
+        if dr.returncode == 0:
+            diff_out = dr.stdout.decode("utf-8", errors="replace") if dr.stdout else ""
+            if not diff_out.strip():
+                _log(f"  ℹ 跳过纯属性变更: {file_path}", "info")
+                return 1, 0, 0, []
+    except Exception:
+        pass
+
     cmd = [
         svn_exe, "merge", "--ignore-ancestry", "--accept", "theirs-full",
     ] + rev_args + [source_url, local_file] + auth_args

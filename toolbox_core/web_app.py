@@ -51,7 +51,7 @@ from toolbox_config import (  # noqa: E402
     SCRIPT_DIR, MAIN_SCRIPT, DEFAULT_OUTPUT_DIR,
     load_config, save_config,
 )
-from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock  # noqa: E402
+from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock, _diagnose_svn_missing, _auto_install_svn_cli  # noqa: E402
 from xlsm_zipper import apply_via_excel  # noqa: E402
 from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path, resolve_svn_url_to_local, migrate_old_svn_mappings  # noqa: E402
 
@@ -527,6 +527,12 @@ def _svn_update_first(q, target_dir):
         q.put("SVN 更新超时（超过2分钟）\n")
     except Exception as e:
         q.put("SVN 更新异常: " + str(e) + "\n")
+        if "系统找不到指定的文件" in str(e):
+            q.put("  💡 " + _diagnose_svn_missing().replace("\n", "\n     ") + "\n")
+            q.put("  → 正在自动安装 SVN 命令行工具...\n")
+            _put = lambda msg: q.put("     " + msg)
+            ok, msg = _auto_install_svn_cli(put=_put)
+            q.put(f"  → {msg}\n")
 
 
 def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
@@ -1164,6 +1170,11 @@ def _exec_copy_files(step, put, task_id=None):
                 put(f"  ⚠ {os.path.basename(fp)}: {r.stderr.strip()[-100:]}\n")
         except Exception as e:
             put(f"  ⚠ {os.path.basename(fp)} 回退异常: {e}\n")
+            if "系统找不到指定的文件" in str(e):
+                put("  💡 " + _diagnose_svn_missing().replace("\n", "\n     ") + "\n")
+                put("  → 正在自动安装 SVN 命令行工具...\n")
+                ok, msg = _auto_install_svn_cli(put=lambda m: put("     " + m))
+                put(f"  → {msg}\n")
 
     upload_paths = [
         os.path.join(base_path, "Client", "Assets", "StreamingAssets"),
@@ -1350,6 +1361,11 @@ def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
         if proc:
             _unregister_proc(proc, task_id)
         put(f"更新异常: {e}\n")
+        if "系统找不到指定的文件" in str(e):
+            put("  💡 " + _diagnose_svn_missing().replace("\n", "\n     ") + "\n")
+            put("  → 正在自动安装 SVN 命令行工具...\n")
+            ok, msg = _auto_install_svn_cli(put=lambda m: put("     " + m))
+            put(f"  → {msg}\n")
         return False
 
 
@@ -1403,6 +1419,11 @@ def _exec_lock_svn(step, put, task_id=None):
         if proc:
             _unregister_proc(proc, task_id)
         put(f"锁定异常: {e}\n")
+        if "系统找不到指定的文件" in str(e):
+            put("  💡 " + _diagnose_svn_missing().replace("\n", "\n     ") + "\n")
+            put("  → 正在自动安装 SVN 命令行工具...\n")
+            ok, msg = _auto_install_svn_cli(put=lambda m: put("     " + m))
+            put(f"  → {msg}\n")
     return False
 
 
@@ -3584,6 +3605,90 @@ def api_update_check():
     return jsonify(result)
 
 
+# _updater.bat 内容（用于兜底重建，防止 xcopy 覆盖自身时异常丢失）
+_UPDATER_BAT_CONTENT = r"""@echo off
+setlocal enabledelayedexpansion
+set DEB=%~dp0_update_debug.txt
+echo [%DATE% %TIME%] bat start > "%DEB%"
+echo [%DATE% %TIME%] dp0=%~dp0 >> "%DEB%"
+
+set /a LN=0
+for /f "tokens=*" %%a in ('type "%~dp0_update_args.txt" 2^>nul') do (
+    set /a LN+=1
+    if !LN!==1 set ZIP_FILE=%%a
+    if !LN!==2 set TMP_DIR=%%a
+    if !LN!==3 set APP_NAME=%%a
+    if !LN!==4 set APP_DIR=%%a
+)
+set EXE_NAME=%APP_NAME%.exe
+if not "!APP_DIR:~-1!"=="\" set APP_DIR=!APP_DIR!\
+echo [%DATE% %TIME%] LN=%LN% ZIP_FILE=!ZIP_FILE! >> "%DEB%"
+echo [%DATE% %TIME%] TMP_DIR=!TMP_DIR! >> "%DEB%"
+echo [%DATE% %TIME%] APP_NAME=!APP_NAME! >> "%DEB%"
+echo [%DATE% %TIME%] APP_DIR=!APP_DIR! >> "%DEB%"
+echo [%DATE% %TIME%] EXE_NAME=!EXE_NAME! >> "%DEB%"
+
+if "%ZIP_FILE%"=="" exit /b 1
+
+echo [%DATE% %TIME%] taskkill /f /im !EXE_NAME! >> "%DEB%"
+taskkill /f /im "%EXE_NAME%" 2>&1 >> "%DEB%"
+set /a WAIT_TOTAL=0
+:wait_loop
+ping 127.0.0.1 -n 4 >nul
+set /a WAIT_TOTAL+=3
+tasklist /fi "IMAGENAME eq %EXE_NAME%" 2>nul | find /i "%EXE_NAME%" >nul
+if errorlevel 1 (
+    echo [%DATE% %TIME%] process gone after !WAIT_TOTAL!s >> "%DEB%"
+    goto update_ok
+)
+if !WAIT_TOTAL! geq 15 (
+    echo [%DATE% %TIME%] timeout !WAIT_TOTAL!s >> "%DEB%"
+    goto update_fail
+)
+echo [%DATE% %TIME%] waiting !WAIT_TOTAL!s >> "%DEB%"
+goto wait_loop
+
+:update_fail
+rd /S /Q "%TMP_DIR%" >nul 2>&1
+del /F /Q "%ZIP_FILE%" >nul 2>&1
+del /F /Q "%~dp0_update_args.txt" >nul 2>&1
+echo [%DATE% %TIME%] update_fail >> "%DEB%"
+exit /b 1
+
+:update_ok
+echo [%DATE% %TIME%] unzip >> "%DEB%"
+powershell -Command "Expand-Archive -Path '%ZIP_FILE%' -DestinationPath '%TMP_DIR%' -Force" >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo [%DATE% %TIME%] powershell unzip fail, fallback Shell.Application >> "%DEB%"
+    powershell -Command "$s=New-Object -ComObject Shell.Application;$z=$s.NameSpace('%ZIP_FILE%');$d=$s.NameSpace('%TMP_DIR%');$d.CopyHere($z.Items(),16)"
+)
+
+echo [%DATE% %TIME%] APP_DIR=!APP_DIR! >> "%DEB%"
+echo [%DATE% %TIME%] src=!TMP_DIR!\!APP_NAME!\* >> "%DEB%"
+echo [%DATE% %TIME%] dst=!APP_DIR! >> "%DEB%"
+dir "!TMP_DIR!\!APP_NAME!" >> "%DEB%" 2>&1
+
+xcopy /E /Y /Q "%TMP_DIR%\%APP_NAME%\*" "%APP_DIR%"
+echo [%DATE% %TIME%] xcopy1 ec=!ERRORLEVEL! >> "%DEB%"
+if errorlevel 1 (
+    ping 127.0.0.1 -n 4 >nul
+    xcopy /E /Y /Q "%TMP_DIR%\%APP_NAME%\*" "%APP_DIR%"
+    echo [%DATE% %TIME%] xcopy2 ec=!ERRORLEVEL! >> "%DEB%"
+)
+
+echo [%DATE% %TIME%] cleanup >> "%DEB%"
+rd /S /Q "%TMP_DIR%" >nul 2>&1
+del /F /Q "%ZIP_FILE%" >nul 2>&1
+del /F /Q "%~dp0_update_args.txt" >nul 2>&1
+
+echo [%DATE% %TIME%] start new: !APP_DIR!!EXE_NAME! >> "%DEB%"
+start "" "%APP_DIR%%EXE_NAME%"
+
+echo [%DATE% %TIME%] bat done >> "%DEB%"
+exit /b 0
+"""
+
+
 @app.route("/api/update/apply", methods=["POST"])
 def api_update_apply():
     from update_version import APP_VERSION, UPDATE_URL
@@ -3611,8 +3716,16 @@ def api_update_apply():
             updater = os.path.join(sys._MEIPASS, "_updater.bat")
         else:
             updater = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_updater.bat")
+
         if not os.path.isfile(updater):
-            return jsonify({"ok": False, "error": "未找到更新器脚本 _updater.bat"}), 500
+            # 兜底：_updater.bat 可能被 xcopy 覆盖自身时异常丢失，重新写入
+            _bat_dir = os.path.dirname(updater)
+            try:
+                with open(updater, "w", newline="\r\n") as f:
+                    f.write(_UPDATER_BAT_CONTENT)
+                os.chmod(updater, 0o755)
+            except Exception as e:
+                return jsonify({"ok": False, "error": f"未找到更新器脚本且无法重建: {e}"}), 500
 
         import locale
         app_name = zip_name.rsplit("_v", 1)[0] if "_v" in zip_name else "策划工具箱"
@@ -3658,6 +3771,82 @@ def api_close():
 @app.route("/api/static/<path:filename>")
 def api_static(filename):
     return send_from_directory(_script_dir, filename)
+
+
+# ═══════════════════════════════════════════════════════════
+# 文字表检测 API
+# ═══════════════════════════════════════════════════════════
+
+
+def _resolve_exclude_default():
+    """查找排除配置默认源文件：打包版在 _internal/，开发版在 toolbox_core/"""
+    _parent = os.path.join(os.path.dirname(_script_dir), 'text_check_exclude_ids.txt')
+    if os.path.isfile(_parent):
+        return _parent
+    return os.path.join(_script_dir, 'text_check_exclude_ids.txt')
+
+
+@app.route("/api/text-check/exclude-config", methods=["GET"])
+def api_text_check_exclude_config():
+    """返回排除ID配置文件的路径（本地不存在时自动从默认创建）"""
+    _local = os.path.join(os.environ.get('APPDATA', ''), 'planning-toolbox', 'text_check_exclude_ids.txt')
+    _default = _resolve_exclude_default()
+    if not os.path.isfile(_local):
+        if os.path.isfile(_default):
+            os.makedirs(os.path.dirname(_local), exist_ok=True)
+            import shutil
+            shutil.copy2(_default, _local)
+    if os.path.isfile(_local):
+        return jsonify({"path": _local, "is_local": True})
+    return jsonify({"path": _default, "is_local": False})
+
+
+@app.route("/api/text-check/run", methods=["POST"])
+def api_text_check_run():
+    """运行文字表检测（SSE 流式日志）"""
+    data = request.get_json(force=True)
+    file_path = data.get("file_path", "").strip()
+    target_langs = data.get("target_langs", [])
+    if not file_path or not os.path.isfile(file_path):
+        return jsonify({"error": "文件不存在"}), 400
+    task_id = _get_next_task_id()
+    q = queue.Queue()
+
+    def _run():
+        q.put("开始文字表检测\n")
+        q.put(f"文件: {file_path}\n\n")
+        try:
+            from _text_check import detect
+            _lang_id_map = load_config().get("tr_lang_id_map", {})
+            # 排除ID文件路径：本地不存在时自动从默认创建
+            _local_exclude = os.path.join(os.environ.get('APPDATA', ''), 'planning-toolbox', 'text_check_exclude_ids.txt')
+            _default_exclude = _resolve_exclude_default()
+            if not os.path.isfile(_local_exclude):
+                if os.path.isfile(_default_exclude):
+                    import shutil
+                    os.makedirs(os.path.dirname(_local_exclude), exist_ok=True)
+                    shutil.copy2(_default_exclude, _local_exclude)
+            _exclude_path = _local_exclude if os.path.isfile(_local_exclude) else _default_exclude
+            out_path, issues = detect(file_path,
+                progress_callback=lambda msg: q.put(msg),
+                target_langs=target_langs if target_langs else None,
+                lang_id_map=_lang_id_map,
+                exclude_ids_path=_exclude_path)
+            if out_path:
+                q.put(f"\n✅ 检测完成！发现问题: {issues} 行\n")
+                q.put(f"[输出路径] {out_path}\n")
+            else:
+                q.put(f"\n❌ {issues}\n")
+        except Exception as e:
+            import traceback
+            q.put(f"\n❌ 检测失败: {e}\n")
+            q.put(traceback.format_exc() + "\n")
+        _notify_task_done("文字表检测")
+        q.put(None)
+
+    threading.Thread(target=_run, daemon=True).start()
+    _log_queues[task_id] = q
+    return jsonify({"task_id": task_id})
 
 
 if __name__ == "__main__":

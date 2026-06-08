@@ -69,6 +69,8 @@ DATA_DIRS = [
     ("templates", "templates"),
     ("assets", "assets"),
     ("splash", "splash"),
+    ("py_modules/_tcl_data", "_tcl_data"),
+    ("py_modules/_tk_data", "_tk_data"),
 ]
 
 # ── 更新器辅助脚本 ──
@@ -464,6 +466,13 @@ def build():
     if os.path.isfile(ver_src):
         shutil.copy2(ver_src, ver_dst)
         print(f"  [版本] update_version.py → _internal/toolbox_core/")
+
+    # ── Step 8: 复制 text_check_exclude_ids.txt 到 dist ──
+    tc_exclude_src = os.path.join(CORE_DIR, "text_check_exclude_ids.txt")
+    tc_exclude_dst = os.path.join(dist_app, "_internal", "text_check_exclude_ids.txt")
+    if os.path.isfile(tc_exclude_src):
+        shutil.copy2(tc_exclude_src, tc_exclude_dst)
+        print(f"  [配置] text_check_exclude_ids.txt → _internal/")
 
     # ── 创建时间戳归档（copytree，改 exe 文件名）──
     if os.path.exists(ts_app):

@@ -1647,6 +1647,7 @@ const nav = [
   {key:"svn",label:"SVN 记录"},
   {key:"merge",label:"语义合并"},
   {key:"upload",label:"复制合并"},
+  {key:"textcheck",label:"文字检测"},
   {key:"workflow",label:"工作流"},
   {key:"translate",label:"翻译"},
 ];
@@ -1683,6 +1684,7 @@ const tabMeta = {
   upload:{title:"复制合并",sub:"批量文件复制上传到 SVN 工作目录"},
   workflow:{title:"工作流",sub:"自动化 SVN 操作编排"},
   translate:{title:"翻译",sub:"Excel 多语言批量翻译工作台"},
+  textcheck:{title:"文字表检测",sub:"Texts.xlsm 翻译质量检查 — 漏翻/占位符/标签/重复ID"},
 };
 function switchTab(key) {
   nav.forEach(n => {
@@ -1713,6 +1715,7 @@ function buildTab(key) {
     case "upload": buildUploadTab(panel); break;
     case "workflow": buildWorkflowTab(panel); break;
     case "translate": buildTranslateTab(panel); break;
+    case "textcheck": buildTextCheckTab(panel); break;
   }
   if (key === "svn" || key === "merge") {
     setTimeout(function(){_initDatePicker(key+"_start");_initDatePicker(key+"_end")}, 0);
@@ -2775,6 +2778,116 @@ function _wfAutoName(step) {
   }
   return "";
 }
+function buildTextCheckTab(panel) {
+  const defaultPath = "F:\\D3_KR2_DEV\\gameData\\Text\\Texts.xlsm";
+  panel.innerHTML = `
+    <div class="workbench" style="display:flex;flex-direction:column;gap:12px">
+      <div class="card">
+        <div class="card-title">文字表检测</div>
+        <div class="form-group">
+          <label>检测文件路径</label>
+          <div class="flex-row">
+            <input type="text" id="tc_path" value="${escapeHtml(config.tc_path||defaultPath)}" style="flex:1" autocomplete="off">
+            <button class="btn btn-normal" data-action="browse-tc-file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
+          </div>
+          <div style="font-size:12px;color:var(--dim);margin-top:4px">检测内容：空值、漏翻、占位符不一致、颜色/代码标签丢失、全局重复ID</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">检测语言</div>
+        <div class="check-group" id="tc_tgt_langs"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">排除ID配置</div>
+        <div class="form-group">
+          <div class="flex-row">
+            <input type="text" id="tc_exclude_path" style="flex:1" readonly>
+            <button class="btn btn-normal" data-action="browse-tc-exclude" title="浏览配置文件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
+            <button class="btn btn-normal" data-action="open-tc-exclude" title="打开配置文件"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
+          </div>
+          <div style="font-size:12px;color:var(--dim);margin-top:4px">一行一个 ID，以 # 开头的行为注释</div>
+        </div>
+      </div>
+      <div class="action-center">
+        <button class="btn btn-primary" data-action="run-text-check" style="min-width:200px">开始检测</button>
+      </div>
+      <div class="log-wrap" style="flex:1;min-height:200px">
+        <div class="card-header compact" style="padding:0 0 4px 0"><span style="font-weight:600">执行日志</span></div>
+        <div class="log" id="tc_log"><div class="log-anchor"></div></div>
+      </div>
+    </div>`;
+  const saved = config.tc_path || defaultPath;
+  document.getElementById("tc_path").value = saved;
+  enablePathDrop("tc_path", {mode:"file"});
+  fetch("/api/translate/lang-id-map").then(r=>r.json()).then(d => {
+    const data = d.data || {};
+    const names = Object.keys(data).sort();
+    const cg = document.getElementById("tc_tgt_langs");
+    cg.innerHTML = names.map(n => {
+      return `<label><input type="checkbox" value="${escapeHtml(n)}"> ${escapeHtml(n)}</label>`;
+    }).join("");
+  });
+  fetch("/api/text-check/exclude-config").then(r=>r.json()).then(d => {
+    if (d.path) document.getElementById("tc_exclude_path").value = d.path;
+  });
+}
+async function runTextCheck() {
+  triggerUpdateCheck();
+  const filePath = document.getElementById("tc_path").value.trim();
+  if (!filePath) { _showToast("请输入检测文件路径"); return; }
+  const logEl = document.getElementById("tc_log");
+  _logClear(logEl);
+  const btn = document.querySelector("[data-action='run-text-check']");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>检测中...';
+  _incRunning();
+  try {
+    saveConfig({tc_path: filePath});
+    const checkedLangs = [];
+    document.querySelectorAll("#tc_tgt_langs input:checked").forEach(cb => checkedLangs.push(cb.value));
+    if (!checkedLangs.length) { _showToast("请勾选至少一个检测语言"); btn.disabled=false; btn.textContent="开始检测"; _decRunning(); return; }
+    const body = {file_path: filePath, target_langs: checkedLangs};
+    const r = await fetch("/api/text-check/run", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const d = await r.json();
+    if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent="开始检测"; _decRunning(); return; }
+    if (window._esTc) window._esTc.close();
+    const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
+    window._esTc = evtSrc;
+    let tcOutputPath = "";
+    evtSrc.onmessage = (e) => {
+      if (e.data === "[DONE]") {
+        evtSrc.close();
+        window._esTc = null;
+        btn.disabled = false;
+        btn.textContent = "开始检测";
+        _decRunning();
+        if (tcOutputPath) {
+          fetch("/api/open/folder", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:tcOutputPath})}).catch(function(){});
+          _openFolder(tcOutputPath);
+        }
+        return;
+      }
+      for (const raw of e.data.split("\n")) {
+        if (!raw.trim()) continue;
+        if (raw.startsWith("[输出路径] ")) {
+          tcOutputPath = raw.slice(7).trim();
+        }
+        const div = document.createElement("div");
+        div.textContent = raw;
+        _logAppend(logEl, div);
+        if (/\[error\]/.test(raw)) _focusAppOnError("textcheck", logEl);
+      }
+    };
+  } catch (err) {
+    const div = document.createElement("div");
+    div.className = "error";
+    div.textContent = "❌ 请求失败: " + err.message;
+    _logAppend(logEl, div);
+    btn.disabled = false;
+    btn.textContent = "开始检测";
+    _decRunning();
+  }
+}
 function buildTranslateTab(panel) {
   const api_url = config.tr_api_url||"https://api.openai.com/v1/chat/completions";
   const model = config.tr_model||"gpt-4o-mini";
@@ -3027,7 +3140,7 @@ function saveTrLangAdvSettings() {
 }
 let _runningCount = 0;
 const _esMap = {};
-let _tabCount = {svn:0, merge:0, upload:0, workflow:0, translate:0};
+let _tabCount = {svn:0, merge:0, upload:0, textcheck:0, workflow:0, translate:0};
 let _wfPlayState = {};
 function _updateWfDot(wfIdx) {
   const dot = document.querySelector(`.wf-status-dot[data-idx="${wfIdx}"] span`);
@@ -4291,6 +4404,7 @@ document.addEventListener("click",e=>{
     case "run-svn": runSvn(); break;
     case "run-upload": runUpload(); break;
     case "run-translate": runTranslate(); break;
+    case "run-text-check": runTextCheck(); break;
     case "wf-create": wfCreate(); break;
     case "svn-advanced": openAdvSettings(); break;
     case "close-adv-settings": closeAdvSettings(); break;
@@ -4392,6 +4506,19 @@ document.addEventListener("click",e=>{
     case "refresh-files": refreshFiles(); break;
     case "select-all": selectAllFiles(true); break;
     case "select-none": selectAllFiles(false); break;
+    case "browse-tc-file": {
+      browseFile("tc_path");
+      break;
+    }
+    case "browse-tc-exclude": {
+      browseFile("tc_exclude_path");
+      break;
+    }
+    case "open-tc-exclude": {
+      const p = document.getElementById("tc_exclude_path").value.trim();
+      if (p) _openFolder(p);
+      break;
+    }
     case "browse-tr-src": {
       const _ts = document.getElementById("tr_src").value.trim();
       const _tsDir = _ts ? (_ts.substring(0, Math.max(_ts.lastIndexOf("\\"), _ts.lastIndexOf("/"))) || _ts) : "";

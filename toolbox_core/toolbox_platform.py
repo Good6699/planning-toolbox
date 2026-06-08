@@ -164,6 +164,111 @@ def _get_svn_path() -> str:
         pass
     return "svn"
 
+
+def _diagnose_svn_missing() -> str:
+    """诊断 svn 命令找不到的原因，返回具体修复提示"""
+    try:
+        import winreg
+        for key in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+            for subkey in (r"SOFTWARE\TortoiseSVN", r"SOFTWARE\WOW6432Node\TortoiseSVN"):
+                try:
+                    with winreg.OpenKey(key, subkey) as k:
+                        proc_path, _ = winreg.QueryValueEx(k, "ProcPath")
+                        svn_dir = os.path.dirname(proc_path)
+                        svn_exe = os.path.join(svn_dir, "svn.exe")
+                        if not os.path.isfile(svn_exe):
+                            return ("检测到已安装 TortoiseSVN，但缺少命令行客户端。\n"
+                                    "请重新运行 TortoiseSVN 安装程序 → Modify → 勾选 Command Line Client Tools。")
+                        return ("TortoiseSVN 命令行工具已安装，但未添加到 PATH 环境变量。\n"
+                                "请将以下路径添加到系统 PATH：\n" + svn_dir)
+                except (OSError, FileNotFoundError):
+                    pass
+    except Exception:
+        pass
+    # 检查其他常见 SVN 客户端
+    common_clients = [
+        (r"C:\Program Files\SlikSvn\bin\svn.exe", "SlikSvn"),
+        (r"C:\Program Files (x86)\SlikSvn\bin\svn.exe", "SlikSvn"),
+        (r"C:\Program Files\Subversion\bin\svn.exe", "Subversion"),
+        (r"C:\Program Files\VisualSVN\bin\svn.exe", "VisualSVN"),
+    ]
+    for exe_path, client_name in common_clients:
+        if os.path.isfile(exe_path):
+            return (f"已找到 {client_name} ({exe_path})，但未添加到 PATH。\n"
+                    f"请将其所在目录添加到系统 PATH 环境变量。")
+    # 什么都没装
+    return "未检测到 SVN 客户端。请安装 TortoiseSVN（安装时勾选 Command Line Client Tools）或 SlikSvn。"
+
+
+def _auto_install_svn_cli(put=None) -> tuple:
+    """
+    自动安装 SVN 命令行客户端。
+    优先使用 winget（Windows 11 内置），回退到直接下载 SlikSvn MSI。
+    返回 (success: bool, message: str)
+    """
+    cache_dir = os.path.join(os.environ.get('APPDATA', ''), 'planning-toolbox', 'cache')
+    os.makedirs(cache_dir, exist_ok=True)
+
+    # ── 尝试 winget ──
+    try:
+        if put:
+            put("正在通过 winget 安装 SlikSvn（SVN 命令行工具）...\n")
+        r = subprocess.run(
+            ["winget", "install", "SlikSvn", "--silent", "--accept-package-agreements"],
+            capture_output=True, text=True, timeout=120)
+        if r.returncode in (0, 3010):
+            import time
+            time.sleep(2)
+            svn_test = subprocess.run(["svn", "--version"], capture_output=True, timeout=10)
+            if svn_test.returncode == 0:
+                return True, "通过 winget 安装 SlikSvn 成功"
+            # 可能 PATH 没刷新，找实际路径
+            if _get_svn_path() != "svn":
+                return True, "SlikSvn 已安装（svn.exe 已找到）"
+        if put:
+            put(f"winget 安装结果: {r.stdout.strip()[-200:]}\n")
+    except FileNotFoundError:
+        if put:
+            put("winget 不可用，切换为直接下载...\n")
+    except Exception as e:
+        if put:
+            put(f"winget 安装异常: {e}，切换为直接下载...\n")
+
+    # ── 直接下载 SlikSvn MSI ──
+    msi_url = "https://sliksvn.com/pub/SlikSvn/1.14.3/SlikSvn-1.14.3-x64.msi"
+    msi_file = os.path.join(cache_dir, "SlikSvn-1.14.3-x64.msi")
+
+    if not os.path.isfile(msi_file):
+        if put:
+            put("正在下载 SlikSvn (约 8MB)...\n")
+        try:
+            import urllib.request
+            urllib.request.urlretrieve(msi_url, msi_file)
+            if put:
+                put("下载完成\n")
+        except Exception as e:
+            return False, f"下载 SlikSvn 失败: {e}"
+
+    if put:
+        put("正在静默安装 SlikSvn...\n")
+    try:
+        r = subprocess.run(
+            ["msiexec", "/i", msi_file, "/passive", "/norestart"],
+            capture_output=True, text=True, timeout=120)
+        if r.returncode in (0, 3010):
+            import time
+            time.sleep(3)
+            svn_test = subprocess.run(["svn", "--version"], capture_output=True, timeout=10)
+            if svn_test.returncode == 0:
+                return True, "SlikSvn 安装成功"
+            if _get_svn_path() != "svn":
+                return True, "SlikSvn 已安装（svn.exe 已找到）"
+            return True, "SlikSvn 安装完成（可能需要重启应用或电脑才能生效）"
+        return False, f"SlikSvn 安装失败 (msiexec 返回 {r.returncode})"
+    except Exception as e:
+        return False, f"SlikSvn 安装异常: {e}"
+
+
 def _get_subprocess_kwargs():
     """获取 subprocess 参数，Windows 下隐藏 CMD 窗口"""
     kwargs = {}

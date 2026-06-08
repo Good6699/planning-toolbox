@@ -468,15 +468,63 @@ class EdgeDocker:
             pass
 
 
+def _get_hidden_sp_kwargs():
+    """返回隐藏 CMD 窗口的 subprocess 参数"""
+    import subprocess as _sp
+    si = _sp.STARTUPINFO()
+    si.dwFlags |= _sp.STARTF_USESHOWWINDOW
+    si.wShowWindow = _sp.SW_HIDE
+    return {"startupinfo": si, "creationflags": _sp.CREATE_NO_WINDOW}
+
+
+def _force_kill_old_instance():
+    """强制杀死其他运行中的策划工具箱实例，确保唯一实例"""
+    import subprocess as _sp
+    import time as _time
+    pids = set()
+    _my_pid = str(os.getpid())
+    _kw = _get_hidden_sp_kwargs()
+
+    try:
+        # 1. 扫端口 18124（实例锁）和 18123（Flask），收集旧 PID
+        r = _sp.run(["netstat", "-ano"], capture_output=True, text=True, timeout=5, **_kw)
+        for line in r.stdout.splitlines():
+            if ("18124" in line or "18123" in line) and "LISTENING" in line:
+                parts = line.strip().split()
+                if parts:
+                    pid = parts[-1]
+                    if pid.isdigit() and pid != _my_pid:
+                        pids.add(pid)
+    except Exception:
+        pass
+
+    # 2. 按 exe 名搜同类进程（兜底，同名但端口可能不同的情况）
+    try:
+        r = _sp.run(["tasklist", "/fi", "IMAGENAME eq 策划工具箱.exe", "/fo", "csv", "/nh"],
+                    capture_output=True, text=True, timeout=5, **_kw)
+        for line in r.stdout.splitlines():
+            parts = line.strip().strip('"').split('","')
+            if len(parts) >= 2 and parts[1].isdigit() and parts[1] != _my_pid:
+                pids.add(parts[1])
+    except Exception:
+        pass
+
+    for pid in pids:
+        try:
+            _sp.run(["taskkill", "/f", "/pid", pid],
+                    capture_output=True, timeout=5, **_kw)
+        except Exception:
+            pass
+    _time.sleep(0.5)
+
+
 def _acquire_instance_lock():
     global _instance_socket
+    # 先强制杀死旧实例，再绑定端口确保自己是唯一实例
+    _force_kill_old_instance()
     _instance_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     _instance_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try:
-        _instance_socket.bind(("127.0.0.1", 18124))
-    except socket.error:
-        print("[单实例锁] 端口 18124 已被占用，已有实例在运行", file=sys.stderr)
-        sys.exit(0)
+    _instance_socket.bind(("127.0.0.1", 18124))
 
 
 def _start_flask():
@@ -714,6 +762,67 @@ _WM_TRAYICON = win32con.WM_APP + 100
 # 固定 GUID —— 所有版本一致，确保托盘图标显示偏好持久化
 _TRAY_GUID = (0x5F8C4B9E, 0x3E7A, 0x4D2A,
               (0x9B, 0x1C, 0x0D, 0x8E, 0x6F, 0x4A, 0x2C, 0x3B))
+# GUID 字符串：{5F8C4B9E-3E7A-4D2A-9B1C-0D8E6F4A2C3B}
+_TRAY_GUID_STR = "{" + "-".join([
+    "5F8C4B9E", "3E7A", "4D2A",
+    "9B1C", "0D8E6F4A2C3B"
+]) + "}"
+
+
+def _ensure_tray_visible():
+    """在注册托盘图标前，确保 Windows 对应 GUID 的 IsPromoted=1，强制始终显示"""
+    try:
+        import winreg
+        key_path = r"Control Panel\NotifyIconSettings"
+        sub_key = key_path + "\\" + _TRAY_GUID_STR
+        try:
+            k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, sub_key, 0,
+                               winreg.KEY_READ | winreg.KEY_SET_VALUE)
+            try:
+                val, _ = winreg.QueryValueEx(k, "IsPromoted")
+                if val != 1:
+                    winreg.SetValueEx(k, "IsPromoted", 0, winreg.REG_DWORD, 1)
+            except FileNotFoundError:
+                winreg.SetValueEx(k, "IsPromoted", 0, winreg.REG_DWORD, 1)
+            winreg.CloseKey(k)
+        except FileNotFoundError:
+            # 注册表项还不存在，创建它
+            k = winreg.CreateKey(winreg.HKEY_CURRENT_USER, sub_key)
+            winreg.SetValueEx(k, "IsPromoted", 0, winreg.REG_DWORD, 1)
+            winreg.SetValueEx(k, "ExecutablePath", 0, winreg.REG_SZ, sys.executable)
+            winreg.CloseKey(k)
+    except Exception:
+        pass
+
+
+def _ensure_tray_visible_fallback():
+    """扫描 NotifyIconSettings 中 exe 路径匹配的旧条目并设 IsPromoted=1。返回是否找到"""
+    try:
+        import winreg
+        base_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                  r"Control Panel\NotifyIconSettings")
+        i = 0
+        found = False
+        while True:
+            try:
+                sub_name = winreg.EnumKey(base_key, i)
+                sub = winreg.OpenKey(base_key, sub_name, 0,
+                                     winreg.KEY_READ | winreg.KEY_SET_VALUE)
+                try:
+                    val, _ = winreg.QueryValueEx(sub, "ExecutablePath")
+                    if val and "策划工具箱" in val:
+                        winreg.SetValueEx(sub, "IsPromoted", 0, winreg.REG_DWORD, 1)
+                        found = True
+                except FileNotFoundError:
+                    pass
+                winreg.CloseKey(sub)
+                i += 1
+            except OSError:
+                break
+        winreg.CloseKey(base_key)
+        return found
+    except Exception:
+        return False
 
 
 def _create_tray_hwnd():
@@ -770,45 +879,34 @@ def _tray_thread():
     if not hicon:
         hicon = win32gui.LoadIcon(0, win32con.IDI_APPLICATION)
 
-    # Create hidden window and register tray icon
-    # 用 win32gui.Shell_NotifyIcon(tuple) 注册（避免 ctypes 在 frozen exe 下结构体兼容问题）
-    # 持久化通过固定 APPDATA 路径 + registry IsPromoted=1 双重保障
+    # Create hidden window and register tray icon（用 win32gui tuple 格式，稳定可靠）
     hwnd = _create_tray_hwnd()
+
+    # 注册前先写注册表 IsPromoted=1
+    _ensure_tray_visible()
 
     tray_flags = win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP
     nid = (hwnd, _NOTIFY_ICON_ID, tray_flags, _WM_TRAYICON, hicon, "策划工具箱")
     win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)
     _tray_icon = hwnd
 
-    # 等待 0.5 秒让 Explorer 创建注册表条目，然后扫描并设为始终显示
-    # 写注册表后重新注册图标，让 Explorer 即时应用 IsPromoted=1
-    time.sleep(0.5)
-    try:
-        import winreg
-        base_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                                  r"Control Panel\NotifyIconSettings")
-        i = 0
-        while True:
+    # 等待 Explorer 创建 NotifyIconSettings 注册表条目，然后设 IsPromoted=1
+    # Windows 创建条目时机不确定，用重试机制确保生效
+    _ensure_tray_visible_fallback()
+    _tray_retry_count = 0
+    while _tray_retry_count < 6:
+        time.sleep(1)
+        _tray_retry_count += 1
+        # 扫描注册表，如果找到匹配条目则设 IsPromoted=1 并重注册
+        found = _ensure_tray_visible_fallback()
+        if found:
+            # 找到条目后重新注册图标，让 Explorer 即时读取 IsPromoted
             try:
-                sub_name = winreg.EnumKey(base_key, i)
-                sub = winreg.OpenKey(base_key, sub_name, 0,
-                                     winreg.KEY_READ | winreg.KEY_SET_VALUE)
-                try:
-                    val, _ = winreg.QueryValueEx(sub, "ExecutablePath")
-                    if val and "策划工具箱" in val:
-                        winreg.SetValueEx(sub, "IsPromoted", 0, winreg.REG_DWORD, 1)
-                except FileNotFoundError:
-                    pass
-                winreg.CloseKey(sub)
-                i += 1
-            except OSError:
-                break
-        winreg.CloseKey(base_key)
-        # 重新注册图标，让 Explorer 即时读取新的 IsPromoted 值
-        win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, nid)
-        win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)
-    except Exception:
-        pass
+                win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, nid)
+                win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)
+            except Exception:
+                pass
+            break
 
     # Message loop
     from ctypes import wintypes as _wt

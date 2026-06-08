@@ -1,4 +1,10 @@
 - **2026-04-16**：记忆系统启用
+- **2026-06-08**：SVN 命令缺失自动安装——检测 svn 命令找不到时精确诊断原因（TortoiseSVN 缺 CLI / 未安装），自动调用 winget 或下载 SlikSvn MSI 静默安装
+- **2026-06-08**：`_updater.bat` 兜底重建——更新器脚本被 xcopy 覆盖自身时可能异常丢失，在 `web_app.py` 中嵌入 `_UPDATER_BAT_CONTENT` 常量，找不到时自动重建
+- **2026-06-08**：托盘图标默认显示——Windows NotifyIconSettings 注册表 `IsPromoted=1` 强制始终显示；旧方案只等 0.5 秒扫一次注册表不可靠，改为重试 6 秒（每 1 秒扫一次）直到找到条目
+- **2026-06-08**：`_force_kill_old_instance()` 必须排除 `os.getpid()` 自身，否则 `tasklist` 搜同名进程时会自尽；所有子进程调用加 `CREATE_NO_WINDOW | SW_HIDE` 隐藏 cmd 窗口
+- **2026-06-08**：`_tcl_data`/`_tk_data` 需加入 build.py 的 DATA_DIRS 避免 PyInstaller 运行时 `Tcl data directory not found`
+- **2026-06-07**：文字表检测引擎——扫描 Texts.xlsm 58 个 Sheet，检测空值/漏翻/占位符不一致/颜色标签丢失/重复ID；输出为 SVN 对比导出格式（蓝色表头+锁定+交替行+边框），只输出问题行；`svn propdel` 不支持 `--targets`；**JS slice 中文字符和西文字符都是 1 个长度**，截取前缀时务必核对字符数
 - **2026-06-07**：语义合并优化——merge 自带 add/mod/del 处理，无需单独走 export/add/delete 分支；新增文件 mime-type 用 `svn propdel svn:mime-type` 清理（A 状态文件安全，不产生 ` M`）；合并前 `svn diff --summarize` 跳过纯属性变更文件；version list 查询阶段也用 `svn diff --summarize` 过滤纯属性变更；空文件夹在合并结束后批量清理；**注意 `svn propdel` 不支持 `--targets`**，必须逐文件执行或分批调用
 
 ## 技术规范偏好

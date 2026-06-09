@@ -1500,15 +1500,10 @@ def _svn_decode_output(data):
 
 
 def _exec_revert_svn(step, put, task_id=None):
-    # 兼容新旧格式：revert_paths（新数组）或 target_path（旧单路径）
     target_paths = []
     rp = step.get("revert_paths", [])
     if isinstance(rp, list) and rp:
         target_paths = [p.strip() for p in rp if p.strip()]
-    else:
-        tp = step.get("target_path", "").strip()
-        if tp:
-            target_paths.append(tp)
 
     valid_paths = [p for p in target_paths if os.path.exists(p)]
     if not valid_paths:
@@ -3230,7 +3225,9 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
             _log("正在过滤纯属性变更文件...")
             content_files = set()
             _svn = _get_svn_path()
-            norm_url = source_url.rstrip("/")
+
+            # svn diff --summarize 输出用正斜杠，source_url 可能是反斜杠，统一比较
+            norm_url = source_url.replace("\\", "/").rstrip("/")
             for i in range(0, len(filtered_revs), 50):
                 batch = filtered_revs[i:i + 50]
                 rev_args = []
@@ -3245,17 +3242,31 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
                     for line in out.strip().splitlines():
                         parts = line.strip().split(None, 1)
                         if len(parts) >= 2:
-                            path = parts[1]
+                            path = parts[1].replace("\\", "/")
                             if path.startswith(norm_url):
                                 path = path[len(norm_url):].lstrip("/")
                                 content_files.add(path)
                 except Exception:
                     pass
+
             if content_files:
+                # content_files 是相对路径（如 Assets/foo.xlsx）
+                # svn_log 路径是仓库绝对路径（如 /D3_EA/trunk/Client/Assets/foo.xlsx）
+                # 统一用 endswith 匹配相对路径的尾部
+                _cf_lower = {p.lower() for p in content_files}
                 removed = 0
                 for v in versions:
                     orig = v.get("files", [])
-                    v["files"] = [f for f in orig if f.get("path", "") in content_files]
+                    v["files"] = []
+                    for f in orig:
+                        _fp = f.get("path", "").replace("\\", "/")
+                        _fp_lower = _fp.lower()
+                        # 直接相等 或 以 /{相对路径} 结尾 或 {相对路径} 是路径尾
+                        if _fp_lower in _cf_lower or any(
+                            _fp_lower.endswith("/" + cf) or _fp_lower == cf
+                            for cf in _cf_lower
+                        ):
+                            v["files"].append(f)
                     removed += len(orig) - len(v.get("files", []))
                 if removed:
                     _log(f"  已过滤 {removed} 个纯属性变更文件")

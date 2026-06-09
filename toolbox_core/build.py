@@ -190,6 +190,7 @@ def _get_hidden_imports():
         "--hidden-import=webview.js",
         "--hidden-import=proxy_tools",
         "--hidden-import=bottle",
+        "--hidden-import=_text_check",
         "--collect-all=webview",
     ]
 

@@ -35,7 +35,7 @@ import threading
 import time
 import socket
 import signal
-import urllib.request
+import urllib.request, urllib.error
 import ctypes.wintypes
 import webview
 import win32gui
@@ -97,6 +97,7 @@ _VSCREEN_B = _vy + win32api.GetSystemMetrics(79)
 
 _instance_socket = None
 _tray_icon = None
+_tray_nid = None
 _flask_server = None
 _window_visible = True
 _force_close = False
@@ -597,10 +598,12 @@ def _quit_app():
     _stop_flask()
     if _tray_icon:
         try:
-            win32gui.PostMessage(_tray_icon, win32con.WM_CLOSE, 0, 0)
+            # 发 WM_QUIT 让托盘线程的消息循环退出
+            # 消息循环退出后会自动执行 NIM_DELETE 清理图标，再 os._exit(0)
+            win32gui.PostMessage(_tray_icon, win32con.WM_QUIT, 0, 0)
         except Exception:
             pass
-    os._exit(0)
+    # 让消息循环自己处理清理和退出，不在这里调 os._exit
 
 
 def _stop_flask():
@@ -889,6 +892,7 @@ def _tray_thread():
     nid = (hwnd, _NOTIFY_ICON_ID, tray_flags, _WM_TRAYICON, hicon, "策划工具箱")
     win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, nid)
     _tray_icon = hwnd
+    _tray_nid = nid
 
     # 等待 Explorer 创建 NotifyIconSettings 注册表条目，然后设 IsPromoted=1
     # Windows 创建条目时机不确定，用重试机制确保生效
@@ -1070,6 +1074,10 @@ def main():
     tray_thread = threading.Thread(target=_tray_thread, daemon=True)
     tray_thread.start()
 
+    # 先等 Flask 就绪，再创建窗口直接用 URL 加载 SPA，避免导航白边框
+    if not _wait_for_flask(timeout=15):
+        print("[错误] Flask 未能在 15 秒内就绪", file=sys.stderr)
+
     config = load_config()
     saved_w = config.get("window_w", 0)
     saved_h = config.get("window_h", 0)
@@ -1082,7 +1090,7 @@ def main():
 
     window = webview.create_window(
         "策划工具箱",
-        html=SPLASH_HTML,
+        url="http://127.0.0.1:18123",
         width=win_w,
         height=win_h,
         x=init_cx,
@@ -1135,7 +1143,6 @@ def main():
         print("[DEBUG] _boot_app 开始", file=sys.stderr)
         window.events.loaded.wait(timeout=30)
         print("[DEBUG] 窗口已加载", file=sys.stderr)
-        _set_progress(window, 15, "界面就绪")
         _set_window_icon()
         print("[DEBUG] 图标已设置", file=sys.stderr)
 
@@ -1143,26 +1150,8 @@ def main():
         docker = EdgeDocker(window)
         _docker = docker
         docker.start()
-        _set_progress(window, 30, "初始化服务中")
         print("[DEBUG] EdgeDocker 已启动", file=sys.stderr)
 
-        if not _wait_for_flask(timeout=15):
-            print("[错误] Flask 未能在 15 秒内就绪", file=sys.stderr)
-            return
-        print("[DEBUG] Flask 就绪", file=sys.stderr)
-        _set_progress(window, 55, "后端就绪")
-        _set_progress(window, 90, "准备就绪")
-        time.sleep(0.2)
-        _set_progress(window, 100, "启动中")
-        time.sleep(0.1)
-
-        try:
-            print("[DEBUG] 正在加载 URL...", file=sys.stderr)
-            window.load_url("http://127.0.0.1:18123")
-            print("[DEBUG] URL 已加载", file=sys.stderr)
-            time.sleep(0.5)
-        except Exception as e:
-            print(f"[load_url] {e}", file=sys.stderr)
         hwnd = _find_window_hwnd(timeout=0.5)
         if hwnd:
             _show_taskbar_icon(hwnd)

@@ -357,6 +357,14 @@ input::placeholder,textarea::placeholder{
   cursor:not-allowed;
   transform:none;
 }
+.btn-primary.stop, .btn-normal.stop{
+  color:#ff6b6b;
+  background:rgba(255,107,107,.15);
+}
+.btn-primary.stop:hover, .btn-normal.stop:hover{
+  background:rgba(255,107,107,.25);
+  color:#ff6b6b;
+}
 .btn-normal{
   background:rgba(255,255,255,.04);
   color:var(--sub);
@@ -2838,29 +2846,36 @@ async function runTextCheck() {
   const logEl = document.getElementById("tc_log");
   _logClear(logEl);
   const btn = document.querySelector("[data-action='run-text-check']");
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>检测中...';
+  btn.dataset.orig = btn.dataset.orig || btn.textContent;
   _incRunning();
   try {
     saveConfig({tc_path: filePath});
     const checkedLangs = [];
     document.querySelectorAll("#tc_tgt_langs input:checked").forEach(cb => checkedLangs.push(cb.value));
-    if (!checkedLangs.length) { _showToast("请勾选至少一个检测语言"); btn.disabled=false; btn.textContent="开始检测"; _decRunning(); return; }
+    if (!checkedLangs.length) { _showToast("请勾选至少一个检测语言"); btn.innerHTML=btn.dataset.orig; _decRunning(); return; }
     const body = {file_path: filePath, target_langs: checkedLangs};
     const r = await fetch("/api/text-check/run", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await r.json();
-    if (d.error) { _showToast(d.error); btn.disabled=false; btn.textContent="开始检测"; _decRunning(); return; }
+    if (d.error) { _showToast(d.error); btn.innerHTML=btn.dataset.orig; _decRunning(); return; }
+    btn.dataset.taskId = d.task_id;
+    btn.innerHTML = _WF_ICONS.stop;
+    btn.classList.add("stop");
     if (window._esTc) window._esTc.close();
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
     window._esTc = evtSrc;
     let tcOutputPath = "";
+    const _tcDone = () => {
+      if (!btn.dataset.taskId) return;
+      btn.dataset.taskId = '';
+      btn.classList.remove("stop");
+      btn.innerHTML = btn.dataset.orig;
+      _decRunning();
+    };
     evtSrc.onmessage = (e) => {
       if (e.data === "[DONE]") {
         evtSrc.close();
         window._esTc = null;
-        btn.disabled = false;
-        btn.textContent = "开始检测";
-        _decRunning();
+        _tcDone();
         if (tcOutputPath) {
           fetch("/api/open/folder", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:tcOutputPath})}).catch(function(){});
           _openFolder(tcOutputPath);
@@ -2879,12 +2894,11 @@ async function runTextCheck() {
       }
     };
   } catch (err) {
+    if (btn.dataset.taskId) { btn.dataset.taskId = ''; btn.classList.remove("stop"); btn.innerHTML = btn.dataset.orig; }
     const div = document.createElement("div");
     div.className = "error";
     div.textContent = "❌ 请求失败: " + err.message;
     _logAppend(logEl, div);
-    btn.disabled = false;
-    btn.textContent = "开始检测";
     _decRunning();
   }
 }
@@ -3337,17 +3351,18 @@ async function runTask(url, body, btn, logId, label, onDone) {
   }
   _incRunning();
   if (tabKey) _incTabRunning(tabKey);
-  if (!label) {
-    if (!btn.dataset.orig) btn.dataset.orig = btn.textContent;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>执行中...';
-    _logClear(logEl);
-  }
+  _logClear(logEl);
   const r = await fetch(url, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const d = await r.json();
   if (body.wf_idx !== undefined) {
     const sk = body._stateKey || body.wf_idx;
     if (_wfPlayState[sk]) _wfPlayState[sk].taskId = d.task_id;
+  }
+  if (!label && btn && d.task_id) {
+    if (!btn.dataset.orig) btn.dataset.orig = btn.textContent;
+    btn.dataset.taskId = d.task_id;
+    btn.innerHTML = _WF_ICONS.stop;
+    btn.classList.add('stop');
   }
 
   function _done() {
@@ -3355,9 +3370,10 @@ async function runTask(url, body, btn, logId, label, onDone) {
     if (tabKey) { _tabCount[tabKey] = Math.max(0, _tabCount[tabKey] - 1); if (_tabCount[tabKey] === 0) _setTabDot(tabKey, false); }
     if (label) {
       if (onDone) onDone();
-    } else {
-      btn.disabled = false;
-      btn.textContent = btn.dataset.orig;
+    } else if (btn && btn.dataset.taskId) {
+      btn.dataset.taskId = '';
+      btn.classList.remove('stop');
+      btn.innerHTML = btn.dataset.orig || '执行';
     }
   }
 
@@ -4025,9 +4041,7 @@ async function runMergeQuery() {
   if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
   if (!targetPath) { _showToast("请输入目标本地工作副本路径"); return; }
   const btn = document.getElementById("merge_query_btn");
-  btn.disabled = true;
-  const orig = btn.textContent;
-  btn.innerHTML = '<span class="spinner"></span>查询中...';
+  btn.dataset.orig = btn.dataset.orig || btn.textContent;
   const logEl = document.getElementById("merge_log");
   _logClear(logEl);
   _incRunning();
@@ -4045,18 +4059,27 @@ async function runMergeQuery() {
     initSuggest("merge_source", config.svn_urls);
     const r = await fetch("/api/merge/query", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await r.json();
-    if (d.error) { _showToast(d.error); _focusAppOnError("merge", logEl); btn.disabled=false; btn.textContent=orig; _decRunning(); _decTabRunning("merge"); return; }
+    if (d.error) { _showToast(d.error); _focusAppOnError("merge", logEl); _decRunning(); _decTabRunning("merge"); return; }
+    btn.dataset.taskId = d.task_id;
+    btn.innerHTML = _WF_ICONS.stop;
+    btn.classList.add("stop");
     if (window._esMergeQ) window._esMergeQ.close();
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
     window._esMergeQ = evtSrc;
     let resultData = null;
+    const _mergeDone = () => {
+      if (!btn.dataset.taskId) return;
+      btn.dataset.taskId = '';
+      btn.classList.remove("stop");
+      btn.innerHTML = btn.dataset.orig;
+      _decRunning();
+      _decTabRunning("merge");
+    };
     evtSrc.onmessage = (e) => {
       if (e.data === "[DONE]") {
         evtSrc.close();
-        btn.disabled = false;
-        btn.textContent = orig;
-        _decRunning();
-        _decTabRunning("merge");
+        _mergeDone();
+        if (resultData) {
         if (resultData) {
           if (resultData.ok) {
             _mergeData.versions = resultData.versions || [];
@@ -4092,8 +4115,7 @@ async function runMergeQuery() {
       }
     };
   } catch (err) {
-    btn.disabled = false;
-    btn.textContent = orig;
+    if (btn.dataset.taskId) { btn.dataset.taskId = ''; btn.classList.remove("stop"); btn.innerHTML = btn.dataset.orig; }
     _decRunning();
     _decTabRunning("merge");
     _showToast("请求失败: " + err.message);
@@ -4262,8 +4284,7 @@ async function runMergeRun() {
   const checkedRevs = Object.keys(_mergeData.checkedRevs).map(Number);
   if (!checkedRevs.length) { _showToast("请至少勾选一个版本"); return; }
   const btn = document.getElementById("merge_run_btn");
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>合并中...';
+  btn.dataset.orig = btn.dataset.orig || btn.textContent;
   const logEl = document.getElementById("merge_log");
   _logClear(logEl);
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
@@ -4300,6 +4321,17 @@ async function runMergeRun() {
       _decTabRunning("merge");
       return;
     }
+    btn.dataset.taskId = d.task_id;
+    btn.innerHTML = _WF_ICONS.stop;
+    btn.classList.add("stop");
+    const _mergeRunDone = () => {
+      if (!btn.dataset.taskId) return;
+      btn.dataset.taskId = '';
+      btn.classList.remove("stop");
+      btn.innerHTML = btn.dataset.orig;
+      _decRunning();
+      _decTabRunning("merge");
+    };
     if (window._esMergeRun) window._esMergeRun.close();
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
     window._esMergeRun = evtSrc;
@@ -4307,10 +4339,7 @@ async function runMergeRun() {
       if (e.data === "[DONE]") {
         evtSrc.close();
         window._esMergeRun = null;
-        btn.disabled = false;
-        btn.textContent = "开始合并";
-        _decRunning();
-        _decTabRunning("merge");
+        _mergeRunDone();
         return;
       }
       const lines = e.data.split("\n");
@@ -4325,8 +4354,7 @@ async function runMergeRun() {
   } catch (err) {
     logEl.innerHTML = '<span class="error">❌ 请求失败: '+escapeHtml(err.message)+'</span>';
     _focusAppOnError("merge", logEl);
-    btn.disabled = false;
-    btn.textContent = "开始合并";
+    if (btn.dataset.taskId) { btn.dataset.taskId = ''; btn.classList.remove("stop"); btn.innerHTML = btn.dataset.orig; }
     _decRunning();
     _decTabRunning("merge");
   }
@@ -4351,8 +4379,7 @@ async function runMergeAnalysis() {
     }
   });
   const btn = document.getElementById("merge_analysis_btn");
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>分析中...';
+  btn.dataset.orig = btn.dataset.orig || btn.textContent;
   const logEl = document.getElementById("merge_log");
   _logClear(logEl);
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
@@ -4362,7 +4389,18 @@ async function runMergeAnalysis() {
   try {
     const r = await fetch("/api/merge/analyze", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await r.json();
-    if (d.error) { _showToast(d.error); _focusAppOnError("merge", logEl); btn.disabled=false; btn.textContent="语义分析"; _decRunning(); _decTabRunning("merge"); return; }
+    if (d.error) { _showToast(d.error); _focusAppOnError("merge", logEl); _decRunning(); _decTabRunning("merge"); return; }
+    btn.dataset.taskId = d.task_id;
+    btn.innerHTML = _WF_ICONS.stop;
+    btn.classList.add("stop");
+    const _mergeAnaDone = () => {
+      if (!btn.dataset.taskId) return;
+      btn.dataset.taskId = '';
+      btn.classList.remove("stop");
+      btn.innerHTML = btn.dataset.orig;
+      _decRunning();
+      _decTabRunning("merge");
+    };
     if (window._esMergeAna) window._esMergeAna.close();
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
     window._esMergeAna = evtSrc;
@@ -4370,10 +4408,7 @@ async function runMergeAnalysis() {
       if (e.data === "[DONE]") {
         evtSrc.close();
         window._esMergeAna = null;
-        btn.disabled = false;
-        btn.textContent = "语义分析";
-        _decRunning();
-        _decTabRunning("merge");
+        _mergeAnaDone();
         return;
       }
       if (e.data.startsWith("[RESULT]")) {
@@ -4389,14 +4424,25 @@ async function runMergeAnalysis() {
       }
     };
   } catch (err) {
-    btn.disabled = false;
-    btn.textContent = "语义分析";
+    if (btn.dataset.taskId) { btn.dataset.taskId = ''; btn.classList.remove("stop"); btn.innerHTML = btn.dataset.orig; }
     _decRunning();
     _decTabRunning("merge");
     _showToast("请求失败: " + err.message);
   }
 }
 document.addEventListener("click",e=>{
+  const stopBtn = e.target.closest("[data-task-id]");
+  if (stopBtn && stopBtn.dataset.taskId) {
+    (async () => {
+      if (!(await showConfirm({title:"确认停止", message:"确定要停止运行吗？", danger:true}))) return;
+      const tid = stopBtn.dataset.taskId;
+      stopBtn.dataset.taskId = '';
+      stopBtn.classList.remove("stop");
+      stopBtn.innerHTML = stopBtn.dataset.orig || "执行";
+      fetch("/api/task/cancel", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task_id: tid})}).catch(()=>{});
+    })();
+    return;
+  }
   const target = e.target.closest("[data-action]");
   if(!target) return;
   const action = target.dataset.action;

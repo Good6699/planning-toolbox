@@ -4080,7 +4080,6 @@ async function runMergeQuery() {
         evtSrc.close();
         _mergeDone();
         if (resultData) {
-        if (resultData) {
           if (resultData.ok) {
             _mergeData.versions = resultData.versions || [];
             _mergeData.stripPrefix = resultData.strip_prefix || "";

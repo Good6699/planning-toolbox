@@ -4435,9 +4435,8 @@ document.addEventListener("click",e=>{
     (async () => {
       if (!(await showConfirm({title:"确认停止", message:"确定要停止运行吗？", danger:true}))) return;
       const tid = stopBtn.dataset.taskId;
-      stopBtn.dataset.taskId = '';
-      stopBtn.classList.remove("stop");
-      stopBtn.innerHTML = stopBtn.dataset.orig || "执行";
+      // 只发取消请求，不清按钮也不清 data-task-id
+      // 让后续的 onerror/[DONE] 自然清理（_done / _mergeDone 等负责恢复按钮和计数器）
       fetch("/api/task/cancel", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task_id: tid})}).catch(()=>{});
     })();
     return;

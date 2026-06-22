@@ -1074,10 +1074,6 @@ def main():
     tray_thread = threading.Thread(target=_tray_thread, daemon=True)
     tray_thread.start()
 
-    # 先等 Flask 就绪，再创建窗口直接用 URL 加载 SPA，避免导航白边框
-    if not _wait_for_flask(timeout=15):
-        print("[错误] Flask 未能在 15 秒内就绪", file=sys.stderr)
-
     config = load_config()
     saved_w = config.get("window_w", 0)
     saved_h = config.get("window_h", 0)
@@ -1090,7 +1086,7 @@ def main():
 
     window = webview.create_window(
         "策划工具箱",
-        url="http://127.0.0.1:18123",
+        html=SPLASH_HTML,
         width=win_w,
         height=win_h,
         x=init_cx,
@@ -1143,6 +1139,7 @@ def main():
         print("[DEBUG] _boot_app 开始", file=sys.stderr)
         window.events.loaded.wait(timeout=30)
         print("[DEBUG] 窗口已加载", file=sys.stderr)
+        _set_progress(window, 15, "界面就绪")
         _set_window_icon()
         print("[DEBUG] 图标已设置", file=sys.stderr)
 
@@ -1150,8 +1147,26 @@ def main():
         docker = EdgeDocker(window)
         _docker = docker
         docker.start()
+        _set_progress(window, 30, "初始化服务中")
         print("[DEBUG] EdgeDocker 已启动", file=sys.stderr)
 
+        if not _wait_for_flask(timeout=15):
+            print("[错误] Flask 未能在 15 秒内就绪", file=sys.stderr)
+            return
+        print("[DEBUG] Flask 就绪", file=sys.stderr)
+        _set_progress(window, 55, "后端就绪")
+        _set_progress(window, 90, "准备就绪")
+        time.sleep(0.2)
+        _set_progress(window, 100, "启动中")
+        time.sleep(0.1)
+
+        try:
+            print("[DEBUG] 正在加载 URL...", file=sys.stderr)
+            window.load_url("http://127.0.0.1:18123")
+            print("[DEBUG] URL 已加载", file=sys.stderr)
+            time.sleep(0.5)
+        except Exception as e:
+            print(f"[load_url] {e}", file=sys.stderr)
         hwnd = _find_window_hwnd(timeout=0.5)
         if hwnd:
             _show_taskbar_icon(hwnd)

@@ -466,9 +466,54 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
   1. 在 `web_app.py` 的 `safe` 字典中添加 `"merge_target_history": cfg.get("merge_target_history", [])`
   2. 在 `_selectSuggest()` 的 `_configMap` 和删除建议项的 `map` 中补充 `merge_target` / `merge_author` / `merge_keyword` 的配置键映射，确保从下拉列表选择/删除时也持久化排序
 - **教训**：新增配置键时，必须同时检查前端的 blur 保存逻辑 + 后端的 GET 白名单。POST 写入没问题不代表 GET 读回没问题。
-- **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/web_app.py)
+- **涉及文件**：[web_app.py](file:///c:/Users/admin/.claw/workspace/web_app.py)
 
-### SVN 关键词支持逗号分隔多个筛选词
+## 2026-06-09 一站式环境修复 + 功能增强
+
+### 新机器环境搭建——全链路依赖安装
+- **场景**：新机器上 Python/SVN/Git/项目依赖全部缺失
+- **解决方案**：winget 安装 Python 3.13/Python 2.7/Git；手动下载 Apache Subversion 1.14.5 二进制；pip install 项目依赖；PowerShell 执行策略改为 RemoteSigned
+
+### 配置文件 UTF-16 导致解码失败
+- **场景**：`git show > svn_gui_config.json` PowerShell 重定向默认为 UTF-16 LE
+- **解决方案**：用 `Out-File -Encoding utf8` 或 `[System.IO.File]::WriteAllText` 确保 UTF-8 无 BOM
+
+### CMD 弹窗彻底消除——DETACHED_PROCESS
+- **场景**：`CREATE_NO_WINDOW` 在某些 SVN 版本下仍闪烁
+- **根因**：`CREATE_NO_WINDOW` 只是不显示窗口，`DETACHED_PROCESS` 才是从创建层面不带控制台
+- **解决方案**：`creationflags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS`
+- **涉及文件**：[toolbox_platform.py](file:///G:/DGameAI/workspace/toolbox_core/toolbox_platform.py)
+
+### 关闭按钮被 drag-bar 覆盖
+- **根因**：`.drag-bar` `position:fixed;z-index:9999;height:32px` 覆盖了关闭按钮（距顶部 ~20px）
+- **解决方案**：drag-bar 高度 32px → 16px
+- **涉及文件**：[index.html](file:///G:/DGameAI/workspace/toolbox_core/templates/index.html)
+
+### JS 花括号不平衡导致 SPA 白屏
+- **场景**：添加停止按钮功能后，SPA 完全空白，无 API 请求发出
+- **根因**：`runMergeQuery` 中 `if (resultData) {` 重复了两行，多了一个 `{`，整个 `<script>` 解析失败
+- **教训**：修改 inline JS 后必须检查花括号平衡，可用 Python 统计 `{`/`}` 数量验证
+- **涉及文件**：[index.html](file:///G:/DGameAI/workspace/toolbox_core/templates/index.html)
+
+### 停止按钮不应立即清除 data-task-id
+- **场景**：强制停止后状态灯仍显示运行中
+- **根因**：停止按钮确认后立即清除了 `btn.dataset.taskId` 并恢复了按钮，但没调 `_decRunning()`/`_decTabRunning()`。后续 SSE `onerror` 触发的 `_mergeDone()` 检查 `!btn.dataset.taskId` 为 true 直接 return，计数器永不归零
+- **解决方案**：停止按钮只发 `/api/task/cancel`，不碰按钮状态和 `data-task-id`，让自然的 `onerror` → `_done()`/`_mergeDone()` 流程恢复按钮和计数器
+- **涉及文件**：[index.html](file:///G:/DGameAI/workspace/toolbox_core/templates/index.html)
+
+### 退出后托盘图标不消失
+- **根因**：`os._exit(0)` 直接杀进程，托盘线程来不及执行 `NIM_DELETE`
+- **解决方案**：`_quit_app()` 不发 `os._exit(0)`，改 Post WM_QUIT 让消息循环自然退出 → 触发 NIM_DELETE
+- **涉及文件**：[desktop_main.py](file:///G:/DGameAI/workspace/toolbox_core/desktop_main.py)
+
+### win11toast 未安装导致任务完成无弹窗
+- **场景**：新环境缺少 `win11toast` 包，`_notify_task_done` 里 `ImportError` 被静默吞掉
+- **解决方案**：`pip install win11toast` + `build.py` 加 `--hidden-import=win11toast`
+- **涉及文件**：[build.py](file:///G:/DGameAI/workspace/toolbox_core/build.py)
+
+### SVN
+
+关键词支持逗号分隔多个筛选词
 - **场景**：`#svn_keyword` 和 `#merge_keyword` 只能输入单个关键词，需要支持逗号分隔的 OR 逻辑
 - **解决方案**：
   1. 前端占位文字提示逗号分隔

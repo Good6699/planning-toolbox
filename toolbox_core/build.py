@@ -191,6 +191,7 @@ def _get_hidden_imports():
         "--hidden-import=proxy_tools",
         "--hidden-import=bottle",
         "--hidden-import=_text_check",
+        "--hidden-import=win11toast",
         "--collect-all=webview",
     ]
 

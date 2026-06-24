@@ -357,11 +357,17 @@ input::placeholder,textarea::placeholder{
   cursor:not-allowed;
   transform:none;
 }
-.btn-primary.stop, .btn-normal.stop{
+.btn-primary.stop{
+  /* 沿用 .btn-primary 原有蓝色渐变样式，只替换图标 */
+}
+.btn-normal.stop{
   color:#ff6b6b;
   background:rgba(255,107,107,.15);
 }
-.btn-primary.stop:hover, .btn-normal.stop:hover{
+.btn-primary.stop:hover{
+  /* 沿用 .btn-primary:hover 原有样式 */
+}
+.btn-normal.stop:hover{
   background:rgba(255,107,107,.25);
   color:#ff6b6b;
 }

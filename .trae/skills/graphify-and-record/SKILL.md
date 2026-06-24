@@ -56,8 +56,15 @@ $env:PYTHONPATH="py_modules"; python graphify_quick.py --full --no-viz
 
 ```powershell
 # 从 APPDATA 同步运行时配置到仓库（确保 UTF-8 无 BOM）
+# 注意：必须用 git show 直接从仓库读原始文件来校验编码，不能用 cp / Get-Content 中转（会乱码）
+$raw = git show origin/web-optimal:toolbox_core/py_modules/toolbox_core/svn_gui_config.json 2>$null
 $cfg = Get-Content "$env:APPDATA\planning-toolbox\svn_gui_config.json" -Raw
-[System.IO.File]::WriteAllText("$PWD\toolbox_core\svn_gui_config.json", $cfg, [System.Text.UTF8Encoding]::new($false))
+if ($raw -and $cfg -ne $raw) {
+  [System.IO.File]::WriteAllText("$PWD\toolbox_core\svn_gui_config.json", $cfg, [System.Text.UTF8Encoding]::new($false))
+} elseif ($raw) {
+  # APPDATA 配置未变化，直接写仓库版本
+  [System.IO.File]::WriteAllText("$PWD\toolbox_core\svn_gui_config.json", $raw, [System.Text.UTF8Encoding]::new($false))
+}
 ```
 
 注意：**必须用 `[System.Text.UTF8Encoding]::new($false)` 去掉 BOM**，否则 `load_config()` 用 `utf-8` 解码时 BOM 会导致异常回退空配置。

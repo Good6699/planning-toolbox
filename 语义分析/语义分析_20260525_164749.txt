@@ -1,0 +1,156 @@
+════════════════════════════════════════════════════════════
+  SVN 变更语义分析报告
+  生成时间：2026-05-25 16:47:51
+  源路径：branches/20240606_KR2/Client
+  目标路径：G:\D3_KR2\Client
+  分析版本数：3
+  版本列表：r344282, r344279, r344276
+════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────
+  汇总 3 个版本 (r344276 → r344282) 的变更
+────────────────────────────────────────────────────────
+
+  [修改] CorruptSecretMapPanel.prefab
+
+    - CorruptSecretMapPanel/MenuBase/Btn_Quit:
+        + 新增插件: IphoneXBtnPortraitPosAdapter
+        修改了 锚点偏移 position
+              旧值: {'x': -310, 'y': -669}
+              新值: {'x': 50, 'y': 51}
+        修改了 锚点最小值
+              旧值: {'x': 0.5, 'y': 0.5}
+              新值: {'x': 0, 'y': 0}
+        修改了 锚点最大值
+              旧值: {'x': 0.5, 'y': 0.5}
+              新值: {'x': 0, 'y': 0}
+
+    - CorruptSecretMapPanel/Map/Ts_SelfItem/SelfFlag/bg:
+        修改了 射线检测
+              旧值: 1
+              新值: 0
+
+  [修改] CorruptSecretBattlePanel.prefab
+
+    - CorruptSecretBattlePanel/Model/Ts_HitVfx:
+        修改了 m_vfxList
+              修改了 4 项:
+                ~ d3_Fx_ui_p1_beidong02_slot_origin:
+                    m_position: (0, 0, 0) → (0, -350, 0)
+                    m_scale: (640, 640, 640) → (150, 150, 150)
+                ~ d3_Fx_ui_p2_beidong02_slot_origin:
+                    m_position: (0, 0, 0) → (0, -350, 0)
+                    m_scale: (640, 640, 640) → (150, 150, 150)
+                ~ d3_Fx_ui_p3_beidong01_slot_origin:
+                    m_position: (0, 0, 0) → (0, -350, 0)
+                    m_scale: (640, 640, 640) → (150, 150, 150)
+                ~ d3_Fx_ui_p4_beidong04_slot_origin:
+                    m_position: (0, 0, 0) → (0, -350, 0)
+                    m_scale: (640, 640, 640) → (150, 150, 150)
+
+  [修改] CorruptSecretExplorePanel.prefab
+
+    - CorruptSecretExplorePanel/Ts_IntellectAnim/Text_IntellectAnim:
+        - 移除插件: ContentSizeFitter
+        修改了 m_RootOrder
+              旧值: 0
+              新值: 2
+        修改了 锚点最小值
+              旧值: {'x': 0.5, 'y': 0.5}
+              新值: {'x': 0, 'y': 0}
+        修改了 子节点
+              移除了 3 项:
+                - CorruptSecretExplorePanel/Ts_IntellectAnim/jiahao
+                - CorruptSecretExplorePanel/Ts_IntellectAnim/UpArrow
+                - CorruptSecretExplorePanel/Ts_IntellectAnim/Text_IntellectStr
+              (共 3 → 0 项)
+        修改了 尺寸偏移
+              旧值: {'x': 0, 'y': 67}
+              新值: {'x': 54, 'y': 100}
+        修改了 锚点最大值
+              旧值: {'x': 0.5, 'y': 0.5}
+              新值: {'x': 0, 'y': 0}
+
+    - CorruptSecretExplorePanel/Ts_IntellectAnim:
+        + 新增插件: HorizontalLayoutGroup
+        修改了 子节点
+              新增了 3 项:
+                + CorruptSecretExplorePanel/Ts_IntellectAnim/Text_IntellectStr
+                + CorruptSecretExplorePanel/Ts_IntellectAnim/jiahao
+                + CorruptSecretExplorePanel/Ts_IntellectAnim/UpArrow
+              (共 1 → 4 项)
+        修改了 尺寸偏移
+              旧值: {'x': 100, 'y': 100}
+              新值: {'x': 319.27, 'y': 100}
+
+    - CorruptSecretExplorePanel/Ts_IntellectAnim/Text_IntellectStr:
+        修改了 m_RootOrder
+              旧值: 2
+              新值: 0
+        修改了 锚点偏移 position
+              旧值: {'x': -39.1784, 'y': -3}
+              新值: {'x': 0, 'y': 0}
+        修改了 锚点最小值
+              旧值: {'x': 0, 'y': 0.5}
+              新值: {'x': 0, 'y': 0}
+        修改了 轴心
+              旧值: {'x': 1, 'y': 0.5}
+              新值: {'x': 0.5, 'y': 0.5}
+        修改了 缩放 scale
+              旧值: ('x': 1.0008, 'y': 1.0008, 'z': 1.0008)
+              新值: ('x': 1.0008001, 'y': 1.0008001, 'z': 1.0008001)
+        修改了 尺寸偏移
+              旧值: {'x': 206.83, 'y': 67}
+              新值: {'x': 206.83002, 'y': 67}
+        修改了 父级关联
+              旧值: CorruptSecretExplorePanel/Ts_IntellectAnim/Text_IntellectAnim
+              新值: CorruptSecretExplorePanel/Ts_IntellectAnim
+        修改了 锚点最大值
+              旧值: {'x': 0, 'y': 0.5}
+              新值: {'x': 0, 'y': 0}
+        修改了 名称
+              旧值: L_Text_Intellect
+              新值: Text_IntellectStr
+
+    - CorruptSecretExplorePanel/Panel/Btn_Explore:
+        修改了 缩放 scale
+              旧值: ('x': 1.0207047, 'y': 1.0207047, 'z': 1.0207047)
+              新值: ('x': 1.0010259, 'y': 1.0010259, 'z': 1.0010259)
+
+    - CorruptSecretExplorePanel/Ts_IntellectAnim/UpArrow:
+        修改了 m_RootOrder
+              旧值: 1
+              新值: 3
+        修改了 锚点偏移 position
+              旧值: {'x': 19.9, 'y': -0.50001}
+              新值: {'x': 0, 'y': 0}
+        修改了 锚点最小值
+              旧值: {'x': 1, 'y': 0.5}
+              新值: {'x': 0, 'y': 0}
+        修改了 父级关联
+              旧值: CorruptSecretExplorePanel/Ts_IntellectAnim/Text_IntellectAnim
+              新值: CorruptSecretExplorePanel/Ts_IntellectAnim
+        修改了 锚点最大值
+              旧值: {'x': 1, 'y': 0.5}
+              新值: {'x': 0, 'y': 0}
+
+    - CorruptSecretExplorePanel/Ts_IntellectAnim/jiahao:
+        修改了 m_RootOrder
+              旧值: 0
+              新值: 1
+        修改了 锚点偏移 position
+              旧值: {'x': -35, 'y': -3}
+              新值: {'x': 0, 'y': 0}
+        修改了 锚点最小值
+              旧值: {'x': 0, 'y': 0.5}
+              新值: {'x': 0, 'y': 0}
+        修改了 轴心
+              旧值: {'x': 0, 'y': 0.5}
+              新值: {'x': 0.5, 'y': 0.5}
+        修改了 父级关联
+              旧值: CorruptSecretExplorePanel/Ts_IntellectAnim/Text_IntellectAnim
+              新值: CorruptSecretExplorePanel/Ts_IntellectAnim
+        修改了 锚点最大值
+              旧值: {'x': 0, 'y': 0.5}
+              新值: {'x': 0, 'y': 0}
+

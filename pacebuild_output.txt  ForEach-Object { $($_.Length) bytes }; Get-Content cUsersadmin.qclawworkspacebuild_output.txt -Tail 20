@@ -1,0 +1,34 @@
+[33mcommit 30619efc23334234c1b245a6ad8fae32c7be82d9[m
+Author: Good6699 <good6699@users.noreply.github.com>
+Date:   Fri May 29 10:48:41 2026 +0800
+
+    chore: 更新入口文件路径，清理旧版文件残留
+
+ .svn_gui_history.json                              |    5 [31m-[m
+ ExcelTool2.py                                      |  252 [31m--[m
+ ...70\200\351\224\256\345\257\271\346\257\224.bat" |   73 [31m-[m
+ ...200\351\224\256\345\257\271\346\257\224GUI.bat" |    8 [31m-[m
+ "SVN\345\267\245\345\205\267\347\256\261.bat"      |    2 [31m-[m
+ check_diff.py                                      |   53 [31m-[m
+ desktop_main.py                                    |  964 [31m-----[m
+ desktop_shell_demo.py                              |  586 [31m---[m
+ export_error_code.py                               |  398 [31m--[m
+ inject_excel_tool2.py                              |  755 [31m----[m
+ lang_map.txt                                       |   70 [31m-[m
+ svn_compare_gui.py                                 |  632 [31m---[m
+ svn_gui_config.json                                |  454 [31m--[m
+ svn_launcher.py                                    |   24 [31m-[m
+ svn_oneclick_compare.py                            | 3522 [31m---------------[m
+ svn_query.py                                       |  306 [31m--[m
+ templates/index.html                               | 4552 [31m--------------------[m
+ toolbox_config.py                                  |   99 [31m-[m
+ toolbox_merge.py                                   |  791 [31m----[m
+ toolbox_platform.py                                |  127 [31m-[m
+ toolbox_tab_svn.py                                 | 1168 [31m-----[m
+ toolbox_tab_translate.py                           |  796 [31m----[m
+ toolbox_tab_upload.py                              |  610 [31m---[m
+ toolbox_tab_workflow.py                            | 2433 [31m-----------[m
+ web_app.py                                         | 2519 [31m-----------[m
+ xlsm_zipper.py                                     |  170 [31m-[m
+ ...222\345\267\245\345\205\267\347\256\261GUI.vbs" |  193 [31m-[m
+ 27 files changed, 21562 deletions(-)

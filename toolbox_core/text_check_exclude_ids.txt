@@ -1,0 +1,11 @@
+# 排除检测配置
+# # 开头的行为注释
+# 直接写 ID 可排除该 ID 的行（不区分大小写）
+# KEYWORD: 开头的行为 SC 内容关键词，SC 包含该关键词的行跳过
+# 示例:
+# KEYWORD:作废
+# D3_CorruptSecret_Text124
+KEYWORD:作废
+KEYWORD:废弃
+KEYWORD:老D2配置
+KEYWORD:不翻译

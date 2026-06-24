@@ -1,0 +1,97 @@
+════════════════════════════════════════════════════════════
+  SVN 变更语义分析报告
+  生成时间：2026-05-26 17:23:22
+  源路径：branches/20240606_KR2/Client
+  目标路径：G:\D3_KR2\Client
+  分析版本数：1
+  版本列表：r344323
+════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────
+#1  r344323 | zhangjunyu | 2026-05-25T08:32:43
+备注：【OB+15】【腐败秘境】功能提交  --预制
+────────────────────────────────────────────────────────
+
+  [mod] CorruptSecretBattlePanel.prefab
+    ─ CorruptSecretBattlePanel/D3ComUI_MenuBase/Menu/Scroll/List:
+      修改了 尺寸偏移
+            (0, 102)
+            → (101, 102)
+    ─ CorruptSecretBattlePanel/D3ComUI_MenuBase/TopTab/ComUI_currencyBarGroup/ComUI_currencyBar_bangZuan:
+      修改了 锚点最小值
+            (0, 0)
+            → (0, 1)
+      修改了 锚点最大值
+            (0, 0)
+            → (0, 1)
+      修改了 锚点偏移 position
+            (0, 0)
+            → (110, 0)
+    ─ CorruptSecretBattlePanel/D3ComUI_MenuBase/Menu/Scroll/List/Toggle_1:
+      修改了 锚点最小值
+            (0, 0)
+            → (0, 1)
+      修改了 锚点最大值
+            (0, 0)
+            → (0, 1)
+      修改了 锚点偏移 position
+            (0, 0)
+            → (58, -51)
+    ─ CorruptSecretBattlePanel/Panel/Award/Ts_AwardParent:
+      修改了 锚点最小值
+            (0, 0)
+            → (0, 1)
+      修改了 锚点最大值
+            (0, 0)
+            → (0, 1)
+      修改了 锚点偏移 position
+            (0, 0)
+            → (93, -44)
+    ─ CorruptSecretBattlePanel/Panel/Award:
+      修改了 尺寸偏移
+            (180, 0)
+            → (180, 52)
+    ─ CorruptSecretBattlePanel/Panel/Award/L_Text:
+      修改了 锚点最小值
+            (0, 0)
+            → (0, 1)
+      修改了 尺寸偏移
+            (180, 0)
+            → (180, 33)
+      修改了 锚点最大值
+            (0, 0)
+            → (0, 1)
+      修改了 锚点偏移 position
+            (0, 0)
+            → (93, -22.5)
+    ─ CorruptSecretBattlePanel/D3ComUI_MenuBase/TopTab/ComUI_currencyBarGroup:
+      修改了 尺寸偏移
+            (0, 40)
+            → (110, 40)
+
+  [mod] CorruptSecretMainPanel.prefab
+    ─ CorruptSecretMainPanel/Top/Title/Time/Ts_Teaming:
+      修改了 锚点最小值
+            (0, 0)
+            → (0, 1)
+      修改了 锚点最大值
+            (0, 0)
+            → (0, 1)
+      修改了 锚点偏移 position
+            (110, 0)
+            → (51.574997, -50)
+    ─ CorruptSecretMainPanel/Top/Btn_Dimension/L_Text_Dimension:
+      修改了 尺寸偏移
+            (0, 55)
+            → (88, 55)
+    ─ CorruptSecretMainPanel/Top/Title/Time/Text_Time:
+      修改了 锚点最小值
+            (0, 0)
+            → (0, 1)
+      修改了 锚点最大值
+            (0, 0)
+            → (0, 1)
+      修改了 锚点偏移 position
+            (0, 0)
+            → (213.58, -50)
+

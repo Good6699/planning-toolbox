@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "main.py", line 41, in <module>
+    os.chdir(core_dir)
+    ~~~~~~~~^^^^^^^^^^
+FileNotFoundError: [WinError 2] 系统找不到指定的文件。: 'C:\\Users\\admin\\.qclaw\\workspace\\dist\\策划工具箱_v1.0.1_20260531_0857\\_internal\\toolbox_core'

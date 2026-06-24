@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>策划工具箱</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0f1115;font-family:"Segoe UI","Microsoft YaHei UI",sans-serif}
+body{background:radial-gradient(circle at top,#1c2540 0%,#0f1115 45%)}
+.bg-f{position:absolute;inset:-10%;background:radial-gradient(circle at 30% 20%,rgba(94,162,255,.08),transparent 40%);filter:blur(80px);animation:f 14s ease-in-out infinite alternate}
+.r{position:relative;width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.lw{display:flex;flex-direction:column;align-items:center;animation:r2 .9s cubic-bezier(.2,.8,.2,1) forwards}
+.lb{width:100px;height:100px;border-radius:22px;background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center}
+.lb svg{width:84px;height:84px}
+.t{margin-top:20px;font-size:30px;font-weight:700;letter-spacing:1px;color:#fff}
+.st{margin-top:8px;font-size:13px;color:#8b96ad;letter-spacing:3px}
+.p{position:absolute;bottom:54px;width:auto}
+.pt{font-size:11px;letter-spacing:2px;color:#8b96ad}
+@keyframes r2{0%{opacity:0;transform:scale(.96);filter:blur(10px)}100%{opacity:1;transform:scale(1);filter:blur(0)}}
+@keyframes f{0%{transform:translateX(-40px) translateY(-20px)}100%{transform:translateX(40px) translateY(20px)}}
+</style></head>
+<body>
+<div class="bg-f"></div>
+<div class="r">
+<div class="lw"><div class="lb"><svg viewBox="25 25 50 50" fill="none"><defs><linearGradient id="cg" x1="25" y1="25" x2="75" y2="75" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#8BE9FF"/><stop offset="50" stop-color="#4F8CFF"/><stop offset="100" stop-color="#6A4CFF"/></linearGradient></defs><path d="M30 28 H70 L70 40 H42 L42 60 H70 L70 72 H30 L30 50 H58" stroke="url(#cg)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="58" cy="50" r="6" fill="url(#cg)"/></svg></div><div class="t">策划工具箱</div><div class="st">Game Pipeline Toolkit</div></div>
+<div class="p"><div class="pt" id="stxt">LOADING...</div></div>
+</div></body></html>

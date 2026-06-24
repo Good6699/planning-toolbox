@@ -1,0 +1,21 @@
+
+============================================================
+  策划工具箱 — PyInstaller 打包
+  版本: v1.0.1
+  工作区: C:\Users\admin\.qclaw\workspace
+============================================================
+
+[PyInstaller] C:\Users\admin\AppData\Local\Programs\Python\Python313\Scripts\pyinstaller.EXE
+  [清理] 已移除 API Key 字段: tr_api_key_enc
+  [数据] templates/ → templates/
+  [数据] assets/ → assets/
+  [数据] splash/ → splash/
+  [数据] _cmp_worker.py → ./
+  [数据] _merge_analyzer.py → ./
+  [数据] _merge_analyze_worker.py → ./
+  [数据] _export_error_code_erl.py → ./
+  [数据] _updater.bat → ./
+
+[执行] PyInstaller 打包中...
+  Entry: main.py
+  Output: C:\Users\admin\.qclaw\workspace\dist\策划工具箱_v1.0.1_20260531_0909\

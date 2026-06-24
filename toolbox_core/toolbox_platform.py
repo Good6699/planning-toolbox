@@ -277,5 +277,5 @@ def _get_subprocess_kwargs():
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         si.wShowWindow = subprocess.SW_HIDE
         kwargs["startupinfo"] = si
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     return kwargs

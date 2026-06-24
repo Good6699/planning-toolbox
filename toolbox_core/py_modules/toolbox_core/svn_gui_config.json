@@ -10,17 +10,17 @@
     "Texts"
   ],
   "merge_file_filter_mode": "exclude",
-  "merge_file_filter_exclude_text": "Assets\\StreamingAssets\\SkillConfig,Assets\\StreamingAssets\\BinData,Assets\\StreamingAssets\\GenerateData,Assets\\StreamingAssets\\Language,Assets\\Code,Assets\\Code_Lua,gameData\\UpLoadBackup,gameData\\老D3废弃表,gameData\\配置描述文档,gameData\\.ExcelTool2,gameData\\.svn,gameData\\config,gameData\\config_temp,gameData\\ErlangExportCopy,gameData\\ExportTxt,gameData\\macro,gameData\\old,gameData\\oldGameData,gameData\\protobuf,Assets\\StreamingAssets\\GenerateMsg",
+  "merge_file_filter_exclude_text": "Assets\\StreamingAssets\\SkillConfig,Assets\\StreamingAssets\\BinData,Assets\\StreamingAssets\\GenerateData,Assets\\StreamingAssets\\Language,Assets\\Code,Assets\\Code_Lua,gameData\\UpLoadBackup,gameData\\鑰丏3搴熷純琛?gameData\\閰嶇疆鎻忚堪鏂囨。,gameData\\.ExcelTool2,gameData\\.svn,gameData\\config,gameData\\config_temp,gameData\\ErlangExportCopy,gameData\\ExportTxt,gameData\\macro,gameData\\old,gameData\\oldGameData,gameData\\protobuf,Assets\\StreamingAssets\\GenerateMsg",
   "merge_file_filter_include_text": "gameData\\Text\\Texts.xlsm,gameData\\Data2,gameData\\Language",
   "svn_keyword_history": [
-    "专武,腐败秘境,职业,海渊",
-    "腐败秘境",
-    "裂隙",
-    "专武,腐败秘境,职业",
-    "海渊,腐败",
-    "神器",
-    "专武",
-    "腐败"
+    "涓撴,鑵愯触绉樺,鑱屼笟,娴锋笂",
+    "鑵愯触绉樺",
+    "瑁傞殭",
+    "涓撴,鑵愯触绉樺,鑱屼笟",
+    "娴锋笂,鑵愯触",
+    "绁炲櫒",
+    "涓撴",
+    "鑵愯触"
   ],
   "svn_author_history": [
     "gaoyang",
@@ -35,22 +35,22 @@
     "G:\\D3_KR2\\Client"
   ],
   "output_dir_history": [
-    "C:\\Users\\admin\\.qclaw\\workspace\\输出",
+    "C:\\Users\\admin\\.qclaw\\workspace\\杈撳嚭",
     "G:\\D3_KR2\\gameData\\Text",
     "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
   ],
   "tr_lang_id_map": {
-    "简体中文": [
+    "绠€浣撲腑鏂?: [
       "SC",
       "::SC::",
-      "中文",
+      "涓枃",
       "CHS",
       "CH",
       "CN",
-      "简体",
+      "绠€浣?,
       "SChinese"
     ],
-    "英文": [
+    "鑻辨枃": [
       "EN",
       "::EN::",
       "English",
@@ -58,74 +58,74 @@
       "EN_US",
       "EN_GB"
     ],
-    "韩文": [
+    "闊╂枃": [
       "KR",
       "::KR::",
       "KO",
       "KOR",
       "Korean",
-      "한국어"
+      "頃滉淡鞏?
     ],
-    "日文": [
+    "鏃ユ枃": [
       "JP",
       "::JP::",
       "JA",
       "JPN",
       "Japanese",
-      "日本語"
+      "鏃ユ湰瑾?
     ],
-    "繁体中文": [
+    "绻佷綋涓枃": [
       "TW",
       "::TW::",
       "TCH",
       "TC",
-      "繁体",
+      "绻佷綋",
       "TChinese"
     ],
-    "法文": [
+    "娉曟枃": [
       "FR",
       "::FR::",
       "FRENCH"
     ],
-    "德文": [
+    "寰锋枃": [
       "GE",
       "::GE::",
       "DE",
       "GER",
       "German"
     ],
-    "西班牙文": [
+    "瑗跨彮鐗欐枃": [
       "SP",
       "::SP::",
       "ES",
       "SPA",
       "Spanish"
     ],
-    "葡萄牙文": [
+    "钁¤悇鐗欐枃": [
       "PT",
       "::PT::",
       "POR",
       "Portuguese"
     ],
-    "俄文": [
+    "淇勬枃": [
       "RU",
       "::RU::",
       "RUS",
       "Russian"
     ],
-    "泰文": [
+    "娉版枃": [
       "TH",
       "::TH::",
       "THAI",
       "Thai"
     ],
-    "印尼文": [
+    "鍗板凹鏂?: [
       "IN",
       "::IN::",
       "IND",
       "Indonesian"
     ],
-    "土耳其文": [
+    "鍦熻€冲叾鏂?: [
       "TR",
       "::TR::",
       "TUR",
@@ -149,7 +149,7 @@
   "global_cmp_id_col": "::ID::",
   "cmp_global_id_col": "",
   "src_dir_history": [
-    "C:\\Users\\admin\\.qclaw\\workspace\\输出"
+    "C:\\Users\\admin\\.qclaw\\workspace\\杈撳嚭"
   ],
   "tgt_dir_history": [
     "G:\\D3_KR2\\Client",
@@ -240,59 +240,23 @@
           "type": "upload_svn"
         }
       ]
-    },
-    {
-      "name": "测试",
-      "steps": [
-        {
-          "lock_msg": "锁定中，请勿修改",
-          "name": "Texts.xlsm",
-          "target_path": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
-          "type": "lock_svn",
-          "update_dirs": [
-            "G:\\D3_JP\\gameData",
-            "G:\\D3_JP\\Client\\Assets\\StreamingAssets"
-          ]
-        },
-        {
-          "id_col": "1",
-          "input_paths": [
-            "C:\\Users\\admin\\.qclaw\\workspace\\输出\\Excel\\职业\\Texts.xlsm"
-          ],
-          "merge_prefixes": "",
-          "name": "Texts.xlsm",
-          "target_dir": "G:\\D3_JP\\gameData\\Text",
-          "title_rows": "1",
-          "type": "merge_table"
-        },
-        {
-          "input_file": "G:\\D3_JP\\gameData\\Text\\Texts.xlsm",
-          "lang_codes": "",
-          "name": "Texts.xlsm",
-          "tools": [
-            "G:\\D3_JP\\gameData\\Text\\服务器文字表导出_替换文本引用.bat",
-            "G:\\D3_JP\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
-          ],
-          "type": "export_text"
-        }
-      ]
     }
   ],
-  "output_dir_export": "C:\\Users\\admin\\.qclaw\\workspace\\输出\\导出",
+  "output_dir_export": "C:\\Users\\admin\\.qclaw\\workspace\\杈撳嚭\\瀵煎嚭",
   "window_geometry": "992x800+-1063+178",
   "tr_src_history": [
-    "C:\\Users\\admin\\.qclaw\\workspace\\多语言翻译表.xlsx"
+    "C:\\Users\\admin\\.qclaw\\workspace\\澶氳瑷€缈昏瘧琛?xlsx"
   ],
   "tr_api_url": "https://api.deepseek.com/v1/chat/completions",
   "tr_model": "deepseek-v4-flash",
-  "tr_out_dir": "C:\\Users\\admin\\.qclaw\\workspace\\翻译",
-  "tr_prompt": "你是一个游戏翻译专家。请将以下文本从{src_lang}翻译为{tgt_lang}。只返回翻译结果，不要有任何额外内容。\n如果参考文件中有对应条目，请优先使用参考翻译。",
+  "tr_out_dir": "C:\\Users\\admin\\.qclaw\\workspace\\缈昏瘧",
+  "tr_prompt": "浣犳槸涓€涓父鎴忕炕璇戜笓瀹躲€傝灏嗕互涓嬫枃鏈粠{src_lang}缈昏瘧涓簕tgt_lang}銆傚彧杩斿洖缈昏瘧缁撴灉锛屼笉瑕佹湁浠讳綍棰濆鍐呭銆俓n濡傛灉鍙傝€冩枃浠朵腑鏈夊搴旀潯鐩紝璇蜂紭鍏堜娇鐢ㄥ弬鑰冪炕璇戙€?,
   "tr_batch_size": 300,
   "tr_saved_src_lang": "::SC::",
   "tr_saved_tgt_langs": [
-    "韩文"
+    "闊╂枃"
   ],
-  "output_dir": "C:\\Users\\admin\\.qclaw\\workspace\\输出",
+  "output_dir": "C:\\Users\\admin\\.qclaw\\workspace\\杈撳嚭",
   "tr_src_lang": "::SC::",
   "merge_exclude_paths": [
     "config",
@@ -310,9 +274,9 @@
     "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
     "Assets/Code_Lua/test/test.lua,Assets/StreamingAssets/LocalVersion.xml,InstallClient.bat",
     "F:\\D3_KR2_DEV\\Client\\Assets\\StreamingAssets, F:\\D3_KR2_DEV\\gameData",
-    "F:\\D3_KR2_DEV\\gameData\\Text\\服务器文字表导出_替换文本引用.bat, F:\\D3_KR2_DEV\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
-    "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat, G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
-    "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat,G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
+    "F:\\D3_KR2_DEV\\gameData\\Text\\鏈嶅姟鍣ㄦ枃瀛楄〃瀵煎嚭_鏇挎崲鏂囨湰寮曠敤.bat, F:\\D3_KR2_DEV\\gameData\\Text\\瀹㈡埛绔枃瀛楄〃瀵煎嚭_鏇挎崲鏂囨湰寮曠敤.bat",
+    "G:\\D3_KR2\\gameData\\Text\\鏈嶅姟鍣ㄦ枃瀛楄〃瀵煎嚭_鏇挎崲鏂囨湰寮曠敤.bat, G:\\D3_KR2\\gameData\\Text\\瀹㈡埛绔枃瀛楄〃瀵煎嚭_鏇挎崲鏂囨湰寮曠敤.bat",
+    "G:\\D3_KR2\\gameData\\Text\\鏈嶅姟鍣ㄦ枃瀛楄〃瀵煎嚭_鏇挎崲鏂囨湰寮曠敤.bat,G:\\D3_KR2\\gameData\\Text\\瀹㈡埛绔枃瀛楄〃瀵煎嚭_鏇挎崲鏂囨湰寮曠敤.bat",
     "G:\\D3_KR2\\Client\\Assets\\StreamingAssets,G:\\D3_KR2\\gameData",
     "G:\\D3_KR2\\Client\\Assets\\StreamingAssets,"
   ],

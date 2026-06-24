@@ -1369,6 +1369,29 @@ def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
         return False
 
 
+def _get_svn_cached_user():
+    """从 SVN 凭据缓存读取当前认证用户名"""
+    try:
+        auth_dir = os.path.join(os.environ.get('APPDATA', ''), 'Subversion', 'auth', 'svn.simple')
+        if not os.path.isdir(auth_dir):
+            return None
+        for fname in os.listdir(auth_dir):
+            fpath = os.path.join(auth_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            try:
+                with open(fpath, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read()
+                m = re.search(r'username\s+"([^"]+)"', content)
+                if m:
+                    return m.group(1)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return None
+
+
 def _exec_lock_svn(step, put, task_id=None):
     target_path = step.get("target_path", "").strip()
     lock_msg = step.get("lock_msg", "锁定中，请勿修改")
@@ -1403,16 +1426,18 @@ def _exec_lock_svn(step, put, task_id=None):
                 put("锁定成功\n")
                 return True
             else:
-                # 从错误信息解析锁主，判断是否自己锁的
+                # 从错误信息解析锁主，与 SVN 凭据缓存的实际用户比对
                 m = re.search(r"locked by user '([^']+)'", stderr)
                 lock_owner = m.group(1) if m else ""
-                cfg = load_config()
-                svn_user = cfg.get("svn_user", "")
-                if lock_owner and svn_user and lock_owner == svn_user:
-                    put("文件已由本人锁定，继续执行\n")
-                    return True
+                cached_user = _get_svn_cached_user()
+                if lock_owner:
+                    if cached_user and lock_owner == cached_user:
+                        put("文件已由本人锁定，继续执行\n")
+                        return True
+                    else:
+                        put(f"锁定失败，被 '{lock_owner}' 锁定（当前凭据用户: {cached_user or '?'}）\n")
                 else:
-                    put(f"锁定失败，被 '{lock_owner or '?'}' 锁定: {stderr[-200:]}\n")
+                    put(f"锁定失败: {stderr[-200:]}\n")
         finally:
             _unregister_proc(proc, task_id)
     except Exception as e:

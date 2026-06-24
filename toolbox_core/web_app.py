@@ -1381,10 +1381,16 @@ def _get_svn_cached_user():
                 continue
             try:
                 with open(fpath, 'r', encoding='utf-8', errors='replace') as f:
-                    content = f.read()
-                m = re.search(r'username\s+"([^"]+)"', content)
-                if m:
-                    return m.group(1)
+                    lines = f.readlines()
+                for i, line in enumerate(lines):
+                    if line.strip() == 'username' and i + 1 < len(lines):
+                        val_line = lines[i + 1]
+                        if val_line.startswith('V '):
+                            parts = val_line.split(' ', 1)
+                            val_len = int(parts[1].strip()) if len(parts) > 1 else 0
+                            if val_len > 0 and i + 2 < len(lines):
+                                raw = lines[i + 2].strip()
+                                return raw[:val_len]
             except Exception:
                 continue
     except Exception:

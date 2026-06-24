@@ -279,3 +279,17 @@ def _get_subprocess_kwargs():
         kwargs["startupinfo"] = si
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     return kwargs
+
+
+def _get_bat_subprocess_kwargs():
+    """获取 subprocess 参数，适用于调用 .bat 脚本。
+    与 _get_subprocess_kwargs 不同，不加 CREATE_NO_WINDOW。
+    某些 .bat 内部调用的旧版 Python/C 扩展（如 Python 2.7 的 pyexpat）
+    在没有控制台时会加载失败，需要隐藏控制台而非完全无控制台。"""
+    kwargs = {}
+    if _sys.platform == "win32":
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
+        kwargs["startupinfo"] = si
+    return kwargs

@@ -51,7 +51,7 @@ from toolbox_config import (  # noqa: E402
     SCRIPT_DIR, MAIN_SCRIPT, DEFAULT_OUTPUT_DIR,
     load_config, save_config,
 )
-from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock, _diagnose_svn_missing, _auto_install_svn_cli  # noqa: E402
+from toolbox_platform import _get_subprocess_kwargs, _get_bat_subprocess_kwargs, _get_svn_path, _check_office_lock, _diagnose_svn_missing, _auto_install_svn_cli  # noqa: E402
 from xlsm_zipper import apply_via_excel  # noqa: E402
 from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path, resolve_svn_url_to_local, migrate_old_svn_mappings  # noqa: E402
 
@@ -1004,7 +1004,7 @@ def _exec_export_text(step, put, task_id=None):
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            **_get_subprocess_kwargs())
+            **_get_bat_subprocess_kwargs())
         _register_proc(proc, task_id)
         try:
             # 后台线程读取 stderr，防止管道阻塞
@@ -1229,7 +1229,7 @@ def _exec_copy_files(step, put, task_id=None):
                 cwd=os.path.dirname(tool_path),
                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                **_get_subprocess_kwargs())
+                **_get_bat_subprocess_kwargs())
             _register_proc(proc, task_id)
             try:
                 # 后台线程读取 stderr，防止管道阻塞

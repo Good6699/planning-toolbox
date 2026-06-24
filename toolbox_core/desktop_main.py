@@ -482,9 +482,19 @@ def _force_kill_old_instance():
     """强制杀死其他运行中的策划工具箱实例，确保唯一实例"""
     import subprocess as _sp
     import time as _time
+    import ctypes
     pids = set()
     _my_pid = str(os.getpid())
     _kw = _get_hidden_sp_kwargs()
+
+    # 0. 先给旧实例的托盘窗口发 WM_QUIT，让消息循环自然退出触发 NIM_DELETE 清理图标
+    try:
+        old_hwnd = ctypes.windll.user32.FindWindowW("PlanningToolboxTrayWindow", None)
+        if old_hwnd:
+            ctypes.windll.user32.PostMessageW(old_hwnd, 0x12, 0, 0)  # WM_QUIT
+            _time.sleep(0.3)
+    except Exception:
+        pass
 
     try:
         # 1. 扫端口 18124（实例锁）和 18123（Flask），收集旧 PID
@@ -516,7 +526,15 @@ def _force_kill_old_instance():
                     capture_output=True, timeout=5, **_kw)
         except Exception:
             pass
-    _time.sleep(0.5)
+    # 强制杀死后主动删除旧托盘图标（HWND 可能已失效，但 NIM_DELETE 仍可能被 Explorer 处理）
+    try:
+        old_hwnd2 = ctypes.windll.user32.FindWindowW("PlanningToolboxTrayWindow", None)
+        if old_hwnd2:
+            from win32gui import Shell_NotifyIcon, NIM_DELETE
+            Shell_NotifyIcon(NIM_DELETE, (old_hwnd2, 1, 0, 0, 0, ""))
+    except Exception:
+        pass
+    _time.sleep(0.3)
 
 
 def _acquire_instance_lock():

@@ -50,7 +50,19 @@ $env:PYTHONPATH="py_modules"; python graphify_quick.py --full --no-viz
 
 总结根因和解决方案即可，不用问用户确认。
 
-### Step 3: 提交本地 Git（有代码变更时）
+### Step 3: 同步最新配置到仓库
+
+提交前先将运行时配置（`%APPDATA%/planning-toolbox/svn_gui_config.json`）同步到仓库，确保 GitHub 上的配置是最新的：
+
+```powershell
+# 从 APPDATA 同步运行时配置到仓库（确保 UTF-8 无 BOM）
+$cfg = Get-Content "$env:APPDATA\planning-toolbox\svn_gui_config.json" -Raw
+[System.IO.File]::WriteAllText("$PWD\toolbox_core\svn_gui_config.json", $cfg, [System.Text.UTF8Encoding]::new($false))
+```
+
+注意：**必须用 `[System.Text.UTF8Encoding]::new($false)` 去掉 BOM**，否则 `load_config()` 用 `utf-8` 解码时 BOM 会导致异常回退空配置。
+
+### Step 4: 提交本地 Git（有代码变更时）
 
 ```powershell
 git status
@@ -63,7 +75,8 @@ git commit --no-verify -m "<type>: <中文描述>"
 - 提交前先确认变更文件列表
 
 **打包相关文件的特殊处理**：
-- `toolbox_core/build.py`、`toolbox_core/update_version.py`、`toolbox_core/update_version.py` 需要显式 `git add`
+- `toolbox_core/svn_gui_config.json` 配置文件的变更必须显式 `git add`（被 `.gitignore` 排除或不在追踪中时需要 `-f`）
+- `toolbox_core/build.py`、`toolbox_core/update_version.py` 需要显式 `git add`
 - `update-server/version.json` 和 `update-server/*.zip` 需要显式 `git add -f`（被 `.gitignore` 排除，必须强制添加）
 - `toolbox_core/_updater.bat` 需要 `git add -f`（`.gitignore` 排除了 `*.bat`）
 - 子进程生产脚本 `_cmp_worker.py`、`_merge_analyzer.py`、`_merge_analyze_worker.py`、`_export_error_code_erl.py` 需要 `git add -f`（被 `_*.py` 规则排除，但已加 `.gitignore` 例外）
@@ -77,7 +90,7 @@ git commit --no-verify -m "<type>: <中文描述>"
 - 发布新版本后需要启动 HTTP 服务：`cd update-server && python -m http.server 8080`
 - 防火墙需放行 8080 端口：`netsh advfirewall firewall add rule name="策划工具箱更新服务" dir=in action=allow protocol=TCP localport=8080`
 
-### Step 4: 告知用户
+### Step 5: 告知用户
 
 一句话告知完成：图谱更新结果 + 记录/提交情况。若打包或服务器配置相关文件有变更，额外告知用户：
 - 打包脚本已更新，如需重新打包执行 `cd toolbox_core && python build.py --zip`

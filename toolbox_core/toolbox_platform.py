@@ -273,19 +273,9 @@ def _get_subprocess_kwargs():
     """获取 subprocess 参数，Windows 下隐藏 CMD 窗口"""
     kwargs = {}
     if _sys.platform == "win32":
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-    return kwargs
-
-
-def _get_bat_subprocess_kwargs():
-    """获取 subprocess 参数，适用于调用 .bat 脚本（运行旧版 Python 2.7 C 扩展）。
-    与 _get_subprocess_kwargs 不同：不加 CREATE_NO_WINDOW，用 SW_HIDE 隐藏控制台。
-    某些 Python 2.7 C 扩展（pyexpat）需要在有控制台的环境中才能正确加载，
-    CREATE_NO_WINDOW 完全无控制台会导致 from xml.parsers import expat 失败。"""
-    kwargs = {}
-    if _sys.platform == "win32":
         si = subprocess.STARTUPINFO()
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         si.wShowWindow = subprocess.SW_HIDE
         kwargs["startupinfo"] = si
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     return kwargs

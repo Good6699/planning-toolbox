@@ -51,7 +51,7 @@ from toolbox_config import (  # noqa: E402
     SCRIPT_DIR, MAIN_SCRIPT, DEFAULT_OUTPUT_DIR,
     load_config, save_config,
 )
-from toolbox_platform import _get_subprocess_kwargs, _get_svn_path, _check_office_lock, _diagnose_svn_missing, _auto_install_svn_cli  # noqa: E402
+from toolbox_platform import _get_subprocess_kwargs, _get_bat_subprocess_kwargs, _get_svn_path, _check_office_lock, _diagnose_svn_missing, _auto_install_svn_cli  # noqa: E402
 from xlsm_zipper import apply_via_excel  # noqa: E402
 from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path, resolve_svn_url_to_local, migrate_old_svn_mappings  # noqa: E402
 
@@ -1004,7 +1004,8 @@ def _exec_export_text(step, put, task_id=None):
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            **_get_subprocess_kwargs())
+            env={**os.environ, "PATH": r"C:\Python27\DLLs;" + os.environ.get("PATH", "")},
+            **_get_bat_subprocess_kwargs())
         _register_proc(proc, task_id)
         try:
             # 后台线程读取 stderr，防止管道阻塞
@@ -1229,7 +1230,7 @@ def _exec_copy_files(step, put, task_id=None):
                 cwd=os.path.dirname(tool_path),
                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                **_get_subprocess_kwargs())
+                **_get_bat_subprocess_kwargs())
             _register_proc(proc, task_id)
             try:
                 # 后台线程读取 stderr，防止管道阻塞
@@ -1369,6 +1370,35 @@ def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
         return False
 
 
+def _get_svn_cached_user():
+    """从 SVN 凭据缓存读取当前认证用户名"""
+    try:
+        auth_dir = os.path.join(os.environ.get('APPDATA', ''), 'Subversion', 'auth', 'svn.simple')
+        if not os.path.isdir(auth_dir):
+            return None
+        for fname in os.listdir(auth_dir):
+            fpath = os.path.join(auth_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            try:
+                with open(fpath, 'r', encoding='utf-8', errors='replace') as f:
+                    lines = f.readlines()
+                for i, line in enumerate(lines):
+                    if line.strip() == 'username' and i + 1 < len(lines):
+                        val_line = lines[i + 1]
+                        if val_line.startswith('V '):
+                            parts = val_line.split(' ', 1)
+                            val_len = int(parts[1].strip()) if len(parts) > 1 else 0
+                            if val_len > 0 and i + 2 < len(lines):
+                                raw = lines[i + 2].strip()
+                                return raw[:val_len]
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return None
+
+
 def _exec_lock_svn(step, put, task_id=None):
     target_path = step.get("target_path", "").strip()
     lock_msg = step.get("lock_msg", "锁定中，请勿修改")
@@ -1403,16 +1433,18 @@ def _exec_lock_svn(step, put, task_id=None):
                 put("锁定成功\n")
                 return True
             else:
-                # 从错误信息解析锁主，判断是否自己锁的
+                # 从错误信息解析锁主，与 SVN 凭据缓存的实际用户比对
                 m = re.search(r"locked by user '([^']+)'", stderr)
                 lock_owner = m.group(1) if m else ""
-                cfg = load_config()
-                svn_user = cfg.get("svn_user", "")
-                if lock_owner and svn_user and lock_owner == svn_user:
-                    put("文件已由本人锁定，继续执行\n")
-                    return True
+                cached_user = _get_svn_cached_user()
+                if lock_owner:
+                    if cached_user and lock_owner == cached_user:
+                        put("文件已由本人锁定，继续执行\n")
+                        return True
+                    else:
+                        put(f"锁定失败，被 '{lock_owner}' 锁定（当前凭据用户: {cached_user or '?'}）\n")
                 else:
-                    put(f"锁定失败，被 '{lock_owner or '?'}' 锁定: {stderr[-200:]}\n")
+                    put(f"锁定失败: {stderr[-200:]}\n")
         finally:
             _unregister_proc(proc, task_id)
     except Exception as e:
@@ -1500,15 +1532,10 @@ def _svn_decode_output(data):
 
 
 def _exec_revert_svn(step, put, task_id=None):
-    # 兼容新旧格式：revert_paths（新数组）或 target_path（旧单路径）
     target_paths = []
     rp = step.get("revert_paths", [])
     if isinstance(rp, list) and rp:
         target_paths = [p.strip() for p in rp if p.strip()]
-    else:
-        tp = step.get("target_path", "").strip()
-        if tp:
-            target_paths.append(tp)
 
     valid_paths = [p for p in target_paths if os.path.exists(p)]
     if not valid_paths:
@@ -3230,7 +3257,9 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
             _log("正在过滤纯属性变更文件...")
             content_files = set()
             _svn = _get_svn_path()
-            norm_url = source_url.rstrip("/")
+
+            # svn diff --summarize 输出用正斜杠，source_url 可能是反斜杠，统一比较
+            norm_url = source_url.replace("\\", "/").rstrip("/")
             for i in range(0, len(filtered_revs), 50):
                 batch = filtered_revs[i:i + 50]
                 rev_args = []
@@ -3245,17 +3274,31 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
                     for line in out.strip().splitlines():
                         parts = line.strip().split(None, 1)
                         if len(parts) >= 2:
-                            path = parts[1]
+                            path = parts[1].replace("\\", "/")
                             if path.startswith(norm_url):
                                 path = path[len(norm_url):].lstrip("/")
                                 content_files.add(path)
                 except Exception:
                     pass
+
             if content_files:
+                # content_files 是相对路径（如 Assets/foo.xlsx）
+                # svn_log 路径是仓库绝对路径（如 /D3_EA/trunk/Client/Assets/foo.xlsx）
+                # 统一用 endswith 匹配相对路径的尾部
+                _cf_lower = {p.lower() for p in content_files}
                 removed = 0
                 for v in versions:
                     orig = v.get("files", [])
-                    v["files"] = [f for f in orig if f.get("path", "") in content_files]
+                    v["files"] = []
+                    for f in orig:
+                        _fp = f.get("path", "").replace("\\", "/")
+                        _fp_lower = _fp.lower()
+                        # 直接相等 或 以 /{相对路径} 结尾 或 {相对路径} 是路径尾
+                        if _fp_lower in _cf_lower or any(
+                            _fp_lower.endswith("/" + cf) or _fp_lower == cf
+                            for cf in _cf_lower
+                        ):
+                            v["files"].append(f)
                     removed += len(orig) - len(v.get("files", []))
                 if removed:
                     _log(f"  已过滤 {removed} 个纯属性变更文件")

@@ -273,9 +273,14 @@ def _get_subprocess_kwargs():
     """获取 subprocess 参数，Windows 下隐藏 CMD 窗口"""
     kwargs = {}
     if _sys.platform == "win32":
-        si = subprocess.STARTUPINFO()
-        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        si.wShowWindow = subprocess.SW_HIDE
-        kwargs["startupinfo"] = si
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    return kwargs
+
+
+def _get_bat_subprocess_kwargs():
+    """获取 subprocess 参数，适用于调用 .bat 脚本。
+    与 _get_subprocess_kwargs 相同，复用 CREATE_NO_WINDOW。"""
+    kwargs = {}
+    if _sys.platform == "win32":
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     return kwargs

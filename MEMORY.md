@@ -1471,6 +1471,17 @@ while (true):
   - 更新检查在服务端不可达时应静默失败（不弹错误提示），仅在 `version.json` 返回 `version > APP_VERSION` 时才显示 UI
 - **涉及文件**：[build.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/build.py)，[update_version.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/update_version.py)，[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)，[templates/index.html](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/templates/index.html)，[update-server/version.json](file:///c:/Users/admin/.qclaw/workspace/update-server/version.json)
 
+### 启动白框修复：pywebview 的 DefaultBackgroundColor 缺失 + DWM 深色模式
+- **场景**：2026-06-25 策划工具箱桌面版启动时出现白框，首次修 `DefaultBackgroundColor` 后改善但仍有余白
+- **根因**：两个问题叠加：
+  1. `toolbox_core/py_modules/webview/platforms/edgechromium.py`（**运行时实际加载的**）未设 `DefaultBackgroundColor`，WebView2 导航时白底透出
+  2. `winforms.py` 中 `ExtendFrameIntoClientArea` 扩展的 1px DWM 窗口边框在浅色系统主题下为白色
+- **解决方案**：
+  1. `edgechromium.py`: `form.Controls.Add(self.webview)` 后加 `self.webview.DefaultBackgroundColor = form.BackColor`
+  2. `winforms.py`: `shadow=True` 块中加 `DwmSetWindowAttribute(hwnd, 20, 1, 4)` 启用 DWM 沉浸深色模式
+- **关键教训**：① site-packages 的新版 pywebview 已有修复，但 `main.py` 的 `sys.path.insert(0, py_modules)` 使旧版 `py_modules/webview/` 优先加载 → 查源码运行时链路比看 site-packages 重要；② `DWMWA_USE_IMMERSIVE_DARK_MODE=20` 控制 DWM 扩展边框颜色，frameless+shadow 窗口必须有此设置才能全深色
+- **涉及文件**：[edgechromium.py](file:///G:/DGameAI/workspace/toolbox_core/py_modules/webview/platforms/edgechromium.py)、[winforms.py](file:///G:/DGameAI/workspace/toolbox_core/py_modules/webview/platforms/winforms.py)
+
 ### 全功能模块内存泄漏审计与修复（8项）
 - **场景**：2026-05-30 审计策划工具箱所有功能模块的内存溢出/资源未释放/运行久后卡顿问题，修复了 `_ss_values_cache` 无上限膨胀、ZipFile/openpyxl 文件句柄未释放、前端 `setInterval` 无限轮询等共 8 个泄漏点
 - **根因**：三个层面：

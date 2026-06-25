@@ -54,6 +54,7 @@ class EdgeChrome:
         props.UserDataFolder = os.path.join(os.environ['LOCALAPPDATA'], 'pywebview')
         self.web_view.CreationProperties = props
         form.Controls.Add(self.web_view)
+        self.web_view.DefaultBackgroundColor = form.BackColor
 
         self.js_results = {}
         self.js_result_semaphore = Semaphore(0)

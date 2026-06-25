@@ -165,7 +165,7 @@
       "steps": [
         {
           "file_paths": [
-            "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
+            "F:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
           ],
           "name": "Texts.xlsm",
           "type": "open_tables"
@@ -173,7 +173,7 @@
         {
           "lock_msg": "",
           "name": "Texts.xlsm",
-          "target_path": "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
+          "target_path": "F:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
           "type": "unlock_svn",
           "update_dirs": []
         },
@@ -186,58 +186,33 @@
           ],
           "name": "gameData,StreamingAssets",
           "revert_paths": [
-            "G:\\D3_KR2\\gameData",
-            "G:\\D3_KR2\\Client\\Assets\\StreamingAssets"
+            "F:\\D3_KR2\\gameData",
+            "F:\\D3_KR2\\Client\\Assets\\StreamingAssets"
           ],
-          "target_path": "F:\\D3_KR2_DEV\\Client",
+          "target_path": "D:\\D3_KR2_DEV\\Client",
           "type": "revert_svn"
-        }
-      ]
-    },
-    {
-      "name": "EA",
-      "steps": [
+        },
         {
-          "lock_msg": "",
+          "type": "export_text",
           "name": "Texts.xlsm",
-          "target_path": "H:\\D3_EA\\gameData\\Text\\Texts.xlsm",
-          "type": "lock_svn",
-          "update_dirs": [
-            "H:\\D3_EA\\Client\\Assets\\StreamingAssets",
-            "H:\\D3_EA\\gameData"
+          "input_file": "F:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
+          "upload_svn_dir": [
+            "F:\\D3_KR2\\gameData",
+            "F:\\D3_KR2\\Client\\Assets\\StreamingAssets"
           ]
         },
         {
-          "file_paths": [
-            "H:\\D3_EA\\gameData\\Text\\Texts.xlsm"
-          ],
-          "name": "Texts.xlsm",
-          "type": "open_tables"
-        },
-        {
-          "lock_msg": "",
-          "name": "Texts.xlsm",
-          "target_path": "H:\\D3_EA\\gameData\\Text\\Texts.xlsm",
-          "type": "unlock_svn",
-          "update_dirs": []
-        },
-        {
-          "delete_unversioned": false,
+          "type": "revert_svn",
+          "name": "Client",
           "exclude_paths": [
             "Assets/Code_Lua/test/test.lua",
             "Assets/StreamingAssets/LocalVersion.xml",
             "InstallClient.bat"
           ],
-          "name": "Client",
-          "target_path": "H:\\D3_EA\\Client",
-          "type": "revert_svn"
-        },
-        {
-          "dirs": [
-            "H:\\D3_EA\\Client"
+          "revert_paths": [
+            "F:\\D3_KR2\\Client"
           ],
-          "name": "Client",
-          "type": "upload_svn"
+          "delete_unversioned": false
         }
       ]
     }

@@ -245,6 +245,7 @@ class BrowserView:
             if window.shadow:
                 # Should do this before set frameless
                 ExtendFrameIntoClientArea(self.Handle.ToInt32())
+                DwmSetWindowAttribute(self.Handle.ToInt32(), 20, 1, 4)
                 DwmSetWindowAttribute(self.Handle.ToInt32(), 2, 2, 4)
 
             if window.frameless:

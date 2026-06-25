@@ -57,6 +57,7 @@ class EdgeChrome:
 
         self.form = form
         form.Controls.Add(self.webview)
+        self.webview.DefaultBackgroundColor = form.BackColor
 
         self.js_results = {}
         self.js_result_semaphore = Semaphore(0)

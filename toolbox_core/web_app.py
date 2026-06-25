@@ -1004,7 +1004,7 @@ def _exec_export_text(step, put, task_id=None):
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env={**os.environ, "PATH": r"C:\Python27\DLLs;" + os.environ.get("PATH", "")},
+            env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
             **_get_bat_subprocess_kwargs())
         _register_proc(proc, task_id)
         try:
@@ -1230,6 +1230,7 @@ def _exec_copy_files(step, put, task_id=None):
                 cwd=os.path.dirname(tool_path),
                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
                 **_get_bat_subprocess_kwargs())
             _register_proc(proc, task_id)
             try:

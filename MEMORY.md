@@ -478,10 +478,14 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 - **场景**：`git show > svn_gui_config.json` PowerShell 重定向默认为 UTF-16 LE
 - **解决方案**：用 `Out-File -Encoding utf8` 或 `[System.IO.File]::WriteAllText` 确保 UTF-8 无 BOM
 
-### CMD 弹窗彻底消除——DETACHED_PROCESS
-- **场景**：`CREATE_NO_WINDOW` 在某些 SVN 版本下仍闪烁
-- **根因**：`CREATE_NO_WINDOW` 只是不显示窗口，`DETACHED_PROCESS` 才是从创建层面不带控制台
-- **解决方案**：`creationflags = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS`
+### CMD 弹窗消除——只保留 CREATE_NO_WINDOW
+- **场景**：`CREATE_NO_WINDOW` 在某些 SVN 版本下仍闪烁；但 `DETACHED_PROCESS` 会导致 .bat 调用的 Python 2.7 C 扩展加载失败
+- **根因**：① 某些 .bat + config.bat 设的环境变量组合下 `SW_HIDE` 单独使用会导致 `pyexpat` C 扩展加载时报 `No module named expat`；② `DETACHED_PROCESS` 在无控制台下会让旧版 Python 2.7 (xlrd) 的 C 扩展完全无法加载
+- **解决方案**：
+  1. SVN 等纯 exe 调用：`CREATE_NO_WINDOW`
+  2. `.bat` 脚本调用：`CREATE_NO_WINDOW`（实测 `SW_HIDE` 不加 `CREATE_NO_WINDOW` 会导致特定项目 .bat 环境下 xlrd expat 加载失败）
+  3. 禁止使用 `DETACHED_PROCESS`
+- **验证方法**：Python 2.7 下 `from xml.parsers import expat` 直接在 CMD 中可通过，但通过 `cmd.exe /c .bat` + `SW_HIDE` 时会失败。`CREATE_NO_WINDOW` 反而正常
 - **涉及文件**：[toolbox_platform.py](file:///G:/DGameAI/workspace/toolbox_core/toolbox_platform.py)
 
 ### 关闭按钮被 drag-bar 覆盖

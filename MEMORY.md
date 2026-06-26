@@ -1482,6 +1482,21 @@ while (true):
 - **关键教训**：① site-packages 的新版 pywebview 已有修复，但 `main.py` 的 `sys.path.insert(0, py_modules)` 使旧版 `py_modules/webview/` 优先加载 → 查源码运行时链路比看 site-packages 重要；② `DWMWA_USE_IMMERSIVE_DARK_MODE=20` 控制 DWM 扩展边框颜色，frameless+shadow 窗口必须有此设置才能全深色
 - **涉及文件**：[edgechromium.py](file:///G:/DGameAI/workspace/toolbox_core/py_modules/webview/platforms/edgechromium.py)、[winforms.py](file:///G:/DGameAI/workspace/toolbox_core/py_modules/webview/platforms/winforms.py)
 
+
+### JS 按需拆包优化启动速度 — core.js + tab-*.js 懒加载
+- **场景**：2026-06-26 app.js 185KB 单文件包含全部7个页签代码，启动时全部解析导致启动慢
+- **根因**：185KB 内联 JS 在 WebView2 冷启动时需要完整解析才能执行，DOMContentLoaded 等待脚本解析后触发
+- **解决方案**：
+  1. 将 app.js 拆分为 core.js（框架 + SVN 页签，68KB）和 6 个 tab-*.js（各页签懒加载）
+  2. buildTab 使用显式函数名映射表 + 动态创建 script 标签加载非当前页签代码
+  3. core.js 中调用的 tab 函数加上 typeof 检查，避免未加载时报错
+  4. SortableJS CDN 改为 async（非 defer），避免 CDN 慢阻塞 app.js 执行
+  5. _wait_for_flask 心跳改为 /api/config（13KB）避免每次都下载完整页面（219KB）
+- **关键教训**：
+  1. nav key 与函数名的映射不能简单用首字母大写拼接（textcheck → buildTextCheckTab 需要显式映射）
+  2. deferred 脚本保持执行顺序，CDN 慢会导致后续 defer 脚本被阻塞
+  3. 启动耗时日志中两个 GET / 是 _wait_for_flask 的心跳 + load_url，必须用轻量 API 做心跳
+- **涉及文件**：[core.js](file:///G:/DGameAI/workspace/toolbox_core/core.js)、[templates/index.html](file:///G:/DGameAI/workspace/toolbox_core/templates/index.html)、[desktop_main.py](file:///G:/DGameAI/workspace/toolbox_core/desktop_main.py)、[web_app.py](file:///G:/DGameAI/workspace/toolbox_core/web_app.py)
 ### 修改预制页签—一键清理文字 + 自定义下拉菜单
 - **场景**：2026-06-25 新增"修改预制"页签，支持拖拽/选择 .prefab 文件后自动清空所有组件中的 m_Text 字段
 - **根因**：Unity prefab 文件是文本格式，m_Text: 字段存储文本内容。正则替换 ^( +)(m_Text:)(.*)$ 即可直接清除

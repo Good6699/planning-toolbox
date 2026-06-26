@@ -50,24 +50,32 @@ $env:PYTHONPATH="py_modules"; python graphify_quick.py --full --no-viz
 
 总结根因和解决方案即可，不用问用户确认。
 
-### Step 3: 同步最新配置到仓库
+### Step 3: 同步最新配置到仓库（优先用 Python 校验后写入，避免乱码）
 
-提交前先将运行时配置（`%APPDATA%/planning-toolbox/svn_gui_config.json`）同步到仓库，确保 GitHub 上的配置是最新的：
+提交前先将运行时配置（`%APPDATA%/planning-toolbox/svn_gui_config.json`）同步到仓库，确保 GitHub 上的配置是最新的。
+
+**重要：必须用 Python 校验 JSON 有效性后再写入。** 直接 PowerShell 复制可能把已损坏的 JSON（如 `tr_lang_id_map` 未闭合字符串）同步到仓库，导致后续 `json.load()` 报错打包失败。
 
 ```powershell
-# 从 APPDATA 同步运行时配置到仓库（确保 UTF-8 无 BOM）
-# 注意：必须用 git show 直接从仓库读原始文件来校验编码，不能用 cp / Get-Content 中转（会乱码）
-$raw = git show origin/web-optimal:toolbox_core/py_modules/toolbox_core/svn_gui_config.json 2>$null
+# 用 Python 读取 APPDATA 配置，校验 JSON 有效性后再写入（避免乱码同步到仓库）
 $cfg = Get-Content "$env:APPDATA\planning-toolbox\svn_gui_config.json" -Raw
-if ($raw -and $cfg -ne $raw) {
-  [System.IO.File]::WriteAllText("$PWD\toolbox_core\svn_gui_config.json", $cfg, [System.Text.UTF8Encoding]::new($false))
-} elseif ($raw) {
-  # APPDATA 配置未变化，直接写仓库版本
-  [System.IO.File]::WriteAllText("$PWD\toolbox_core\svn_gui_config.json", $raw, [System.Text.UTF8Encoding]::new($false))
-}
+$out = "$PWD\toolbox_core\svn_gui_config.json"
+python -c @"
+import json, sys
+with open(r'$env:APPDATA\planning-toolbox\svn_gui_config.json', 'rb') as f:
+    raw = f.read()
+try:
+    data = json.loads(raw.decode('utf-8'))
+    # 写回标准化 JSON（缩进 2，ensure_ascii=False，UTF-8 无 BOM）
+    with open(r'$out', 'w', encoding='utf-8') as out:
+        json.dump(data, out, ensure_ascii=False, indent=2)
+    print('OK: 配置已校验并写入')
+except json.JSONDecodeError as e:
+    print(f'WARN: APPDATA 配置已损坏（{e}），跳过同步，保留仓库版本')
+"@
 ```
 
-注意：**必须用 `[System.Text.UTF8Encoding]::new($false)` 去掉 BOM**，否则 `load_config()` 用 `utf-8` 解码时 BOM 会导致异常回退空配置。
+注意：**禁止用 PowerShell 的 `[System.IO.File]::WriteAllText()` 直接写入 JSON 文件**——它不校验 JSON 有效性，会直接把损坏内容写到仓库。
 
 ### Step 4: 提交本地 Git（有代码变更时）
 

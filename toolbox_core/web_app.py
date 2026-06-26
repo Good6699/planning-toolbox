@@ -87,8 +87,10 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
 _quit_app_callback = lambda: None
 
 app = Flask(__name__)
-app.config["TEMPLATES_AUTO_RELOAD"] = True
-app.jinja_env.auto_reload = True
+# 生产环境关闭模板自动重载（减少文件系统调用）
+if os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true"):
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
+    app.jinja_env.auto_reload = True
 
 # 启动时自动从旧配置迁移 SVN URL↔路径映射
 try:

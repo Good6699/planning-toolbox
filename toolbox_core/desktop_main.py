@@ -572,7 +572,7 @@ def _start_flask():
 
 
 def _wait_for_flask(timeout=10):
-    url = "http://127.0.0.1:18123"
+    url = "http://127.0.0.1:18123/api/config"
     start = time.time()
     while time.time() - start < timeout:
         try:
@@ -1187,6 +1187,7 @@ def main():
             print("[DEBUG] URL 已加载", file=sys.stderr)
         except Exception as e:
             print(f"[load_url] {e}", file=sys.stderr)
+
         hwnd = _find_window_hwnd(timeout=0.5)
         if hwnd:
             _show_taskbar_icon(hwnd)

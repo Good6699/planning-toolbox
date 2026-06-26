@@ -68,7 +68,7 @@ body{background:radial-gradient(circle at top,#1c2540 0%,#0f1115 45%)}
 .st{margin-top:8px;font-size:13px;color:#8b96ad;letter-spacing:3px}
 .p{position:absolute;bottom:64px;width:800px;text-align:center}
 .pt{font-size:11px;letter-spacing:2px;color:#8b96ad;margin-bottom:12px}
-.pw{width:100%;height:9px;background:rgba(255,255,255,.06);overflow:hidden;border-radius:999px}
+.pw{width:100%;height:9px;background:transparent;overflow:hidden;border-radius:999px}
 .pb{width:0%;height:100%;background:linear-gradient(90deg,#5ea2ff,#7cb8ff);box-shadow:0 0 20px rgba(94,162,255,.7);transition:width .35s ease}
 .pn{font-size:11px;color:#5f6b80;margin-top:8px;letter-spacing:1px}
 @keyframes r2{0%{opacity:0;transform:scale(.96)}100%{opacity:1;transform:scale(1)}}
@@ -1173,16 +1173,18 @@ def main():
             return
         print("[DEBUG] Flask 就绪", file=sys.stderr)
         _set_progress(window, 55, "后端就绪")
+        time.sleep(0.35)
+        _set_progress(window, 70, "准备渲染")
+        time.sleep(0.3)
         _set_progress(window, 90, "准备就绪")
-        time.sleep(0.2)
-        _set_progress(window, 100, "启动中")
-        time.sleep(0.1)
+        time.sleep(0.35)
+        _set_progress(window, 100, "启动完成")
+        time.sleep(1.0)
 
         try:
             print("[DEBUG] 正在加载 URL...", file=sys.stderr)
             window.load_url("http://127.0.0.1:18123")
             print("[DEBUG] URL 已加载", file=sys.stderr)
-            time.sleep(0.5)
         except Exception as e:
             print(f"[load_url] {e}", file=sys.stderr)
         hwnd = _find_window_hwnd(timeout=0.5)

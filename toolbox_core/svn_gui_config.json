@@ -13,6 +13,8 @@
   "merge_file_filter_exclude_text": "Assets\\StreamingAssets\\SkillConfig,Assets\\StreamingAssets\\BinData,Assets\\StreamingAssets\\GenerateData,Assets\\StreamingAssets\\Language,Assets\\Code,Assets\\Code_Lua,gameData\\UpLoadBackup,gameData\\鑰丏3搴熷純琛?gameData\\閰嶇疆鎻忚堪鏂囨。,gameData\\.ExcelTool2,gameData\\.svn,gameData\\config,gameData\\config_temp,gameData\\ErlangExportCopy,gameData\\ExportTxt,gameData\\macro,gameData\\old,gameData\\oldGameData,gameData\\protobuf,Assets\\StreamingAssets\\GenerateMsg",
   "merge_file_filter_include_text": "gameData\\Text\\Texts.xlsm,gameData\\Data2,gameData\\Language",
   "svn_keyword_history": [
+    "鑱屼笟",
+    "鑵愯触绉樺,鑱屼笟,娴锋笂",
     "涓撴,鑵愯触绉樺,鑱屼笟,娴锋笂",
     "鑵愯触绉樺",
     "瑁傞殭",
@@ -148,9 +150,7 @@
   },
   "global_cmp_id_col": "::ID::",
   "cmp_global_id_col": "",
-  "src_dir_history": [
-    "C:\\Users\\admin\\.qclaw\\workspace\\杈撳嚭"
-  ],
+  "src_dir_history": [],
   "tgt_dir_history": [
     "G:\\D3_KR2\\Client",
     "F:\\D3_KR2_DEV\\Client",
@@ -169,6 +169,15 @@
           ],
           "name": "Texts.xlsm",
           "type": "open_tables"
+        },
+        {
+          "input_file": "F:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
+          "name": "Texts.xlsm",
+          "type": "export_text",
+          "upload_svn_dir": [
+            "F:\\D3_KR2\\gameData",
+            "F:\\D3_KR2\\Client\\Assets\\StreamingAssets"
+          ]
         },
         {
           "lock_msg": "",
@@ -193,26 +202,17 @@
           "type": "revert_svn"
         },
         {
-          "type": "export_text",
-          "name": "Texts.xlsm",
-          "input_file": "F:\\D3_KR2\\gameData\\Text\\Texts.xlsm",
-          "upload_svn_dir": [
-            "F:\\D3_KR2\\gameData",
-            "F:\\D3_KR2\\Client\\Assets\\StreamingAssets"
-          ]
-        },
-        {
-          "type": "revert_svn",
-          "name": "Client",
+          "delete_unversioned": false,
           "exclude_paths": [
             "Assets/Code_Lua/test/test.lua",
             "Assets/StreamingAssets/LocalVersion.xml",
             "InstallClient.bat"
           ],
+          "name": "Client",
           "revert_paths": [
             "F:\\D3_KR2\\Client"
           ],
-          "delete_unversioned": false
+          "type": "revert_svn"
         }
       ]
     }
@@ -265,7 +265,7 @@
     "G:\\D3_EU\\Client"
   ],
   "window_w": 1497,
-  "window_h": 870,
+  "window_h": 872,
   "svn_url_mappings": {
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client": "G:\\D3_KR2\\Client",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData": "G:\\D3_KR2\\gameData"

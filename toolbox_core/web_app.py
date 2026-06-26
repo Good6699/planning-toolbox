@@ -47,6 +47,8 @@ if os.path.isdir(_pm):
         os.environ["TK_LIBRARY"] = tk_dir
 
 from flask import Flask, render_template, request, jsonify, Response, send_from_directory, stream_with_context  # noqa: E402
+from webview.dom import _dnd_state
+
 from toolbox_config import (  # noqa: E402
     SCRIPT_DIR, MAIN_SCRIPT, DEFAULT_OUTPUT_DIR,
     load_config, save_config,
@@ -757,10 +759,97 @@ def api_upload_run():
     threading.Thread(target=_run_upload_copy, args=(src, tgt, files, q, task_id), daemon=True).start()
     return jsonify({"task_id": task_id})
 
-# ═══════════════════════════════════════════════════════════
-# 工作流 API
-# ═══════════════════════════════════════════════════════════
+@app.route("/api/prefab/scan", methods=["POST"])
+def api_prefab_scan():
+    data = request.get_json(force=True)
+    paths = data.get("paths", [])
+    if not paths:
+        return jsonify({"error": "请提供路径"}), 400
+    files = []
+    for p in paths:
+        p = p.strip()
+        if not p:
+            continue
+        if os.path.isfile(p) and p.lower().endswith(".prefab"):
+            files.append(p)
+        elif os.path.isdir(p):
+            for root, dirs, fnames in os.walk(p):
+                for fn in fnames:
+                    if fn.lower().endswith(".prefab"):
+                        files.append(os.path.join(root, fn))
+    files.sort(key=lambda x: x.lower())
+    return jsonify({"files": files, "count": len(files)})
 
+
+@app.route("/api/prefab/consume-dropped", methods=["POST"])
+def api_prefab_consume_dropped():
+    paths = [p[1] for p in _dnd_state.get('paths', [])]
+    _dnd_state['paths'].clear()
+    return jsonify({"paths": paths, "count": len(paths)})
+
+@app.route("/api/prefab/clear-text", methods=["POST"])
+def api_prefab_clear_text():
+    data = request.get_json(force=True)
+    files = data.get("files", [])
+    if not files:
+        return jsonify({"error": "请提供 .prefab 文件列表"}), 400
+
+    task_id = _get_next_task_id()
+    q = queue.Queue()
+    _log_queues[task_id] = q
+    threading.Thread(target=_exec_prefab_clear_text, args=(files, q, task_id), daemon=True).start()
+    return jsonify({"task_id": task_id})
+
+
+
+def _exec_prefab_clear_text(files, q, task_id):
+    total_cleared = 0
+    total_files = 0
+    for fp in files:
+        if not fp.lower().endswith(".prefab"):
+            q.put("[\u8df3\u8fc7] " + os.path.basename(fp) + " \u2014 \u4e0d\u662f .prefab \u6587\u4ef6\n")
+            continue
+        try:
+            with open(fp, "rb") as f:
+                raw_bytes = f.read()
+            # Detect line endings
+            lf_only = raw_bytes.count(b"\n") > 0 and b"\r\n" not in raw_bytes
+            crlf = b"\r\n" in raw_bytes
+            if lf_only:
+                file_lines = raw_bytes.decode("utf-8").split("\n")
+                nl = "\n"
+            elif crlf:
+                file_lines = raw_bytes.decode("utf-8").split("\r\n")
+                nl = "\r\n"
+            else:
+                file_lines = [raw_bytes.decode("utf-8")]
+                nl = "\n"
+            new_lines = []
+            cleared = 0
+            for i, line in enumerate(file_lines):
+                m = re.match(r"^( +)(m_Text:)(.*)$", line)
+                if m and m.group(3).strip():
+                    new_lines.append(m.group(1) + m.group(2))
+                    val = m.group(3).strip()
+                    msg = "[\u6e05\u7406] " + os.path.basename(fp) + " L" + str(i+1) + ": " + val[:50]
+                    if len(val) > 50:
+                        msg += "..."
+                    msg += " \u2192 \u5df2\u6e05\u9664\n"
+                    q.put(msg)
+                    cleared += 1
+                else:
+                    new_lines.append(line)
+            if cleared:
+                with open(fp, "wb") as f:
+                    f.write(nl.join(new_lines).encode("utf-8"))
+                total_cleared += cleared
+            total_files += 1
+            q.put("[\u5b8c\u6210] " + os.path.basename(fp) + " \u2014 \u6e05\u7406 " + str(cleared) + " \u5904 m_Text\n")
+        except Exception as e:
+            q.put("[\u9519\u8bef] " + os.path.basename(fp) + ": " + str(e) + "\n")
+    q.put("\n[DONE] \u5171\u5904\u7406 " + str(total_files) + " \u4e2a\u6587\u4ef6\uff0c\u6e05\u7406 " + str(total_cleared) + " \u5904\u6587\u672c\n")
+    _notify_task_done("\u4e00\u952e\u6e05\u7406\u6587\u5b57")
+    q.put(None)
 
 @app.route("/api/workflow/list", methods=["GET"])
 def api_workflow_list():

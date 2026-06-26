@@ -198,8 +198,6 @@ class EdgeChrome:
             return_value = args.get_WebMessageAsJson()
 
             if return_value == '"FilesDropped"':
-                if _dnd_state['num_listeners'] == 0:
-                    return
                 additionalObjects = args.get_AdditionalObjects()
                 if additionalObjects is None:
                     return

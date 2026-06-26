@@ -1482,6 +1482,20 @@ while (true):
 - **关键教训**：① site-packages 的新版 pywebview 已有修复，但 `main.py` 的 `sys.path.insert(0, py_modules)` 使旧版 `py_modules/webview/` 优先加载 → 查源码运行时链路比看 site-packages 重要；② `DWMWA_USE_IMMERSIVE_DARK_MODE=20` 控制 DWM 扩展边框颜色，frameless+shadow 窗口必须有此设置才能全深色
 - **涉及文件**：[edgechromium.py](file:///G:/DGameAI/workspace/toolbox_core/py_modules/webview/platforms/edgechromium.py)、[winforms.py](file:///G:/DGameAI/workspace/toolbox_core/py_modules/webview/platforms/winforms.py)
 
+### 修改预制页签—一键清理文字 + 自定义下拉菜单
+- **场景**：2026-06-25 新增"修改预制"页签，支持拖拽/选择 .prefab 文件后自动清空所有组件中的 m_Text 字段
+- **根因**：Unity prefab 文件是文本格式，m_Text: 字段存储文本内容。正则替换 ^( +)(m_Text:)(.*)$ 即可直接清除
+- **解决方案**：
+  1. 后端 API: /api/prefab/scan（扫描路径→.prefab 列表）、/api/prefab/clear-text（执行清理）
+  2. 清理逻辑：读文件→按行正则匹配 m_Text→非空值清空→保留原始换行符（LF/CRLF）→二进制写入
+  3. 拖拽路径获取：通过 pywebview 的 _dnd_state 机制，修改 edgechromium.py 去掉 num_listeners 检查，前端 drop 时调用 chrome.webview.postMessageWithAdditionalObjects 传文件，后端 consume-dropped 读取
+  4. 前端：自绘下拉菜单替代原生 select（CSS + JS 控制，风格统一深色主题）
+- **关键教训**：
+  1. pywebview 的 _dnd_state['num_listeners'] 默认 0 阻止 FilesDropped 处理，改 edgechromium.py 绕过
+  2. Windows Shell 不会在 WebView2 中自动给 input 注入路径，必须走 _dnd_state 机制
+  3. 原生 select 下拉弹出层由 OS 绘制，无法统一深色主题，必须用 div 自绘
+- **涉及文件**：[web_app.py](file:///G:/DGameAI/workspace/toolbox_core/web_app.py)、[index.html](file:///G:/DGameAI/workspace/toolbox_core/templates/index.html)、[edgechromium.py](file:///G:/DGameAI/workspace/toolbox_core/py_modules/webview/platforms/edgechromium.py)
+
 ### 全功能模块内存泄漏审计与修复（8项）
 - **场景**：2026-05-30 审计策划工具箱所有功能模块的内存溢出/资源未释放/运行久后卡顿问题，修复了 `_ss_values_cache` 无上限膨胀、ZipFile/openpyxl 文件句柄未释放、前端 `setInterval` 无限轮询等共 8 个泄漏点
 - **根因**：三个层面：

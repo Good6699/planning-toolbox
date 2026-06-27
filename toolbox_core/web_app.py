@@ -1014,6 +1014,61 @@ def _run_wf_task(q, wf, steps, task_id):
     _log_queues.pop(task_id, None)
 
 
+@app.route("/api/workflow/update-wc", methods=["POST"])
+def api_workflow_update_wc():
+    data = request.get_json(force=True)
+    prefixes = data.get("prefixes", [])
+    name = data.get("name", "工作流")
+    if not prefixes:
+        return jsonify({"error": "未提供路径前缀"}), 400
+    task_id = _get_next_task_id()
+    q = queue.Queue()
+    _log_queues[task_id] = q
+    threading.Thread(target=_workflow_update_wc_worker, args=(task_id, prefixes, name), daemon=True).start()
+    return jsonify({"task_id": task_id})
+
+
+def _workflow_update_wc_worker(task_id, prefixes, name):
+    q = _log_queues.setdefault(task_id, queue.Queue())
+
+    def _put(msg):
+        q.put(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+    try:
+        svn = _get_svn_path()
+        q.put(f"{'='*50}\n")
+        q.put(f"🔄 更新工作流「{name}」的 SVN 工作副本\n")
+        q.put(f"{'='*50}\n")
+        total = 0
+        success = 0
+        fail = 0
+        for prefix in prefixes:
+            for subdir in ["Client", "gameData"]:
+                d = os.path.join(prefix, subdir)
+                if not os.path.isdir(d):
+                    q.put(f"⏭ 目录不存在: {d}\n")
+                    continue
+                total += 1
+                q.put(f"\n── 更新: {d} ──\n")
+                try:
+                    ok = _svn_update_with_cleanup(svn, d, _put, task_id)
+                    if ok:
+                        success += 1
+                    else:
+                        fail += 1
+                except Exception as e:
+                    q.put(f"  ❌ 更新失败: {d} → {e}\n")
+                    fail += 1
+        q.put(f"\n{'='*50}\n")
+        q.put(f"📊 更新完成: {success} 成功, {fail} 失败 (共 {total} 个目录)\n")
+    except Exception as e:
+        q.put(f"\n❌ 更新任务异常终止: {e}\n")
+    finally:
+        _notify_task_done(f"更新Wc:{name}")
+        q.put(None)
+        _log_queues.pop(task_id, None)
+
+
 @app.route("/api/workflow/run", methods=["POST"])
 def api_workflow_run():
     data = request.get_json(force=True)

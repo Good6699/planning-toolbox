@@ -656,7 +656,7 @@ def open_commit_dialog(target_wc):
     try:
         subprocess.Popen(
             [proc_path, "/command:commit", f"/path:{target_wc}",
-             "/notempfile", "/closeonend:2"],
+             "/notempfile", "/closeonend:0"],
             **_get_subprocess_kwargs()
         )
         return True

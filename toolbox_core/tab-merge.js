@@ -106,6 +106,7 @@ function buildMergeTab(panel) {
             <div class="cd-wrap cd-sm" id="merge_file_filter_wrap">
               <div class="cd-trigger" id="merge_file_filter_trigger" data-value=""><span>全部</span><span class="cd-arrow"></span></div>
               <div class="cd-menu" id="merge_file_filter_menu">
+                <div class="cd-item selected" data-value="">全部</div>
                 <div class="cd-item cd-action" data-action="select-all">全选</div>
                 <div class="cd-item cd-action" data-action="select-invert">反选</div>
                 <div class="cd-item cd-action" data-action="select-clear">清空</div>
@@ -517,6 +518,15 @@ function _selectAllMergeFiles(select) {
   const items = document.querySelectorAll("#merge_file_list .merge-file-item");
   items.forEach(el => {
     const path = el.dataset.path;
+    if (select === null) {
+      const was = _mergeData.checkedFiles[path];
+      _mergeData.checkedFiles[path] = !was;
+      if (!was) _mergeData.totalChecked++;
+      if (was) _mergeData.totalChecked--;
+      el.classList.toggle("checked", !was);
+      el.querySelector("input[type='checkbox']").checked = !was;
+      return;
+    }
     const was = _mergeData.checkedFiles[path];
     _mergeData.checkedFiles[path] = select;
     if (select && !was) _mergeData.totalChecked++;
@@ -712,5 +722,91 @@ async function runMergeAnalysis() {
     _decRunning();
     _decTabRunning("merge");
     _showToast("请求失败: " + err.message);
+  }
+}
+async function runMergeRun() {
+  triggerUpdateCheck();
+  const sourceUrl = document.getElementById("merge_source").value.trim();
+  const targetPath = document.getElementById("merge_target").value.trim();
+  if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
+  if (!targetPath) { _showToast("请输入目标路径"); return; }
+  const checkedPaths = Object.keys(_mergeData.checkedFiles).filter(k => _mergeData.checkedFiles[k]);
+  if (!checkedPaths.length) { _showToast("请至少选择一个文件"); return; }
+  const checkedRevs = Object.keys(_mergeData.checkedRevs).map(Number);
+  if (!checkedRevs.length) { _showToast("请至少勾选一个版本"); return; }
+  const btn = document.getElementById("merge_run_btn");
+  btn.dataset.orig = btn.dataset.orig || btn.textContent;
+  const logEl = document.getElementById("merge_log");
+  _logClear(logEl);
+  logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
+  _incRunning();
+  _incTabRunning("merge");
+  const revFileMap = {};
+  _mergeData.versions.forEach(v => {
+    if (!_mergeData.checkedRevs[v.rev]) return;
+    (v.files || []).forEach(f => {
+      if (!_isPathExcluded(f.path) && _mergeData.checkedFiles[f.path]) {
+        if (!revFileMap[f.path]) revFileMap[f.path] = [];
+        revFileMap[f.path].push(v.rev);
+      }
+    });
+  });
+  const body = {
+    source_url: sourceUrl,
+    target_path: targetPath,
+    revisions: checkedRevs,
+    rev_file_map: revFileMap,
+    exclude_paths: config.merge_revert_exclude_paths || [],
+    files: [...document.querySelectorAll("#merge_file_list .merge-file-item input:checked")].map(cb => {
+      const item = cb.closest(".merge-file-item");
+      return {path: item.dataset.path, action: item.dataset.action || "mod"};
+    }),
+  };
+  try {
+    const r = await fetch("/api/merge/run", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const d = await r.json();
+    if (d.error) {
+      logEl.innerHTML = '<span class="error">❌ '+escapeHtml(d.error)+'</span>';
+      _focusAppOnError("merge", logEl);
+      _decRunning();
+      _decTabRunning("merge");
+      return;
+    }
+    btn.dataset.taskId = d.task_id;
+    btn.innerHTML = _WF_ICONS.stop;
+    btn.classList.add("stop");
+    const _mergeRunDone = () => {
+      if (!btn.dataset.taskId) return;
+      btn.dataset.taskId = '';
+      btn.classList.remove("stop");
+      btn.innerHTML = btn.dataset.orig;
+      _decRunning();
+      _decTabRunning("merge");
+    };
+    if (window._esMergeRun) window._esMergeRun.close();
+    const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
+    window._esMergeRun = evtSrc;
+    evtSrc.onmessage = (e) => {
+      if (e.data === "[DONE]") {
+        evtSrc.close();
+        window._esMergeRun = null;
+        _mergeRunDone();
+        return;
+      }
+      const lines = e.data.split("\n");
+      for (const raw of lines) {
+        if (!raw.trim()) continue;
+        const div = document.createElement("div");
+        div.textContent = raw;
+        _logAppend(logEl, div);
+        if (/\[error\]/.test(raw)) _focusAppOnError("merge", logEl);
+      }
+    };
+  } catch (err) {
+    logEl.innerHTML = '<span class="error">❌ 请求失败: '+escapeHtml(err.message)+'</span>';
+    _focusAppOnError("merge", logEl);
+    if (btn.dataset.taskId) { btn.dataset.taskId = ''; btn.classList.remove("stop"); btn.innerHTML = btn.dataset.orig; }
+    _decRunning();
+    _decTabRunning("merge");
   }
 }

@@ -1,3 +1,6 @@
+- **2026-06-27**：merge_target 浏览选路径后立即保存——`browseDir` 只设 input 值不保存 config，blur 事件在原生对话框关闭后不一定触发，导致 merge_target 路径浏览选择后不持久化。改为在 browseDir 回调中主动调用 saveConfig。
+- **2026-06-27**：TortoiseSVN 提交弹窗不再自动关闭——`open_commit_dialog` 参数 `/closeonend:2` 改为 `/closeonend:0`，让用户手动确认提交结果后自己关弹窗。
+- **2026-06-27**：SVN/merge 日期页签每次切换刷新——`switchTab()` 新增 svn/merge 分支，每次切换页签时重新计算 `_end`（当天）和 `_start`（当年1月1日）值，不再依赖首次构建的静态值。
 - **2026-04-16**：记忆系统启用
 - **2026-06-08**：SVN 命令缺失自动安装——检测 svn 命令找不到时精确诊断原因（TortoiseSVN 缺 CLI / 未安装），自动调用 winget 或下载 SlikSvn MSI 静默安装
 - **2026-06-08**：`_updater.bat` 兜底重建——更新器脚本被 xcopy 覆盖自身时可能异常丢失，在 `web_app.py` 中嵌入 `_UPDATER_BAT_CONTENT` 常量，找不到时自动重建
@@ -88,6 +91,15 @@ main.py → toolbox_core/desktop_main.py → pywebview(WinForms) → 内嵌WebVi
 | 规范 | `.trae/skills/toolbox-ui/SKILL.md` | UI 开发规范 |
 - 知识图谱：`graphify-out/`（`graphify_quick.py --no-viz` 增量更新）
 - Tkinter 旧版代码已于 2026-05-29 清理删除（`svn_compare_gui.py`, `toolbox_tab_*.py`, `svn_oneclick_compare.py` 等11个文件）
+
+### feat(agent): 引入 Karpathy 四原则优化 AGENT.md
+- **场景**：2026-06-26 参考 `multica-ai/andrej-karpathy-skills`（GitHub 182k⭐）的 CLAUDE.md，优化小贝壳 AGENT.md
+- **新增 4 条原则**：
+  1. **Think Before You Code** — 实现前列假设、暴露不确定性、提供多种解读、先提简化方案、命名困惑
+  2. **Simplicity First** — 只写最少代码，不加预测性抽象，不处理不可能发生的错误
+  3. **Surgical Changes** — 只动必须动的东西，不改相邻代码，不重构没坏的东西
+  4. **Goal-Driven Execution** — 把任务转为可验证目标，定义成功标准后再实现，验收循环
+- **涉及文件**：[AGENT.md](file:///c:/Users/admin/.dgameai/agents/builtin-xbk/AGENT.md)
 
 ## 经验与决策
 

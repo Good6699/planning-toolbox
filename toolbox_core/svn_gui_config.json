@@ -1,5 +1,7 @@
 {
   "svn_urls": [
+    "http://192.168.1.41:8080/svn/D3/branches/20240530_SouthAsia/Client",
+    "F:\\D3_Asia\\Client",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData",
@@ -13,6 +15,7 @@
   "merge_file_filter_exclude_text": "Assets\\StreamingAssets\\SkillConfig,Assets\\StreamingAssets\\BinData,Assets\\StreamingAssets\\GenerateData,Assets\\StreamingAssets\\Language,Assets\\Code,Assets\\Code_Lua,gameData\\UpLoadBackup,gameData\\老D3废弃表,gameData\\配置描述文档,gameData\\.ExcelTool2,gameData\\.svn,gameData\\config,gameData\\config_temp,gameData\\ErlangExportCopy,gameData\\ExportTxt,gameData\\macro,gameData\\old,gameData\\oldGameData,gameData\\protobuf,Assets\\StreamingAssets\\GenerateMsg",
   "merge_file_filter_include_text": "gameData\\Text\\Texts.xlsm,gameData\\Data2,gameData\\Language",
   "svn_keyword_history": [
+    "出战位",
     "腐败秘境,裂隙",
     "腐败秘境",
     "职业",
@@ -30,7 +33,7 @@
     "zhaowei"
   ],
   "merge_target_history": [
-    "F:\\D3_KR2_DEV\\Client",
+    "F:\\D3_DEV_Asia\\Client",
     "H:\\D3_EA\\Client",
     "F:\\D3_KR2_DEV\\gameData",
     "F:\\D3_KR2_DEV\\gameData",
@@ -38,6 +41,7 @@
     "G:\\D3_KR2\\Client"
   ],
   "output_dir_history": [
+    "F:\\D3_Asia\\Client",
     "C:\\Users\\admin\\.qclaw\\workspace\\输出",
     "G:\\D3_KR2\\gameData\\Text",
     "G:\\D3_KR2\\gameData\\Text\\Texts.xlsm"
@@ -188,10 +192,10 @@
           "update_dirs": []
         },
         {
-          "type": "export_error_code",
+          "lang_codes": "ZH_CN,KO_KR",
           "name": "ZH_CN,KO_KR",
           "root_dir": "F:\\D3_KR2\\gameData\\Language",
-          "lang_codes": "ZH_CN,KO_KR",
+          "type": "export_error_code",
           "upload_svn_dir": [
             "F:\\D3_KR2\\gameData",
             "F:\\D3_KR2\\Client\\Assets\\StreamingAssets"
@@ -226,34 +230,34 @@
           "type": "revert_svn"
         },
         {
-          "type": "copy_files",
           "name": "Text",
           "src_dir": "F:\\D3_KR2\\gameData\\Text",
-          "tgt_dir": "D:\\D3_KR2_DEV\\gameData\\Text"
+          "tgt_dir": "D:\\D3_KR2_DEV\\gameData",
+          "type": "copy_files"
         },
         {
-          "type": "export_error_code",
+          "lang_codes": "ZH_CN,KO_KR",
           "name": "ZH_CN,KO_KR",
           "root_dir": "D:\\D3_KR2_DEV\\gameData\\Language",
-          "lang_codes": "ZH_CN,KO_KR",
+          "type": "export_error_code",
           "upload_svn_dir": [
             "D:\\D3_KR2_DEV\\gameData",
             "D:\\D3_KR2_DEV\\Client\\Assets\\StreamingAssets"
           ]
         },
         {
-          "type": "revert_svn",
-          "name": "Client,gameData",
+          "delete_unversioned": false,
           "exclude_paths": [
             "Assets/Code_Lua/test/test.lua",
             "Assets/StreamingAssets/LocalVersion.xml",
             "InstallClient.bat"
           ],
+          "name": "Client,gameData",
           "revert_paths": [
             "D:\\D3_KR2_DEV\\Client",
             "D:\\D3_KR2_DEV\\gameData"
           ],
-          "delete_unversioned": false
+          "type": "revert_svn"
         }
       ]
     },
@@ -284,10 +288,10 @@
           "update_dirs": []
         },
         {
-          "type": "export_error_code",
+          "lang_codes": "ZH_CN,EN_US,EU_FR,EU_GE,EU_PT,EU_RU,EU_SP,EU_TR,ZH_TW",
           "name": "ZH_CN,EN_US,EU_FR,EU_GE,EU_PT,EU_RU,EU_SP,EU_TR,ZH_TW",
           "root_dir": "G:\\D3_EA\\gameData\\Language",
-          "lang_codes": "ZH_CN,EN_US,EU_FR,EU_GE,EU_PT,EU_RU,EU_SP,EU_TR,ZH_TW",
+          "type": "export_error_code",
           "upload_svn_dir": [
             "G:\\D3_EA\\gameData",
             "G:\\D3_EA\\Client\\Assets\\StreamingAssets"
@@ -322,34 +326,34 @@
           "type": "revert_svn"
         },
         {
-          "type": "copy_files",
           "name": "Text",
           "src_dir": "G:\\D3_EA\\gameData\\Text",
-          "tgt_dir": "G:\\D3_EA_DEV\\gameData\\Text"
+          "tgt_dir": "G:\\D3_EA_DEV\\gameData",
+          "type": "copy_files"
         },
         {
-          "type": "export_error_code",
+          "lang_codes": "ZH_CN,EN_US,EU_FR,EU_GE,EU_PT,EU_RU,EU_SP,EU_TR,ZH_TW",
           "name": "ZH_CN,EN_US,EU_FR,EU_GE,EU_PT,EU_RU,EU_SP,EU_TR,ZH_TW",
           "root_dir": "G:\\D3_EA_DEV\\gameData\\Language",
-          "lang_codes": "ZH_CN,EN_US,EU_FR,EU_GE,EU_PT,EU_RU,EU_SP,EU_TR,ZH_TW",
+          "type": "export_error_code",
           "upload_svn_dir": [
             "G:\\D3_EA_DEV\\gameData",
             "G:\\D3_EA_DEV\\Client\\Assets\\StreamingAssets"
           ]
         },
         {
-          "type": "revert_svn",
-          "name": "Client,gameData",
+          "delete_unversioned": false,
           "exclude_paths": [
             "Assets/Code_Lua/test/test.lua",
             "Assets/StreamingAssets/LocalVersion.xml",
             "InstallClient.bat"
           ],
+          "name": "Client,gameData",
           "revert_paths": [
             "G:\\D3_EA_DEV\\Client",
             "G:\\D3_EA_DEV\\gameData"
           ],
-          "delete_unversioned": false
+          "type": "revert_svn"
         }
       ]
     },
@@ -380,10 +384,10 @@
           "update_dirs": []
         },
         {
-          "type": "export_error_code",
+          "lang_codes": "ZH_CN,EN_US,EU_FR,EU_GE,EU_PT,EU_RU,EU_SP,EU_TR,ZH_TW",
           "name": "ZH_CN,EN_US,EU_FR,EU_GE,EU_PT,EU_RU,EU_SP,EU_TR,ZH_TW",
           "root_dir": "F:\\D3_EA2022\\gameData\\Language",
-          "lang_codes": "ZH_CN,EN_US,EU_FR,EU_GE,EU_PT,EU_RU,EU_SP,EU_TR,ZH_TW",
+          "type": "export_error_code",
           "upload_svn_dir": [
             "F:\\D3_EA2022\\gameData",
             "F:\\D3_EA2022\\Client\\Assets\\StreamingAssets"
@@ -418,34 +422,34 @@
           "type": "revert_svn"
         },
         {
-          "type": "copy_files",
           "name": "Text",
           "src_dir": "F:\\D3_EA2022\\gameData\\Text",
-          "tgt_dir": "D:\\D3_2022EA_DEV\\gameData\\Text"
+          "tgt_dir": "D:\\D3_2022EA_DEV\\gameData",
+          "type": "copy_files"
         },
         {
-          "type": "export_error_code",
+          "lang_codes": "ZH_CN,EN_US,EU_FR,EU_GE,EU_PT,EU_RU,EU_SP,EU_TR,ZH_TW",
           "name": "ZH_CN,EN_US,EU_FR,EU_GE,EU_PT,EU_RU,EU_SP,EU_TR,ZH_TW",
           "root_dir": "D:\\D3_2022EA_DEV\\gameData\\Language",
-          "lang_codes": "ZH_CN,EN_US,EU_FR,EU_GE,EU_PT,EU_RU,EU_SP,EU_TR,ZH_TW",
+          "type": "export_error_code",
           "upload_svn_dir": [
             "D:\\D3_2022EA_DEV\\gameData",
             "D:\\D3_2022EA_DEV\\Client\\Assets\\StreamingAssets"
           ]
         },
         {
-          "type": "revert_svn",
-          "name": "Client,gameData",
+          "delete_unversioned": false,
           "exclude_paths": [
             "Assets/Code_Lua/test/test.lua",
             "Assets/StreamingAssets/LocalVersion.xml",
             "InstallClient.bat"
           ],
+          "name": "Client,gameData",
           "revert_paths": [
             "D:\\D3_2022EA_DEV\\Client",
             "D:\\D3_2022EA_DEV\\gameData"
           ],
-          "delete_unversioned": false
+          "type": "revert_svn"
         }
       ]
     },
@@ -476,10 +480,10 @@
           "update_dirs": []
         },
         {
-          "type": "export_error_code",
+          "lang_codes": "IN_ID,MS_MY,TH_TH,TL_PH,ZH_CN,ZH_TW",
           "name": "IN_ID,MS_MY,TH_TH,TL_PH,ZH_CN,ZH_TW",
           "root_dir": "F:\\D3_Asia\\gameData\\Language",
-          "lang_codes": "IN_ID,MS_MY,TH_TH,TL_PH,ZH_CN,ZH_TW",
+          "type": "export_error_code",
           "upload_svn_dir": [
             "F:\\D3_Asia\\gameData",
             "F:\\D3_Asia\\Client\\Assets\\StreamingAssets"
@@ -514,34 +518,34 @@
           "type": "revert_svn"
         },
         {
-          "type": "copy_files",
           "name": "Text",
           "src_dir": "F:\\D3_Asia\\gameData\\Text",
-          "tgt_dir": "F:\\D3_DEV_Asia\\gameData\\Text"
+          "tgt_dir": "F:\\D3_DEV_Asia\\gameData",
+          "type": "copy_files"
         },
         {
-          "type": "export_error_code",
+          "lang_codes": "IN_ID,MS_MY,TH_TH,TL_PH,ZH_CN,ZH_TW",
           "name": "IN_ID,MS_MY,TH_TH,TL_PH,ZH_CN,ZH_TW",
           "root_dir": "F:\\D3_DEV_Asia\\gameData\\Language",
-          "lang_codes": "IN_ID,MS_MY,TH_TH,TL_PH,ZH_CN,ZH_TW",
+          "type": "export_error_code",
           "upload_svn_dir": [
             "F:\\D3_DEV_Asia\\gameData",
             "F:\\D3_DEV_Asia\\Client\\Assets\\StreamingAssets"
           ]
         },
         {
-          "type": "revert_svn",
-          "name": "Client,gameData",
+          "delete_unversioned": false,
           "exclude_paths": [
             "Assets/Code_Lua/test/test.lua",
             "Assets/StreamingAssets/LocalVersion.xml",
             "InstallClient.bat"
           ],
+          "name": "Client,gameData",
           "revert_paths": [
             "F:\\D3_DEV_Asia\\Client",
             "F:\\D3_DEV_Asia\\gameData"
           ],
-          "delete_unversioned": false
+          "type": "revert_svn"
         }
       ]
     }
@@ -568,6 +572,9 @@
     "ExportTxt"
   ],
   "_wf_history_texts": [
+    "D:\\D3_KR2_DEV\\gameData",
+    "G:\\D3_EA_DEV\\gameData",
+    "D:\\D3_2022EA_DEV\\gameData",
     "IN_ID,MS_MY,TH_TH,TL_PH,ZH_CN,ZH_TW",
     "IN_ID,MS_MY,TH_TH,TL_PH,ZH_CN,",
     "IN_ID,MS_MY,TH_TH,TL_PH,",
@@ -594,9 +601,7 @@
     "F:\\D3_KR2_DEV\\Client\\Assets\\StreamingAssets, F:\\D3_KR2_DEV\\gameData",
     "F:\\D3_KR2_DEV\\gameData\\Text\\服务器文字表导出_替换文本引用.bat, F:\\D3_KR2_DEV\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
     "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat, G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
-    "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat,G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat",
-    "G:\\D3_KR2\\Client\\Assets\\StreamingAssets,G:\\D3_KR2\\gameData",
-    "G:\\D3_KR2\\Client\\Assets\\StreamingAssets,"
+    "G:\\D3_KR2\\gameData\\Text\\服务器文字表导出_替换文本引用.bat,G:\\D3_KR2\\gameData\\Text\\客户端文字表导出_替换文本引用.bat"
   ],
   "_wf_history_paths": [
     "G:\\D3_KR2\\gameData",

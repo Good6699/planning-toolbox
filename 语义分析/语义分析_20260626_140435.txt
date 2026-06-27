@@ -1,0 +1,221 @@
+════════════════════════════════════════════════════════════
+  SVN 变更语义分析报告
+  生成时间：2026-06-26 14:04:40
+  源路径：branches/20240606_KR2/Client
+  目标路径：F:\D3_KR2\Client
+  分析版本数：39
+  版本列表：r344552, r344430, r344121, r344003, r344001, r343973, r343952, r343940, r343935, r343904, r343899, r343726, r343718, r343577, r343552, r336764, r336472, r336469, r336456, r336297, r335879, r335865, r335848, r335517, r335458, r335452, r335198, r335140, r335069, r335065, r334882, r334793, r334760, r334711, r334684, r334660, r334462, r334439, r334381
+════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────
+  汇总 39 个版本 (r334381 → r344552) 的变更
+────────────────────────────────────────────────────────
+
+  [修改] CommonTeamRecruitPanel.prefab
+    ─ CommonTeamRecruitPanel/Panel/Tog_AutoAgree:
+      修改了 尺寸偏移
+            (228.4, 26)
+            → (0, 26)
+    ─ CommonTeamRecruitPanel/Panel/Drop_Unit:
+      修改了 m_isHideFirstItem
+            1
+            → 0
+    ─ CommonTeamRecruitPanel/Panel/Tog_AutoAgree/L_Text:
+      修改了 锚点最大值
+            (0, 1)
+            → (0, 0)
+      修改了 锚点最小值
+            (0, 1)
+            → (0, 0)
+      修改了 锚点偏移 position
+            (38, -13)
+            → (0, 0)
+    ─ CommonTeamRecruitPanel/Panel/Tog_AutoAgree/Image_CheckMark:
+      修改了 锚点最大值
+            (0, 1)
+            → (0, 0)
+      修改了 锚点最小值
+            (0, 1)
+            → (0, 0)
+      修改了 锚点偏移 position
+            (19, -13)
+            → (0, 0)
+
+  [修改] AC_GamePlayShopPanel_965.prefab
+    ─ 节点(100100000):
+      新增了 Prefab
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Scroll:
+      新增了 MonoBehaviour/脚本
+      新增了 CanvasRenderer
+      新增了 MonoBehaviour/脚本
+      新增节点
+      新增了 RectTransform
+      新增了 RectMask2D
+    ─ AC_GamePlayShopPanel_965/L_Text_Title:
+      新增了 Outline
+      新增节点
+      新增了 DGText
+      新增了 TextGradient
+      新增了 RectTransform
+      新增了 MonoBehaviour/脚本
+      新增了 CanvasRenderer
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item/Btn_Buy/Text:
+      新增了 CanvasRenderer
+      新增了 Outline
+      新增了 RectTransform
+      新增了 TextInLineImage
+      新增节点
+    ─ AC_GamePlayShopPanel_965/L_Text_Tips:
+      新增节点
+      新增了 CanvasRenderer
+      新增了 DGText
+      新增了 RectTransform
+      新增了 Outline
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_2Arrow:
+      新增了 RectTransform
+      新增了 CanvasRenderer
+      新增了 TweenAnchoredPosition
+      新增了 DGImage
+      新增节点
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item/Img_Tag:
+      新增节点
+      新增了 MonoBehaviour/脚本
+      新增了 RectTransform
+      新增了 CanvasRenderer
+    ─ AC_GamePlayShopPanel_965/BG:
+      新增了 CanvasRenderer
+      新增了 Button
+      新增了 Image
+      新增了 RectTransform
+      新增节点
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item/Ts_Mask/Image:
+      新增了 RectTransform
+      新增节点
+      新增了 CanvasRenderer
+      新增了 Image
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item/Text_Name:
+      新增了 DGGradientText
+      新增了 CanvasRenderer
+      新增了 MonoBehaviour/脚本
+      新增节点
+      新增了 RectTransform
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_1Arrow:
+      新增了 RectTransform
+      新增节点
+      新增了 DGImage
+      新增了 TweenAnchoredPosition
+      新增了 CanvasRenderer
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item/Text_ItemNum:
+      新增了 CanvasRenderer
+      新增了 DGGradientText
+      新增了 RectTransform
+      新增节点
+      新增了 MonoBehaviour/脚本
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item/Image:
+      新增了 DGImage
+      新增了 CanvasRenderer
+      新增了 RectTransform
+      新增节点
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item/name_bg:
+      新增节点
+      新增了 CanvasRenderer
+      新增了 RectTransform
+    ─ AC_GamePlayShopPanel_965/BGImg/Image:
+      新增节点
+      新增了 RectTransform
+      新增了 Image
+      新增了 CanvasRenderer
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item/Ts_Mask:
+      新增节点
+      新增了 Image
+      新增了 RectTransform
+      新增了 CanvasRenderer
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item/Btn_Buy:
+      新增了 CanvasRenderer
+      新增了 MonoBehaviour/脚本
+      新增节点
+      新增了 RectTransform
+      新增了 DGImage
+    ─ AC_GamePlayShopPanel_965/Panel/Btn_Close:
+      新增了 CanvasRenderer
+      新增了 MonoBehaviour/脚本
+      新增了 RectTransform
+      新增节点
+      新增了 MonoBehaviour/脚本
+    ─ AC_GamePlayShopPanel_965/Panel:
+      新增了 CanvasRenderer
+      新增节点
+      新增了 RectTransform
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item/Ts_Mask/Text:
+      新增了 CanvasRenderer
+      新增了 RectTransform
+      新增节点
+      新增了 DGText
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item/Ts_Icon:
+      新增了 CanvasRenderer
+      新增节点
+      新增了 RectTransform
+    ─ AC_GamePlayShopPanel_965/Panel/Text_OwnCount:
+      新增了 TextInLineImage
+      新增了 CanvasRenderer
+      新增节点
+      新增了 RectTransform
+      新增了 Outline
+    ─ AC_GamePlayShopPanel_965/BGImg:
+      新增节点
+      新增了 CanvasRenderer
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item/Text_Limit:
+      新增了 RectTransform
+      新增了 Outline
+      新增节点
+      新增了 DGText
+      新增了 CanvasRenderer
+    ─ AC_GamePlayShopPanel_965:
+      新增了 CanvasRenderer
+      新增节点
+    ─ AC_GamePlayShopPanel_965/Panel/bg:
+      新增了 DGImage
+      新增了 CanvasRenderer
+      新增节点
+      新增了 RectTransform
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Scroll/Loop_Content:
+      新增节点
+      新增了 CanvasRenderer
+    ─ AC_GamePlayShopPanel_965/Panel/Loop_Item:
+      新增节点
+      新增了 CanvasRenderer
+
+  [修改] AC_DemonRiftPanel.prefab
+    ─ AC_DemonRiftPanel/Panel/Btn_Dimension:
+      修改了 锚点最小值
+            (0, 0.5)
+            → (0.5, 0.5)
+      修改了 锚点最大值
+            (0, 0.5)
+            → (0.5, 0.5)
+      修改了 锚点偏移 position
+            (6.899994, 569.53)
+            → (-353.1, 569.53)
+
+  [修改] ActivityCenterMainPanel.prefab
+    ─ ActivityCenterMainPanel/Top/ComUI_currencyBarGroup:
+      修改了 锚点最小值
+            (1, 1)
+            → (0.5, 1)
+      修改了 锚点最大值
+            (1, 1)
+            → (0.5, 1)
+      修改了 锚点偏移 position
+            (-123, -76)
+            → (237, -76)
+    ─ ActivityCenterMainPanel/Top/QuitBtn:
+      修改了 锚点最小值
+            (1, 1)
+            → (0.5, 1)
+      修改了 锚点最大值
+            (1, 1)
+            → (0.5, 1)
+      修改了 锚点偏移 position
+            (-62, -99)
+            → (298, -99)
+

@@ -136,6 +136,24 @@ function switchTab(key) {
 
     if (src && src.value.trim()) refreshFiles();
 
+  } else if (key === "svn" || key === "merge") {
+
+    const now = new Date();
+
+    const y = now.getFullYear();
+
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+
+    const d = String(now.getDate()).padStart(2, "0");
+
+    const startEl = document.getElementById(key + "_start");
+
+    const endEl = document.getElementById(key + "_end");
+
+    if (startEl) startEl.value = y + "-01-01";
+
+    if (endEl) endEl.value = y + "-" + m + "-" + d;
+
   }
 
 }
@@ -1848,7 +1866,14 @@ document.addEventListener("click",e=>{
 
       const _mtDir = _mt0 ? (_mt0.substring(0, Math.max(_mt0.lastIndexOf("\\"), _mt0.lastIndexOf("/"))) || _mt0) : "";
 
-      browseDir("merge_target", null, _mtDir);
+      browseDir("merge_target", function(){
+        const val = document.getElementById("merge_target").value.trim();
+        if (val && !(config.merge_target_history||[]).includes(val)) {
+          saveConfig({merge_target_history:[val, ...(config.merge_target_history||[])].slice(0,20)});
+          config.merge_target_history = [val, ...(config.merge_target_history||[])].slice(0,20);
+          initSuggest("merge_target", config.merge_target_history);
+        }
+      }, _mtDir);
 
       break;
 

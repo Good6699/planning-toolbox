@@ -1,4 +1,4 @@
-- **2026-06-27**：merge_target 浏览选路径后立即保存——`browseDir` 只设 input 值不保存 config，blur 事件在原生对话框关闭后不一定触发，导致 merge_target 路径浏览选择后不持久化。改为在 browseDir 回调中主动调用 saveConfig。
+- **2026-06-27**：merge 多项修复——strip_prefix 支持本地路径（`svn info` 获取 URL）、不存在文件改按新增、冲突强制覆盖简化（去 revert+resolve 只留 cat）、树冲突先 resolve 再 cat。
 - **2026-06-27**：TortoiseSVN 提交弹窗不再自动关闭——`open_commit_dialog` 参数 `/closeonend:2` 改为 `/closeonend:0`，让用户手动确认提交结果后自己关弹窗。
 - **2026-06-27**：SVN/merge 日期页签每次切换刷新——`switchTab()` 新增 svn/merge 分支，每次切换页签时重新计算 `_end`（当天）和 `_start`（当年1月1日）值，不再依赖首次构建的静态值。
 - **2026-04-16**：记忆系统启用

@@ -568,7 +568,7 @@ function _updateWfDot(wfIdx) {
 
   if (!dot) return;
 
-  const running = Object.keys(_wfPlayState).some(k => k.startsWith("step_" + wfIdx + "_"));
+  const running = Object.keys(_wfPlayState).some(k => k.startsWith("step_" + wfIdx + "_") || k === "update_" + wfIdx);
 
   dot.style.background = running ? "var(--yellow,#f0c040)" : "var(--green,#4caf50)";
 

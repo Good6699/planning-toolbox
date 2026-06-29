@@ -1039,28 +1039,32 @@ def _workflow_update_wc_worker(task_id, prefixes, name):
         q.put(f"{'='*50}\n")
         q.put(f"🔄 更新工作流「{name}」的 SVN 工作副本\n")
         q.put(f"{'='*50}\n")
-        total = 0
-        success = 0
-        fail = 0
+        dirs = []
         for prefix in prefixes:
             for subdir in ["Client", "gameData"]:
                 d = os.path.join(prefix, subdir)
                 if not os.path.isdir(d):
                     q.put(f"⏭ 目录不存在: {d}\n")
-                    continue
-                total += 1
-                q.put(f"\n── 更新: {d} ──\n")
+                else:
+                    dirs.append(d)
+        if not dirs:
+            q.put("没有需要更新的目录\n")
+            return
+        q.put(f"共 {len(dirs)} 个目录，并行更新中...\n")
+        results = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(dirs)) as executor:
+            fut_map = {executor.submit(_svn_update_with_cleanup, svn, d, _put, task_id): d for d in dirs}
+            for fut in concurrent.futures.as_completed(fut_map):
+                d = fut_map[fut]
                 try:
-                    ok = _svn_update_with_cleanup(svn, d, _put, task_id)
-                    if ok:
-                        success += 1
-                    else:
-                        fail += 1
+                    results[d] = fut.result()
                 except Exception as e:
+                    results[d] = False
                     q.put(f"  ❌ 更新失败: {d} → {e}\n")
-                    fail += 1
+        success = sum(1 for v in results.values() if v)
+        fail = sum(1 for v in results.values() if not v)
         q.put(f"\n{'='*50}\n")
-        q.put(f"📊 更新完成: {success} 成功, {fail} 失败 (共 {total} 个目录)\n")
+        q.put(f"📊 更新完成: {success} 成功, {fail} 失败 (共 {len(dirs)} 个目录)\n")
     except Exception as e:
         q.put(f"\n❌ 更新任务异常终止: {e}\n")
     finally:
@@ -1444,7 +1448,7 @@ def _exec_copy_files(step, put, task_id=None):
 
 
 def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
-    """执行 svn update，遇到 E155004 锁时自动 cleanup 重试一次"""
+    """执行 svn update，遇到 E155004/E155037 时自动 cleanup 重试一次"""
     proc = None
     try:
         proc = subprocess.Popen([svn, "update", "--accept", "theirs-full", d],
@@ -1463,7 +1467,7 @@ def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
                 put(f"更新完成: {d}\n")
                 return True
             err = stderr.strip()
-            if "E155004" in err:
+            if "E155004" in err or "E155037" in err:
                 put("检测到 SVN 锁，正在执行 cleanup...\n")
                 cleanup_proc = subprocess.Popen(
                     [svn, "cleanup", d],
@@ -1471,7 +1475,37 @@ def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
                     **_get_subprocess_kwargs())
                 _register_proc(cleanup_proc, task_id)
                 try:
-                    cleanup_proc.communicate(timeout=60)
+                    cl_out, cl_err = cleanup_proc.communicate(timeout=60)
+                    cl_stdout = _svn_decode_output(cl_out)
+                    cl_stderr = _svn_decode_output(cl_err)
+                    for line in cl_stdout.strip().splitlines():
+                        line = line.strip()
+                        if line:
+                            put(f"  [cleanup] {line}\n")
+                    if cleanup_proc.returncode != 0:
+                        put(f"  cleanup 失败 ({cleanup_proc.returncode}): {cl_stderr.strip()[-200:]}\n")
+                        put(f"  正在重试 svn cleanup（无参数模式）...\n")
+                        cl2 = subprocess.Popen(
+                            [svn, "cleanup", d, "--remove-unversioned"],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            **_get_subprocess_kwargs())
+                        _register_proc(cl2, task_id)
+                        try:
+                            cl2.communicate(timeout=60)
+                        finally:
+                            _unregister_proc(cl2, task_id)
+                        if cl2.returncode != 0:
+                            put(f"  cleanup 重试仍失败，尝试强制回退本地修改...\n")
+                            revert_proc = subprocess.Popen(
+                                [svn, "revert", "-R", d],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                **_get_subprocess_kwargs())
+                            _register_proc(revert_proc, task_id)
+                            try:
+                                revert_proc.communicate(timeout=60)
+                            finally:
+                                _unregister_proc(revert_proc, task_id)
+                            put(f"  本地回退完成，重试更新...\n")
                 finally:
                     _unregister_proc(cleanup_proc, task_id)
                 put("cleanup 完成，重试更新...\n")
@@ -3516,10 +3550,31 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
         _revert_one_path(svn, target_path, revert_step, _put, task_id)
         q.put("\n")
 
+        # 计算文件路径中需要裁剪的前缀（文件路径是仓库根相对路径如
+        # /branches/xxx/Assets/...，需要裁剪到相对于 source_url 的路径）
         from urllib.parse import urlparse
-        parsed = urlparse(source_url)
-        segs = parsed.path.strip("/").split("/")
-        strip_prefix = ("/" + "/".join(segs[2:]) + "/") if len(segs) > 2 else None
+        norm_source = source_url.replace("\\", "/")
+        parsed = urlparse(norm_source)
+        if parsed.scheme and len(parsed.scheme) > 1:
+            # URL 格式如 http://svn/repo/branches/...
+            url_path = parsed.path
+        else:
+            # 本地路径如 G:\D3_EA\Client → 用 svn info 获取 URL
+            try:
+                ri = subprocess.run([svn, "info", "--show-item", "url", source_url],
+                                    capture_output=True, timeout=15,
+                                    **_get_subprocess_kwargs())
+                svn_url = ri.stdout.decode("utf-8", errors="replace").strip()
+                if svn_url:
+                    parsed = urlparse(svn_url)
+                    url_path = parsed.path
+                else:
+                    url_path = ""
+            except Exception:
+                url_path = ""
+        path_segs = url_path.strip("/").split("/")
+        # 跳过前 2 段（仓库根路径 /svn/repo 等），保留分支路径
+        strip_prefix = ("/" + "/".join(path_segs[2:]) + "/") if len(path_segs) > 2 else None
         for f in files:
             raw = f.get("path", "")
             if strip_prefix and raw.startswith(strip_prefix):

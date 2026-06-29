@@ -316,16 +316,14 @@ def _svn_revert_file(svn_exe, local_file):
 
 
 def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args):
-    """清除 SVN 冲突/删除状态，用源版本完整替换（最后手段）
+    """用源版本完整替换本地文件（最后手段）
 
-    当 revert + 重新 merge 都失败时使用。
-    先 svn revert 撤销 SVN 元数据（删除/冲突标记），
-    再用 svn cat 下载源版本内容覆盖本地文件，
-    最后 svn resolve --accept working 确认状态。
+    先 resolve 清除树冲突，再 svn cat 下载覆盖写入。
     """
+    # 先清除冲突标记，否则 svn cat 对本地路径会失败
     try:
         subprocess.run(
-            [svn_exe, "revert", local_file],
+            [svn_exe, "resolve", "--accept", "working", local_file] + auth_args,
             capture_output=True, timeout=30,
             **_get_subprocess_kwargs()
         )
@@ -352,10 +350,17 @@ def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, 
         return
     try:
         subprocess.run(
+            [svn_exe, "add", "--force", "--quiet", local_file] + auth_args,
+            capture_output=True, timeout=30,
+            **_get_subprocess_kwargs()
+        )
+    except Exception:
+        pass
+    try:
+        subprocess.run(
             [svn_exe, "resolve", "--accept", "working", local_file] + auth_args,
-            capture_output=True,
-            encoding="utf-8", errors="replace",
-            timeout=30, **_get_subprocess_kwargs()
+            capture_output=True, timeout=30,
+            **_get_subprocess_kwargs()
         )
     except Exception:
         pass
@@ -438,6 +443,14 @@ def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
         return 1, 0, 0, []
     if status == "conflict":
         _log(f"  ⚠ 已用源版本覆盖(冲突消解): {file_path}", "warn")
+        try:
+            subprocess.run(
+                [svn_exe, "resolve", "--accept", "working", local_file] + auth_args,
+                capture_output=True, timeout=30,
+                **_get_subprocess_kwargs()
+            )
+        except Exception:
+            pass
         return 1, 1, 0, [file_path]
     if status == "e155010":
         _log(f"  → 文件未跟踪，转为新增: {file_path}", "info")
@@ -548,10 +561,15 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
         _log(f"  ⚠ 删除目录失败: {msg}", "warn")
         return 0, 1, 0, [file_path]
 
-    # 目录删除 + 文件修改：统一走 svn merge
-    if action != "add" and not os.path.exists(local_file):
-        _log(f"⏭ 跳过(本地不存在): {file_path}", "warn")
-        return 0, 0, 1, []
+    # 本地不存在时改按新增处理，直接 export + add
+    if action not in ("add", "del") and not os.path.exists(local_file):
+        _log(f"  → 本地不存在，改按新增: {file_path}", "info")
+        ok = _svn_export_add(svn_exe, source_url, latest_rev,
+                             file_path, local_file, auth_args, _log)
+        if ok:
+            _log(f"  ✅ 新增文件: {file_path}", "ok")
+            return 1, 0, 0, []
+        return 0, 1, 0, [file_path]
 
     return _svn_merge_with_retry(
         svn_exe, source_url, revisions, file_path, local_file,

@@ -1602,7 +1602,7 @@ function saveAdvSettings() {
 
   const exclude_dirs = document.getElementById("adv_exclude_dirs").value.trim();
 
-  const payload = { svn_user, cmp_title_rows: config.cmp_title_rows || "1", cmp_id_col: config.cmp_id_col || "1", cmp_output_cols: config.cmp_output_cols || "" };
+  const payload = { svn_user, cmp_title_rows: document.getElementById("adv_cmp_title_rows").value.trim() || "1", cmp_id_col: document.getElementById("adv_cmp_id_col").value || "1", cmp_output_cols: document.getElementById("adv_cmp_output_cols").value.trim() };
 
   if (svn_pass) payload.svn_pass = svn_pass;
 
@@ -1621,6 +1621,12 @@ function saveAdvSettings() {
         config.svn_user = svn_user;
 
         config.exclude_dirs = exclude_dirs;
+
+        config.cmp_title_rows = payload.cmp_title_rows;
+
+        config.cmp_id_col = payload.cmp_id_col;
+
+        config.cmp_output_cols = payload.cmp_output_cols;
 
         closeAdvSettings();
 

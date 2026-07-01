@@ -3575,6 +3575,17 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
         path_segs = url_path.strip("/").split("/")
         # 跳过前 2 段（仓库根路径 /svn/repo 等），保留分支路径
         strip_prefix = ("/" + "/".join(path_segs[2:]) + "/") if len(path_segs) > 2 else None
+        # 同步裁剪 rev_file_map 的 key，保证与文件路径匹配
+        if strip_prefix:
+            new_map = {}
+            for orig_path, revs in rev_file_map.items():
+                if orig_path.startswith(strip_prefix):
+                    new_map[orig_path[len(strip_prefix):]] = revs
+                elif orig_path.startswith("/"):
+                    new_map[orig_path[1:]] = revs
+                else:
+                    new_map[orig_path] = revs
+            rev_file_map = new_map
         for f in files:
             raw = f.get("path", "")
             if strip_prefix and raw.startswith(strip_prefix):
@@ -3591,7 +3602,12 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
 
         for f in files:
             file_path = f["path"]
-            file_revs = rev_file_map.get(file_path, revisions)
+            file_revs = rev_file_map.get(file_path)
+            if not file_revs:
+                q.put(f"\n── 跳过: {file_path} (无法确定修订版本号)\n")
+                total_skipped += 1
+                done_count += 1
+                continue
             q.put(f"\n── 合并: {file_path} (版本: {file_revs}) ──\n")
             try:
                 result = svn_merge(

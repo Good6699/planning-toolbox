@@ -3166,6 +3166,9 @@ def _get_optimal_workers():
             parse_workers = min(cpu_cores // 2, parse_workers)
         elif available_memory < 16:
             download_workers = min(15, download_workers)
+        # 每 2GB 内存最多 1 个 parse worker，防止大文件并发 OOM
+        mem_parse_cap = max(1, int(available_memory / 2))
+        parse_workers = min(parse_workers, mem_parse_cap)
         return download_workers, parse_workers
     except Exception:
         # psutil 不可用时，使用默认值
@@ -3532,12 +3535,14 @@ def main():
                 f.write(f"关键词: {', '.join(keywords)}\n")
             
             # 记录新增文件
+            new_files_list.sort()
             if new_files_list:
                 f.write(f"\n共计 {len(new_files_list)} 个新增文件:\n")
                 for i, fname in enumerate(new_files_list, 1):
                     f.write(f"{i}. 原文件: {fname}\n")
-            
+
             # 记录修改文件
+            processed_files.sort()
             if processed_files:
                 f.write(f"\n共计 {len(processed_files)} 个修改文件:\n")
                 for i, fname in enumerate(processed_files, 1):

@@ -3166,15 +3166,14 @@ def _get_optimal_workers():
             parse_workers = min(cpu_cores // 2, parse_workers)
         elif available_memory < 16:
             download_workers = min(15, download_workers)
-        # 每 2GB 内存最多 1 个 parse worker，防止大文件并发 OOM
-        mem_parse_cap = max(1, int(available_memory / 2))
+        # 每 1GB 内存最多 1 个 parse worker，防止大文件并发 OOM
+        mem_parse_cap = max(1, int(available_memory))
         parse_workers = min(parse_workers, mem_parse_cap)
         return download_workers, parse_workers
     except Exception:
-        # psutil 不可用时，使用默认值
-        cpu_cores = _cpu_count
-        download_workers = max(4, min(12, cpu_cores * 2))
-        parse_workers = max(4, min(cpu_cores, 8))
+        # psutil 不可用时，保守默认：最多 2 个 parse worker
+        download_workers = max(4, min(12, _cpu_count * 2))
+        parse_workers = max(1, min(_cpu_count, 2))
         return download_workers, parse_workers
 
 _download_workers, _parse_workers = _get_optimal_workers()

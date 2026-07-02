@@ -315,10 +315,11 @@ def _svn_revert_file(svn_exe, local_file):
         return False
 
 
-def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args):
+def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args, global_max_rev=None):
     """用源版本完整替换本地文件（最后手段）
 
     先 resolve 清除树冲突，再 svn cat 下载覆盖写入。
+    global_max_rev: 所有选中版本的最大值，用于 svn cat 确保取到最新内容
     """
     # 先清除冲突标记，否则 svn cat 对本地路径会失败
     try:
@@ -329,10 +330,11 @@ def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, 
         )
     except Exception:
         pass
+    cat_rev = global_max_rev if global_max_rev is not None else revision
     file_url = source_url.rstrip("/") + "/" + file_path
     try:
         proc = subprocess.Popen(
-            [svn_exe, "cat", "-r", str(revision), file_url] + auth_args,
+            [svn_exe, "cat", "-r", str(cat_rev), file_url] + auth_args,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             **_get_subprocess_kwargs()
         )
@@ -411,9 +413,10 @@ def _build_merge_c_args(revisions):
 
 
 def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
-                          auth_args, _log):
+                          auth_args, _log, global_max_rev=None):
     """执行 svn merge，失败时直接源版本覆盖
 
+    global_max_rev: 所有选中版本的最大值，用于 force overwrite 时取最新内容
     返回 (merged, conflict, skip, conflict_files_added)
     """
     _log(f"  → 合并: {file_path}", "info")
@@ -464,12 +467,12 @@ def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
         _log(f"  ❌ 超时: {file_path}", "error")
         return 0, 0, 1, []
     _log(f"  ⚠ 合并失败，直接源版本覆盖: {file_path}", "warn")
-    _svn_resolve_conflict(svn_exe, source_url, latest_rev, file_path, local_file, auth_args)
+    _svn_resolve_conflict(svn_exe, source_url, latest_rev, file_path, local_file, auth_args, global_max_rev)
     return 0, 1, 0, [file_path]
 
 
 def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
-                        action, auth_args, _log):
+                        action, auth_args, _log, global_max_rev=None):
     """处理单个文件的 add/del/mod merge（多版本合并）
 
     目录新增/删除也走 svn merge 让 SVN 递归处理整个目录树。
@@ -555,7 +558,7 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
 
     return _svn_merge_with_retry(
         svn_exe, source_url, revisions, file_path, local_file,
-        auth_args, _log)
+        auth_args, _log, global_max_rev)
 
 
 def svn_update_target(target_path, svn_user=None, svn_pass=None, log_callback=None):
@@ -594,7 +597,8 @@ def svn_update_target(target_path, svn_user=None, svn_pass=None, log_callback=No
 
 
 def svn_merge(source_url, target_wc, revisions, files,
-              svn_user=None, svn_pass=None, log_callback=None):
+              svn_user=None, svn_pass=None, log_callback=None,
+              global_max_rev=None):
     """对选中的文件执行svn merge（多版本合并），使用 --accept theirs-full"""
     def _log(msg, level="info"):
         if log_callback:
@@ -616,7 +620,7 @@ def svn_merge(source_url, target_wc, revisions, files,
         local_file = os.path.join(target_wc, file_path)
         m, c, s, cf = _svn_merge_one_file(
             svn_exe, source_url, revisions, file_path, local_file,
-            action, auth_args, _log)
+            action, auth_args, _log, global_max_rev)
         merged_count += m
         conflict_count += c
         skip_count += s

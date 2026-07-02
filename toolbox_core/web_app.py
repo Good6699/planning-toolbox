@@ -3615,7 +3615,8 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
                 result = svn_merge(
                     source_url, target_path, file_revs, [f],
                     svn_user=svn_user, svn_pass=svn_pass,
-                    log_callback=_log
+                    log_callback=_log,
+                    global_max_rev=max(revisions) if revisions else None
                 )
                 total_merged += result["merged"]
                 total_conflict += result["conflict"]

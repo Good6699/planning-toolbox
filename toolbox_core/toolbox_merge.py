@@ -412,7 +412,7 @@ def _build_merge_c_args(revisions):
 
 def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
                           auth_args, _log):
-    """执行 svn merge (多版本) + 失败时 revert+retry + 最后手段 resolve
+    """执行 svn merge，失败时直接源版本覆盖
 
     返回 (merged, conflict, skip, conflict_files_added)
     """
@@ -463,26 +463,8 @@ def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
     if status == "timeout":
         _log(f"  ❌ 超时: {file_path}", "error")
         return 0, 0, 1, []
-    _log(f"  ⚠ 合并异常: {out_text.strip()}", "warn")
-    ok = _svn_revert_file(svn_exe, local_file)
-    if ok:
-        _log(f"  → 已 revert，重新合并: {file_path}", "info")
-        cmd2 = [
-            svn_exe, "merge", "--ignore-ancestry", "--accept", "theirs-full",
-        ] + rev_args + [source_url, local_file] + auth_args
-        status2, out_text2 = _svn_merge_single_file(svn_exe, cmd2, _log)
-        if status2 == "ok":
-            _log(f"  ✅ 合并成功: {file_path}", "ok")
-            return 1, 0, 0, []
-        if status2 == "conflict":
-            _log(f"  ⚠ 已用源版本覆盖(冲突消解): {file_path}", "warn")
-            return 1, 1, 0, [file_path]
-        _log(f"  ⚠ 重新合并仍失败: {out_text2.strip()}", "warn")
-        _svn_resolve_conflict(svn_exe, source_url, latest_rev, file_path, local_file, auth_args)
-        _log(f"  → 已用源版本强制覆盖（最后手段）: {file_path}", "warn")
-    else:
-        _svn_resolve_conflict(svn_exe, source_url, latest_rev, file_path, local_file, auth_args)
-        _log(f"  → revert 失败，已用源版本强制覆盖: {file_path}", "warn")
+    _log(f"  ⚠ 合并失败，直接源版本覆盖: {file_path}", "warn")
+    _svn_resolve_conflict(svn_exe, source_url, latest_rev, file_path, local_file, auth_args)
     return 0, 1, 0, [file_path]
 
 

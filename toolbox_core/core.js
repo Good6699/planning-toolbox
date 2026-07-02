@@ -1838,7 +1838,22 @@ document.addEventListener("click",e=>{
 
       const _msDir = _ms0 ? (_ms0.substring(0, Math.max(_ms0.lastIndexOf("\\"), _ms0.lastIndexOf("/"))) || _ms0) : "";
 
-      browseDir("merge_source", null, _msDir);
+      browseDir("merge_source", function(){
+        const p = document.getElementById("merge_source").value.trim();
+        if (!p) return;
+        fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:p})})
+          .then(r=>r.json()).then(d=>{
+            if (d.ok) {
+              document.getElementById("merge_source").value = d.url;
+              const urls = config.svn_urls || [];
+              if (!urls.includes(d.url)) {
+                saveConfig({svn_urls:[d.url, ...urls].slice(0,20)});
+                config.svn_urls = [d.url, ...urls].slice(0,20);
+                initSuggest("merge_source", config.svn_urls);
+              }
+            }
+          });
+      }, _msDir);
 
       break;
 

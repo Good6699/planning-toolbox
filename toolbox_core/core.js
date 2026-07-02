@@ -2952,7 +2952,11 @@ window.addEventListener("DOMContentLoaded", async () => {
 
 document.getElementById("close_btn")?.addEventListener("click", ()=>{
 
-  fetch("/api/close", {method:"POST"});
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.hideWindow) {
+    window.pywebview.api.hideWindow();
+  } else {
+    fetch("/api/close", {method:"POST"});
+  }
 
 });
 

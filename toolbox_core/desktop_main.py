@@ -723,6 +723,13 @@ class ResizeApi:
         self._active = False
         _save_window_rect()
 
+    def hideWindow(self):
+        if self._window:
+            try:
+                self._window.hide()
+            except Exception:
+                pass
+
     def app_ready(self):
         pass
 

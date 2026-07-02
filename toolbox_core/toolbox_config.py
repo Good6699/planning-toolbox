@@ -118,8 +118,22 @@ def save_config(config):
         if plain:
             data["tr_api_key_enc"] = encrypt_key(plain)
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        # 原子写入：先写临时文件再 rename，防止写入中断导致文件损坏
+        import tempfile
+        fd, tmp_path = tempfile.mkstemp(
+            dir=os.path.dirname(CONFIG_FILE),
+            suffix=".json", prefix=".cfg_tmp_"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, CONFIG_FILE)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+            raise
     except Exception as e:
         print(f"⚠️ 保存配置失败: {e}")
 

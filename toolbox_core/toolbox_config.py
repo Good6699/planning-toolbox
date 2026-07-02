@@ -82,6 +82,8 @@ def decrypt_key(ciphertext):
 
 # ── 配置读写 ──────────────────────────────────────────────
 def load_config():
+    # 脚本目录下的 svn_gui_config.json 作为默认模板
+    _default_path = os.path.join(SCRIPT_DIR, "svn_gui_config.json")
     default = {
         "svn_urls": [
             "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm"
@@ -89,6 +91,15 @@ def load_config():
         "svn_url_mappings": {},
         "cmp_file_presets": []
     }
+    # 如果模板文件存在，用它替代硬编码默认值
+    try:
+        if os.path.isfile(_default_path):
+            with open(_default_path, "r", encoding="utf-8") as _f:
+                _tmpl = json.load(_f)
+            if isinstance(_tmpl, dict):
+                default = _tmpl
+    except Exception:
+        pass
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:

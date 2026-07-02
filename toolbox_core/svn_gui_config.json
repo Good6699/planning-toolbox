@@ -1,8 +1,9 @@
 {
   "svn_urls": [
+    "http://192.168.1.40:8080/svn/D8/branches/20260622_D8_KR_OB/gameData/Text",
     "http://192.168.1.41:8080/svn/D3/branches/20240530_SouthAsia/Client",
-    "F:\\D3_Asia\\Client",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/Client",
+    "F:\\D3_Asia\\Client",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm",
     "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData",
     "http://192.168.1.41:8080/svn/D3/branches/20260320_D3_EA_Unity2022/gameData",
@@ -15,10 +16,12 @@
   "merge_file_filter_exclude_text": "Assets\\StreamingAssets\\SkillConfig,Assets\\StreamingAssets\\BinData,Assets\\StreamingAssets\\GenerateData,Assets\\StreamingAssets\\Language,Assets\\Code,Assets\\Code_Lua,gameData\\UpLoadBackup,gameData\\老D3废弃表,gameData\\配置描述文档,gameData\\.ExcelTool2,gameData\\.svn,gameData\\config,gameData\\config_temp,gameData\\ErlangExportCopy,gameData\\ExportTxt,gameData\\macro,gameData\\old,gameData\\oldGameData,gameData\\protobuf,Assets\\StreamingAssets\\GenerateMsg",
   "merge_file_filter_include_text": "gameData\\Text\\Texts.xlsm,gameData\\Data2,gameData\\Language",
   "svn_keyword_history": [
-    "出战位",
+    "腐败秘境,裂隙,迷雾,荒古",
     "腐败秘境,裂隙",
-    "腐败秘境",
+    "职业,转职",
     "职业",
+    "出战位",
+    "腐败秘境",
     "腐败秘境,职业,海渊",
     "专武,腐败秘境,职业,海渊",
     "裂隙",
@@ -34,6 +37,8 @@
   ],
   "merge_target_history": [
     "F:\\D3_DEV_Asia\\Client",
+    "F:\\D3_Asia\\Client",
+    "F:\\D3_Asia\\Client",
     "H:\\D3_EA\\Client",
     "F:\\D3_KR2_DEV\\gameData",
     "F:\\D3_KR2_DEV\\gameData",
@@ -41,6 +46,7 @@
     "G:\\D3_KR2\\Client"
   ],
   "output_dir_history": [
+    "D:\\D8_KR\\gameData\\Text",
     "F:\\D3_Asia\\Client",
     "C:\\Users\\admin\\.qclaw\\workspace\\输出",
     "G:\\D3_KR2\\gameData\\Text",
@@ -546,6 +552,206 @@
             "F:\\D3_DEV_Asia\\gameData"
           ],
           "type": "revert_svn"
+        }
+      ]
+    },
+    {
+      "name": "D8_KR",
+      "steps": [
+        {
+          "file_paths": [
+            "D:\\D8_KR\\gameData\\Text\\Texts.xlsm"
+          ],
+          "name": "Texts.xlsm",
+          "type": "open_tables"
+        },
+        {
+          "input_file": "D:\\D8_KR\\gameData\\Text\\Texts.xlsm",
+          "name": "Texts.xlsm",
+          "type": "export_text",
+          "upload_svn_dir": [
+            "D:\\D8_KR\\gameData",
+            "D:\\D8_KR\\Client\\Assets\\StreamingAssets"
+          ]
+        },
+        {
+          "lock_msg": "",
+          "name": "Texts.xlsm",
+          "target_path": "D:\\D8_KR\\gameData\\Text\\Texts.xlsm",
+          "type": "unlock_svn",
+          "update_dirs": []
+        },
+        {
+          "lang_codes": "ZH_CN,KO_KR",
+          "name": "ZH_CN,KO_KR",
+          "root_dir": "D:\\D8_KR\\gameData\\Language",
+          "type": "export_error_code",
+          "upload_svn_dir": [
+            "D:\\D8_KR\\gameData",
+            "D:\\D8_KR\\Client\\Assets\\StreamingAssets"
+          ]
+        },
+        {
+          "delete_unversioned": false,
+          "exclude_paths": [
+            "Assets/Code_Lua/test/test.lua",
+            "Assets/StreamingAssets/LocalVersion.xml",
+            "InstallClient.bat"
+          ],
+          "name": "Client",
+          "revert_paths": [
+            "D:\\D8_KR\\Client"
+          ],
+          "type": "revert_svn"
+        },
+        {
+          "delete_unversioned": false,
+          "exclude_paths": [
+            "Assets/Code_Lua/test/test.lua",
+            "Assets/StreamingAssets/LocalVersion.xml",
+            "InstallClient.bat"
+          ],
+          "name": "gameData,StreamingAssets",
+          "revert_paths": [
+            "D:\\D8_KR\\gameData",
+            "D:\\D8_KR\\Client\\Assets\\StreamingAssets"
+          ],
+          "target_path": "D:\\D8_KR_DEV\\Client",
+          "type": "revert_svn"
+        },
+        {
+          "name": "Text",
+          "src_dir": "D:\\D8_KR\\gameData\\Text",
+          "tgt_dir": "D:\\D8_KR_DEV\\gameData",
+          "type": "copy_files"
+        },
+        {
+          "lang_codes": "ZH_CN,KO_KR",
+          "name": "ZH_CN,KO_KR",
+          "root_dir": "D:\\D8_KR_DEV\\gameData\\Language",
+          "type": "export_error_code",
+          "upload_svn_dir": [
+            "D:\\D8_KR_DEV\\gameData",
+            "D:\\D8_KR_DEV\\Client\\Assets\\StreamingAssets"
+          ]
+        },
+        {
+          "delete_unversioned": false,
+          "exclude_paths": [
+            "Assets/Code_Lua/test/test.lua",
+            "Assets/StreamingAssets/LocalVersion.xml",
+            "InstallClient.bat"
+          ],
+          "name": "Client,gameData",
+          "revert_paths": [
+            "D:\\D8_KR_DEV\\Client",
+            "D:\\D8_KR_DEV\\gameData"
+          ],
+          "type": "revert_svn"
+        }
+      ]
+    },
+    {
+      "name": "D8_CN",
+      "steps": [
+        {
+          "file_paths": [
+            "D:\\D8_CN\\gameData\\Text\\Texts.xlsm"
+          ],
+          "name": "Texts.xlsm",
+          "type": "open_tables"
+        },
+        {
+          "input_file": "D:\\D8_CN\\gameData\\Text\\Texts.xlsm",
+          "name": "Texts.xlsm",
+          "type": "export_text",
+          "upload_svn_dir": [
+            "D:\\D8_CN\\gameData",
+            "D:\\D8_CN\\Client\\Assets\\StreamingAssets"
+          ]
+        },
+        {
+          "lock_msg": "",
+          "name": "Texts.xlsm",
+          "target_path": "D:\\D8_CN\\gameData\\Text\\Texts.xlsm",
+          "type": "unlock_svn",
+          "update_dirs": []
+        },
+        {
+          "lang_codes": "ZH_CN,KO_KR",
+          "name": "ZH_CN,KO_KR",
+          "root_dir": "D:\\D8_CN\\gameData\\Language",
+          "type": "export_error_code",
+          "upload_svn_dir": [
+            "D:\\D8_CN\\gameData",
+            "D:\\D8_CN\\Client\\Assets\\StreamingAssets"
+          ]
+        },
+        {
+          "delete_unversioned": false,
+          "exclude_paths": [
+            "Assets/Code_Lua/test/test.lua",
+            "Assets/StreamingAssets/LocalVersion.xml",
+            "InstallClient.bat"
+          ],
+          "name": "Client",
+          "revert_paths": [
+            "D:\\D8_CN\\Client"
+          ],
+          "type": "revert_svn"
+        },
+        {
+          "delete_unversioned": false,
+          "exclude_paths": [
+            "Assets/Code_Lua/test/test.lua",
+            "Assets/StreamingAssets/LocalVersion.xml",
+            "InstallClient.bat"
+          ],
+          "name": "gameData,StreamingAssets",
+          "revert_paths": [
+            "D:\\D8_CN\\gameData",
+            "D:\\D8_CN\\Client\\Assets\\StreamingAssets"
+          ],
+          "target_path": "D:\\D8_CN_DEV\\Client",
+          "type": "revert_svn"
+        },
+        {
+          "name": "Text",
+          "src_dir": "D:\\D8_CN\\gameData\\Text",
+          "tgt_dir": "D:\\D8_CN_DEV\\gameData",
+          "type": "copy_files"
+        },
+        {
+          "lang_codes": "ZH_CN,KO_KR",
+          "name": "ZH_CN,KO_KR",
+          "root_dir": "D:\\D8_CN_DEV\\gameData\\Language",
+          "type": "export_error_code",
+          "upload_svn_dir": [
+            "D:\\D8_CN_DEV\\gameData",
+            "D:\\D8_CN_DEV\\Client\\Assets\\StreamingAssets"
+          ]
+        },
+        {
+          "delete_unversioned": false,
+          "exclude_paths": [
+            "Assets/Code_Lua/test/test.lua",
+            "Assets/StreamingAssets/LocalVersion.xml",
+            "InstallClient.bat"
+          ],
+          "name": "Client,gameData",
+          "revert_paths": [
+            "D:\\D8_CN_DEV\\Client",
+            "D:\\D8_CN_DEV\\gameData"
+          ],
+          "type": "revert_svn"
+        },
+        {
+          "type": "merge_table",
+          "name": "腐败秘境_裂隙_迷雾_荒古",
+          "input_dir": "G:\\DGameAI\\workspace\\toolbox_core\\输出\\腐败秘境_裂隙_迷雾_荒古\\Texts.xlsm",
+          "target_dir": "D:\\D8_CN\\gameData\\Text\\Texts.xlsm",
+          "title_rows": "1",
+          "id_col": "1"
         }
       ]
     }

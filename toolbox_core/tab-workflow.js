@@ -170,9 +170,36 @@ function buildWorkflowTab(panel) {
         const d = await r.json();
         if (d.error) { bodyEl.innerHTML = '<div class="error">❌ '+escapeHtml(d.error)+'</div>'; _wfPlayDone(); return; }
         _wfPlayState[stateKey].taskId = d.task_id;
+        const _updateLogBuf = [];
+        let _updateLogTimer = null;
+        function _updateLogFlush() {
+          if (!_updateLogBuf.length) return;
+          const frag = document.createDocumentFragment();
+          for (const raw of _updateLogBuf.splice(0)) {
+            if (!raw.trim()) continue;
+            const div = document.createElement("div");
+            div.textContent = raw;
+            frag.appendChild(div);
+          }
+          bodyEl.appendChild(frag);
+        }
+        function _updateLogPush(raw) {
+          _updateLogBuf.push(raw);
+          if (!_updateLogTimer) {
+            _updateLogTimer = setInterval(function() {
+              _updateLogFlush();
+              if (!_updateLogBuf.length && _updateLogTimer) {
+                clearInterval(_updateLogTimer);
+                _updateLogTimer = null;
+              }
+            }, 80);
+          }
+        }
         const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
         evtSrc.onmessage = (e) => {
           if (e.data === "[DONE]") {
+            if (_updateLogTimer) { clearInterval(_updateLogTimer); _updateLogTimer = null; }
+            _updateLogFlush();
             evtSrc.close();
             _wfPlayDone();
             return;
@@ -180,12 +207,13 @@ function buildWorkflowTab(panel) {
           const lines = e.data.split("\n");
           for (const raw of lines) {
             if (!raw.trim()) continue;
-            const div = document.createElement("div");
-            div.textContent = raw;
-            _logAppend(bodyEl, div);
+            _updateLogPush(raw);
           }
         };
-        evtSrc.onerror = () => { evtSrc.close(); _wfPlayDone(); };
+        evtSrc.onerror = () => {
+          if (_updateLogTimer) { clearInterval(_updateLogTimer); _updateLogTimer = null; }
+          evtSrc.close(); _wfPlayDone();
+        };
       } catch(err) {
         bodyEl.innerHTML = '<div class="error">❌ 请求失败: '+escapeHtml(err.message)+'</div>';
         _wfPlayDone();

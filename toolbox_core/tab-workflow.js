@@ -157,7 +157,7 @@ function buildWorkflowTab(panel) {
       const bodyId = "wf_log_update_" + wfIdx + "_" + Date.now();
       const section = document.createElement("div");
       section.className = "wf-log-section";
-      section.innerHTML = `<div class="wf-log-section-header">${escapeHtml(wf.name)} > SVN 工作副本更新</div><div class="wf-log-body" id="${bodyId}"></div>`;
+      section.innerHTML = `<div class="wf-log-section-header">${escapeHtml(wf.name)} > SVN 工作副本更新</div><div class="wf-log-body" id="${bodyId}"><div class="log-anchor"></div></div>`;
       logContainer.appendChild(section);
       section.scrollIntoView({behavior:"smooth", block:"nearest"});
       _wfPlayState[stateKey] = {taskId: ""};
@@ -174,15 +174,13 @@ function buildWorkflowTab(panel) {
         let _updateLogTimer = null;
         function _updateLogFlush() {
           if (!_updateLogBuf.length) return;
-          const frag = document.createDocumentFragment();
           for (const raw of _updateLogBuf.splice(0)) {
             if (!raw.trim()) continue;
             const div = document.createElement("div");
             div.textContent = raw;
-            frag.appendChild(div);
+            _logAppend(bodyEl, div);
           }
-          bodyEl.appendChild(frag);
-          requestAnimationFrame(function(){ bodyEl.scrollTop = bodyEl.scrollHeight; });
+          bodyEl.scrollTop = bodyEl.scrollHeight;
         }
         function _updateLogPush(raw) {
           _updateLogBuf.push(raw);

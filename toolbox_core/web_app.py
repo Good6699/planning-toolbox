@@ -1053,7 +1053,7 @@ def _workflow_update_wc_worker(task_id, prefixes, name):
         q.put(f"共 {len(dirs)} 个目录，并行更新中...\n")
         results = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(dirs)) as executor:
-            fut_map = {executor.submit(_svn_update_with_cleanup, svn, d, _put, task_id): d for d in dirs}
+            fut_map = {executor.submit(_svn_update_with_cleanup, svn, d, _put, task_id, accept_mine=True): d for d in dirs}
             for fut in concurrent.futures.as_completed(fut_map):
                 d = fut_map[fut]
                 try:
@@ -1447,11 +1447,12 @@ def _exec_copy_files(step, put, task_id=None):
     return True
 
 
-def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
+def _svn_update_with_cleanup(svn, d, put, task_id, accept_mine=False):  # noqa: C901
     """执行 svn update，遇到 E155004/E155037 时自动 cleanup 重试一次"""
+    accept_flag = "mine-full" if accept_mine else "theirs-full"
     proc = None
     try:
-        proc = subprocess.Popen([svn, "update", "--accept", "theirs-full", d],
+        proc = subprocess.Popen([svn, "update", "--accept", accept_flag, d],
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 **_get_subprocess_kwargs())
         _register_proc(proc, task_id)
@@ -1464,6 +1465,14 @@ def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
                     line = line.strip()
                     if line:
                         put(f"  {line}\n")
+                if accept_mine:
+                    cfiles = [l[2:].strip() for l in stdout.splitlines()
+                              if l.strip().startswith("C ") and not l.strip().startswith(("C Summary","C Text","C Property"))]
+                    cfiles = [f for f in cfiles if f]
+                    if cfiles:
+                        put(f"  ⚠ 以下 {len(cfiles)} 个文件存在冲突，已自动保留本地版本:\n")
+                        for cf in cfiles:
+                            put(f"    - {cf}\n")
                 put(f"更新完成: {d}\n")
                 return True
             err = stderr.strip()
@@ -1510,7 +1519,7 @@ def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
                     _unregister_proc(cleanup_proc, task_id)
                 put("cleanup 完成，重试更新...\n")
                 retry_proc = subprocess.Popen(
-                    [svn, "update", "--accept", "theirs-full", d],
+                    [svn, "update", "--accept", accept_flag, d],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                     **_get_subprocess_kwargs())
                 _register_proc(retry_proc, task_id)
@@ -1523,6 +1532,14 @@ def _svn_update_with_cleanup(svn, d, put, task_id):  # noqa: C901
                             line = line.strip()
                             if line:
                                 put(f"  {line}\n")
+                        if accept_mine:
+                            cfiles = [l[2:].strip() for l in retry_stdout.splitlines()
+                                      if l.strip().startswith("C ") and not l.strip().startswith(("C Summary","C Text","C Property"))]
+                            cfiles = [f for f in cfiles if f]
+                            if cfiles:
+                                put(f"  ⚠ 以下 {len(cfiles)} 个文件存在冲突，已自动保留本地版本:\n")
+                                for cf in cfiles:
+                                    put(f"    - {cf}\n")
                         put(f"更新完成: {d}\n")
                         return True
                     put(f"cleanup 后更新仍失败: {d} - {retry_stderr[-200:]}\n")

@@ -157,10 +157,10 @@ function switchTab(key) {
   }
 
   // 切换页签时把日志区域滚动到底部
-  setTimeout(function(){
+  requestAnimationFrame(function(){
     var _lid = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log"}[key];
-    if (_lid) { var _le = document.getElementById(_lid); if (_le) _le.scrollTop = _le.scrollHeight; }
-  }, 200);
+    if (_lid) { var _le = document.getElementById(_lid); if (_le && _le.scrollHeight > _le.clientHeight) _le.scrollTop = _le.scrollHeight; }
+  });
 
 }
 
@@ -206,7 +206,7 @@ function buildTab(key) {
     }
     S[k].built = true;
     var _lid = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log"}[k];
-    if (_lid) { var _le = document.getElementById(_lid); if (_le) _le.scrollTop = _le.scrollHeight; }
+    if (_lid) { var _le = document.getElementById(_lid); if (_le && _le.scrollHeight > _le.clientHeight) _le.scrollTop = _le.scrollHeight; }
   }
 }
 
@@ -2964,17 +2964,6 @@ document.getElementById("close_btn")?.addEventListener("click", ()=>{
 
 });
 
-// 窗口恢复（从托盘还原）时滚动当前页签日志到底部
-window.addEventListener("focus", function(){
-  setTimeout(function(){
-    var _act = document.querySelector(".nav-btn.active");
-    if (_act) {
-      var _k = _act.dataset.key;
-      var _lid = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log"}[_k];
-      if (_lid) { var _le = document.getElementById(_lid); if (_le) _le.scrollTop = _le.scrollHeight; }
-    }
-  }, 200);
-});
 
 
 

@@ -723,13 +723,6 @@ class ResizeApi:
         self._active = False
         _save_window_rect()
 
-    def hideWindow(self):
-        if self._window:
-            try:
-                self._window.hide()
-            except Exception:
-                pass
-
     def app_ready(self):
         pass
 
@@ -1154,6 +1147,23 @@ def main():
             except Exception:
                 pass
         window.events.shown += _restore_window_size
+
+    def _scroll_log_on_show():
+        try:
+            window.evaluate_js("""
+                (function(){
+                    var k = document.querySelector('.nav-btn.active');
+                    if (!k) return;
+                    k = k.dataset.key;
+                    var m = {svn:'svn_log',merge:'merge_log',upload:'upload_log',workflow:'wf_log',translate:'tr_log',textcheck:'tc_log',prefab:'prefab_log'}[k];
+                    if (!m) return;
+                    var e = document.getElementById(m);
+                    if (e && e.scrollHeight > e.clientHeight) e.scrollTop = e.scrollHeight;
+                })()
+            """)
+        except Exception:
+            pass
+    window.events.shown += _scroll_log_on_show
 
     def _sigint_handler(signum, frame):
         os._exit(0)

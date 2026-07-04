@@ -599,6 +599,7 @@ def _show_window(icon, item=None):
     try:
         for w in webview.windows:
             w.evaluate_js("triggerUpdateCheck()")
+            w.evaluate_js("scrollLogToBottom()")
     except Exception:
         pass
     if hwnd:
@@ -1148,13 +1149,6 @@ def main():
                 pass
         window.events.shown += _restore_window_size
 
-    window.events.shown += lambda: _scroll_active_log(window)
-
-    def _scroll_active_log(w):
-        try:
-            w.evaluate_js("scrollLogToBottom()")
-        except Exception:
-            pass
 
     def _sigint_handler(signum, frame):
         os._exit(0)

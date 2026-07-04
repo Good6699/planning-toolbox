@@ -182,6 +182,7 @@ function buildWorkflowTab(panel) {
             frag.appendChild(div);
           }
           bodyEl.appendChild(frag);
+          bodyEl.scrollTop = bodyEl.scrollHeight;
         }
         function _updateLogPush(raw) {
           _updateLogBuf.push(raw);

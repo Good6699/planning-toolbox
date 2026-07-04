@@ -156,12 +156,11 @@ function switchTab(key) {
 
   }
 
-  // 每次切换页签时把日志区域滚动到底部
+  // 切换页签时把日志区域滚动到底部
   setTimeout(function(){
-    const _logIds = {svn:"svn_log", merge:"merge_log", upload:"upload_log", workflow:"wf_log", translate:"tr_log", textcheck:"tc_log", prefab:"prefab_log"};
-    const _id = _logIds[key];
-    if (_id) { const _el = document.getElementById(_id); if (_el) _el.scrollTop = _el.scrollHeight; }
-  }, 50);
+    var _lid = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log"}[key];
+    if (_lid) { var _le = document.getElementById(_lid); if (_le) _le.scrollTop = _le.scrollHeight; }
+  }, 200);
 
 }
 
@@ -206,6 +205,8 @@ function buildTab(key) {
       setTimeout(function(){_initDatePicker(k+"_start");_initDatePicker(k+"_end")}, 0);
     }
     S[k].built = true;
+    var _lid = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log"}[k];
+    if (_lid) { var _le = document.getElementById(_lid); if (_le) _le.scrollTop = _le.scrollHeight; }
   }
 }
 
@@ -2961,6 +2962,18 @@ document.getElementById("close_btn")?.addEventListener("click", ()=>{
 
   fetch("/api/close", {method:"POST"});
 
+});
+
+// 窗口恢复（从托盘还原）时滚动当前页签日志到底部
+window.addEventListener("focus", function(){
+  setTimeout(function(){
+    var _act = document.querySelector(".nav-btn.active");
+    if (_act) {
+      var _k = _act.dataset.key;
+      var _lid = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log"}[_k];
+      if (_lid) { var _le = document.getElementById(_lid); if (_le) _le.scrollTop = _le.scrollHeight; }
+    }
+  }, 200);
 });
 
 

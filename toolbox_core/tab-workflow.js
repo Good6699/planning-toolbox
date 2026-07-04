@@ -184,6 +184,7 @@ function buildWorkflowTab(panel) {
             div.textContent = raw;
             _logAppend(bodyEl, div);
           }
+          bodyEl.scrollTop = bodyEl.scrollHeight;
         };
         evtSrc.onerror = () => { evtSrc.close(); _wfPlayDone(); };
       } catch(err) {

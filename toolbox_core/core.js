@@ -2935,7 +2935,8 @@ function scrollLogToBottom() {
   var e;
   if (k === "workflow") {
     var s = document.querySelectorAll("#wf_log .wf-log-body");
-    if (s.length) e = s[s.length - 1];
+    for (var i = 0; i < s.length; i++) { if (s[i].scrollHeight > s[i].clientHeight) s[i].scrollTop = s[i].scrollHeight; }
+    return;
   } else {
     var m = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log"}[k];
     if (m) e = document.getElementById(m);

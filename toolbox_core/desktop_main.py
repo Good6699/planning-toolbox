@@ -1155,9 +1155,14 @@ def main():
                     var k = document.querySelector('.nav-btn.active');
                     if (!k) return;
                     k = k.dataset.key;
-                    var m = {svn:'svn_log',merge:'merge_log',upload:'upload_log',workflow:'wf_log',translate:'tr_log',textcheck:'tc_log',prefab:'prefab_log'}[k];
-                    if (!m) return;
-                    var e = document.getElementById(m);
+                    var e;
+                    if (k === 'workflow') {
+                        var s = document.querySelectorAll('#wf_log .wf-log-body');
+                        if (s.length) e = s[s.length - 1];
+                    } else {
+                        var m = {svn:'svn_log',merge:'merge_log',upload:'upload_log',workflow:'wf_log',translate:'tr_log',textcheck:'tc_log',prefab:'prefab_log'}[k];
+                        if (m) e = document.getElementById(m);
+                    }
                     if (e && e.scrollHeight > e.clientHeight) e.scrollTop = e.scrollHeight;
                 })()
             """)

@@ -158,8 +158,16 @@ function switchTab(key) {
 
   // 切换页签时把日志区域滚动到底部
   requestAnimationFrame(function(){
-    var _lid = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log"}[key];
-    if (_lid) { var _le = document.getElementById(_lid); if (_le && _le.scrollHeight > _le.clientHeight) _le.scrollTop = _le.scrollHeight; }
+    var _le;
+    if (key === "workflow") {
+      // workflow 日志在独立的 .wf-log-body 里
+      var _sections = document.querySelectorAll("#wf_log .wf-log-body");
+      if (_sections.length) _le = _sections[_sections.length - 1];
+    } else {
+      var _lid = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log"}[key];
+      if (_lid) _le = document.getElementById(_lid);
+    }
+    if (_le && _le.scrollHeight > _le.clientHeight) _le.scrollTop = _le.scrollHeight;
   });
 
 }
@@ -205,8 +213,13 @@ function buildTab(key) {
       setTimeout(function(){_initDatePicker(k+"_start");_initDatePicker(k+"_end")}, 0);
     }
     S[k].built = true;
-    var _lid = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log"}[k];
-    if (_lid) { var _le = document.getElementById(_lid); if (_le && _le.scrollHeight > _le.clientHeight) _le.scrollTop = _le.scrollHeight; }
+    if (k === "workflow") {
+      var _sec = document.querySelectorAll("#wf_log .wf-log-body");
+      if (_sec.length) { var _s = _sec[_sec.length - 1]; if (_s.scrollHeight > _s.clientHeight) _s.scrollTop = _s.scrollHeight; }
+    } else {
+      var _lid = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log"}[k];
+      if (_lid) { var _le = document.getElementById(_lid); if (_le && _le.scrollHeight > _le.clientHeight) _le.scrollTop = _le.scrollHeight; }
+    }
   }
 }
 

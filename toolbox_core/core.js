@@ -156,6 +156,13 @@ function switchTab(key) {
 
   }
 
+  // 每次切换页签时把日志区域滚动到底部
+  setTimeout(function(){
+    const _logIds = {svn:"svn_log", merge:"merge_log", upload:"upload_log", workflow:"wf_log", translate:"tr_log", textcheck:"tc_log", prefab:"prefab_log"};
+    const _id = _logIds[key];
+    if (_id) { const _el = document.getElementById(_id); if (_el) _el.scrollTop = _el.scrollHeight; }
+  }, 50);
+
 }
 
 function buildTab(key) {
@@ -2952,11 +2959,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
 document.getElementById("close_btn")?.addEventListener("click", ()=>{
 
-  if (window.pywebview && window.pywebview.api && window.pywebview.api.hideWindow) {
-    window.pywebview.api.hideWindow();
-  } else {
-    fetch("/api/close", {method:"POST"});
-  }
+  fetch("/api/close", {method:"POST"});
 
 });
 

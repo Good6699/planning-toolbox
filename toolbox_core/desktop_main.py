@@ -1148,27 +1148,13 @@ def main():
                 pass
         window.events.shown += _restore_window_size
 
-    def _scroll_log_on_show():
+    window.events.shown += lambda: _scroll_active_log(window)
+
+    def _scroll_active_log(w):
         try:
-            window.evaluate_js("""
-                (function(){
-                    var k = document.querySelector('.nav-btn.active');
-                    if (!k) return;
-                    k = k.dataset.key;
-                    var e;
-                    if (k === 'workflow') {
-                        var s = document.querySelectorAll('#wf_log .wf-log-body');
-                        if (s.length) e = s[s.length - 1];
-                    } else {
-                        var m = {svn:'svn_log',merge:'merge_log',upload:'upload_log',workflow:'wf_log',translate:'tr_log',textcheck:'tc_log',prefab:'prefab_log'}[k];
-                        if (m) e = document.getElementById(m);
-                    }
-                    if (e && e.scrollHeight > e.clientHeight) e.scrollTop = e.scrollHeight;
-                })()
-            """)
+            w.evaluate_js("scrollLogToBottom()")
         except Exception:
             pass
-    window.events.shown += _scroll_log_on_show
 
     def _sigint_handler(signum, frame):
         os._exit(0)

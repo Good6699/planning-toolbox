@@ -332,24 +332,43 @@ def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, 
         pass
     cat_rev = global_max_rev if global_max_rev is not None else revision
     file_url = source_url.rstrip("/") + "/" + file_path
-    try:
-        proc = subprocess.Popen(
-            [svn_exe, "cat", "-r", str(cat_rev), file_url] + auth_args,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            **_get_subprocess_kwargs()
-        )
-        stdout, stderr = proc.communicate(timeout=120)
-        if proc.returncode == 0:
-            parent = os.path.dirname(local_file)
-            if parent:
-                try:
-                    os.makedirs(parent, exist_ok=True)
-                except Exception:
-                    pass
-            with open(local_file, "wb") as f:
-                f.write(stdout)
-    except Exception:
-        return
+    for _attempt in range(2):
+        try:
+            proc = subprocess.Popen(
+                [svn_exe, "cat", "-r", str(cat_rev), file_url] + auth_args,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                **_get_subprocess_kwargs()
+            )
+            stdout, stderr = proc.communicate(timeout=120)
+            if proc.returncode == 0:
+                parent = os.path.dirname(local_file)
+                if parent:
+                    try:
+                        os.makedirs(parent, exist_ok=True)
+                    except Exception:
+                        pass
+                with open(local_file, "wb") as f:
+                    f.write(stdout)
+                break
+            else:
+                err_text = _svn_decode_output(stderr)[:200] if stderr else ("返回码 " + str(proc.returncode))
+                _log("⚠ svn cat第" + str(_attempt + 1) + "次失败 (" + str(cat_rev) + "): " + err_text, "error")
+                if _attempt == 0:
+                    _log("🔄 1秒后重试...", "info")
+                    import time
+                    time.sleep(1)
+        except subprocess.TimeoutExpired:
+            _log("❌ svn cat第" + str(_attempt + 1) + "次超时 (rev " + str(cat_rev) + ", 120s): " + file_path, "error")
+            if _attempt == 0:
+                _log("🔄 1秒后重试...", "info")
+                import time
+                time.sleep(1)
+        except Exception as e:
+            _log("❌ svn cat第" + str(_attempt + 1) + "次异常: " + str(e), "error")
+            if _attempt == 0:
+                _log("🔄 1秒后重试...", "info")
+                import time
+                time.sleep(1)
     try:
         subprocess.run(
             [svn_exe, "add", "--force", "--quiet", local_file] + auth_args,

@@ -28,6 +28,8 @@ const nav = [
 
   {key:"prefab",label:"修改预制"},
 
+  {key:"assist",label:"辅助功能"},
+
 ];
 
 nav.forEach(n => { S[n.key] = {el:null,built:false,logEl:null}; });
@@ -99,6 +101,8 @@ const tabMeta = {
   textcheck:{title:"文字表检测",sub:"Texts.xlsm 翻译质量检查 — 漏翻/占位符/标签/重复ID"},
 
   prefab:{title:"修改预制",sub:"预制文件批量修改工具"},
+
+  assist:{title:"辅助功能",sub:"一键生成meta等辅助工具"},
 
 };
 
@@ -176,9 +180,10 @@ function buildTab(key) {
     translate: "tab-translate.js",
     textcheck: "tab-textcheck.js",
     prefab: "tab-prefab.js",
+    assist: "tab-assist.js",
   };
 
-  var tabBuildFn = {svn:"buildSvnTab", merge:"buildMergeTab", upload:"buildUploadTab", workflow:"buildWorkflowTab", translate:"buildTranslateTab", textcheck:"buildTextCheckTab", prefab:"buildPrefabTab"};
+  var tabBuildFn = {svn:"buildSvnTab", merge:"buildMergeTab", upload:"buildUploadTab", workflow:"buildWorkflowTab", translate:"buildTranslateTab", textcheck:"buildTextCheckTab", prefab:"buildPrefabTab", assist:"buildAssistTab"};
   var buildFn = tabBuildFn[key];
   if (typeof window[buildFn] === "function") {
     window[buildFn](panel);
@@ -562,7 +567,7 @@ let _runningCount = 0;
 
 const _esMap = {};
 
-let _tabCount = {svn:0, merge:0, upload:0, textcheck:0, workflow:0, translate:0};
+let _tabCount = {svn:0, merge:0, upload:0, textcheck:0, workflow:0, translate:0, prefab:0, assist:0};
 
 let _wfPlayState = {};
 
@@ -612,6 +617,7 @@ const _URL_TAB = {
 
   "/api/translate/run":"translate", "/api/workflow/run":"workflow",
 
+  "/api/assist/run":"assist",
 };
 
 
@@ -2096,6 +2102,23 @@ document.addEventListener("click",e=>{
 
     }
 
+    case "assist-browse-meta": {
+      var _inp = document.getElementById("assist_meta_path");
+      if (!_inp) { _showToast("请先切换到辅助功能页签"); break; }
+      browseFile("assist_meta_path", "", "*.meta");
+      break;
+    }
+
+    case "assist-browse-folder": {
+      var _inp2 = document.getElementById("assist_folder_path");
+      if (!_inp2) { _showToast("请先切换到辅助功能页签"); break; }
+      browseDir("assist_folder_path", function() {
+        if (typeof window._assistHandleFolder === "function")
+          window._assistHandleFolder(document.getElementById("assist_folder_path").value);
+      });
+      break;
+    }
+
   }
 
 });
@@ -2740,13 +2763,13 @@ function showAlert(message, title="提示"){
 
 }
 
-async function browseFile(inputId, initialDir) {
+async function browseFile(inputId, initialDir, filter) {
 
   if (window.pywebview && pywebview.api && pywebview.api.browseFile) {
 
     try {
 
-      const path = await pywebview.api.browseFile(initialDir || "");
+      const path = await pywebview.api.browseFile(filter || initialDir || "");
 
       if (path) {
 
@@ -2768,7 +2791,7 @@ async function browseFile(inputId, initialDir) {
 
     input.type = "file";
 
-    input.accept = ".xlsx,.xls,.xlsm";
+    input.accept = filter || ".xlsx,.xls,.xlsm";
 
     input.onchange = () => {
 
@@ -2938,7 +2961,7 @@ function scrollLogToBottom() {
     for (var i = 0; i < s.length; i++) { if (s[i].scrollHeight > s[i].clientHeight) s[i].scrollTop = s[i].scrollHeight; }
     return;
   } else {
-    var m = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log"}[k];
+    var m = {svn:"svn_log",merge:"merge_log",upload:"upload_log",workflow:"wf_log",translate:"tr_log",textcheck:"tc_log",prefab:"prefab_log",assist:"assist_log"}[k];
     if (m) e = document.getElementById(m);
   }
   if (e && e.scrollHeight > e.clientHeight) e.scrollTop = e.scrollHeight;

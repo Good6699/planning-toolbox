@@ -3,11 +3,8 @@ function buildPrefabTab(panel) {
     <div class="workbench" style="display:flex;flex-direction:column;gap:12px">
       <div class="form-group" style="flex-direction:row;align-items:center;gap:12px">
         <label style="white-space:nowrap">操作模式</label>
-        <div class="cd-wrap">
-          <div class="cd-trigger" id="prefab_mode_trigger" data-value="clear-text"><span>一键清理文字</span><span class="cd-arrow"></span></div>
-          <div class="cd-menu" id="prefab_mode_menu">
-            <div class="cd-item selected" data-value="clear-text">一键清理文字</div>
-          </div>
+        <div class="toggle-group" id="prefab_mode_group">
+          <button class="toggle-btn active" data-v="clear-text">一键清理文字</button>
         </div>
       </div>
       <div class="flex-row" style="gap:8px">
@@ -94,40 +91,6 @@ function buildPrefabTab(panel) {
       }
       if (!path) return;
       startPrefabClear([path]);
-    });
-  }
-
-  // 自绘下拉菜单初始化
-  _initCustomDropdown("prefab_mode");
-
-  function _initCustomDropdown(id) {
-    var trigger = document.getElementById(id + "_trigger");
-    var menu = document.getElementById(id + "_menu");
-    var items = menu ? menu.querySelectorAll(".cd-item") : [];
-    if (!trigger || !menu) return;
-    trigger.addEventListener("click", function(e) {
-      e.stopPropagation();
-      var isOpen = menu.classList.contains("show");
-      document.querySelectorAll(".cd-menu.show").forEach(function(m){m.classList.remove("show");});
-      document.querySelectorAll(".cd-trigger.open").forEach(function(t){t.classList.remove("open");});
-      if (!isOpen) { menu.classList.add("show"); trigger.classList.add("open"); }
-    });
-    items.forEach(function(item) {
-      item.addEventListener("click", function(e) {
-        e.stopPropagation();
-        var v = this.dataset.value;
-        var txt = this.textContent;
-        trigger.dataset.value = v;
-        trigger.querySelector("span").textContent = txt;
-        items.forEach(function(x){x.classList.remove("selected");});
-        this.classList.add("selected");
-        menu.classList.remove("show");
-        trigger.classList.remove("open");
-      });
-    });
-    document.addEventListener("click", function() {
-      menu.classList.remove("show");
-      trigger.classList.remove("open");
     });
   }
 }

@@ -735,15 +735,22 @@ class ResizeApi:
             except Exception:
                 pass
 
-    def browseFile(self, directory=""):
+    def browseFile(self, filter=""):
         try:
             w = webview.windows[0]
             if w:
+                if filter and '*' in filter:
+                    name = filter.replace('*.', '').upper() + ' Files'
+                    file_types = (f'{name} ({filter})', 'All Files (*.*)')
+                    directory = ""
+                else:
+                    file_types = ('All Files (*.*)',)
+                    directory = filter
                 result = w.create_file_dialog(
                     webview.OPEN_DIALOG,
                     directory=directory,
                     allow_multiple=False,
-                    file_types=('Excel Files (*.xlsm;*.xlsx;*.xls)', 'All Files (*.*)'),
+                    file_types=file_types,
                 )
                 if result:
                     return result[0]

@@ -2187,18 +2187,9 @@ def step3_download_and_compare(svn_url: str,
         import psutil
         available_memory = psutil.virtual_memory().available / (1024 * 1024 * 1024)
         cpu_cores = psutil.cpu_count(logical=True)
-        if available_memory < 2:
-            parse_w = 1
-            workers = 1
-        elif available_memory < 4:
-            parse_w = 2
-            workers = 3
-        elif available_memory < 8:
-            parse_w = min(cpu_cores, 4)
-            workers = min(cpu_cores, 5)
-        else:
-            parse_w = min(cpu_cores, 8)
-            workers = min(cpu_cores, 10)
+        # 动态分配：解析线程 ~500MB/worker，下载线程 I/O 密集可多些
+        parse_w = max(1, min(cpu_cores, int(available_memory / 0.5)))
+        workers = max(1, min(20, int(available_memory * 2)))
         _log(f"▶ 下载 + 解析+对比（{parse_w} 解析线程 + {workers} 下载线程）...")
         _log(f"       系统资源: {cpu_cores} 核心, {available_memory:.1f}GB 可用内存")
     except ImportError:
@@ -3161,14 +3152,9 @@ def _get_optimal_workers():
         # 解析线程：CPU密集，不超过CPU核心数
         parse_workers = min(cpu_cores, max(4, cpu_cores))
         # 根据可用内存调整
-        if available_memory < 8:
-            download_workers = min(10, download_workers)
-            parse_workers = min(cpu_cores // 2, parse_workers)
-        elif available_memory < 16:
-            download_workers = min(15, download_workers)
-        # 每 1GB 内存最多 1 个 parse worker，防止大文件并发 OOM
-        mem_parse_cap = max(1, int(available_memory))
-        parse_workers = min(parse_workers, mem_parse_cap)
+        # 每 500MB 最多 1 个 parse worker，下载线程 I/O 密集可更多
+        parse_workers = max(1, min(cpu_cores, int(available_memory / 0.5)))
+        download_workers = max(2, min(20, int(available_memory * 2)))
         return download_workers, parse_workers
     except Exception:
         # psutil 不可用时，保守默认：最多 2 个 parse worker
@@ -3541,10 +3527,9 @@ def main():
                     f.write(f"{i}. 原文件: {fname}\n")
 
             # 记录修改文件
-            processed_files.sort()
             if processed_files:
                 f.write(f"\n共计 {len(processed_files)} 个修改文件:\n")
-                for i, fname in enumerate(processed_files, 1):
+                for i, fname in enumerate(sorted(processed_files), 1):
                     diff_count = len(all_file_results.get(fname, []))
                     if diff_count > 0:
                         f.write(f"{i}. 原文件: {fname}（{diff_count} 条差异）\n")

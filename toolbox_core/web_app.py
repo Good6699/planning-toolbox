@@ -2011,25 +2011,71 @@ def _exec_export_error_code(step, put, task_id=None):
 
         ok = True
 
-        put("  [" + code + "] 客户端导出(批处理链)...\n")
+        put("  [" + code + "] 客户端导出...\n")
         try:
-            r = _sp.run(
-                ["cmd", "/c", batch_file, "GameData", "ErrorMessage.xlsm"],
-                cwd=lang_path,
-                capture_output=True,
-                encoding=locale.getpreferredencoding(), errors="replace",
-                timeout=300,
-                **_get_subprocess_kwargs()
-            )
-            if r.returncode == 0:
-                std_out = (r.stdout or "").strip()
-                if std_out:
-                    for line in std_out.split("\n")[-5:]:
-                        put("    " + line.strip() + "\n")
+            import tempfile, shutil
+            proto_dir = os.path.join(lang_path, "protobuf")
+            proto_out = os.path.join(proto_dir, "proto", "out")
+            # 检测分支类型：Asia 的 __init__.py 含 from importlib import reload（Python3）
+            _py3_init = False
+            _init_py = os.path.join(proto_dir, "proto", "__init__.py")
+            if os.path.isfile(_init_py):
+                with open(_init_py, "r", encoding="utf-8", errors="replace") as _f:
+                    if "from importlib import reload" in _f.read():
+                        _py3_init = True
+            _bf = os.path.join(tempfile.gettempdir(), "_xy_export_" + str(os.getpid()) + ".bat")
+            with open(_bf, "w", newline="") as _f:
+                _f.write('@echo off\r\n')
+                _f.write(f'cd /d "{lang_path}"\r\n')
+                _f.write(f'call "{os.path.join(lang_path, "config.bat")}"\r\n')
+                _f.write(f'cd %MASTER_DATA%\r\ncd protobuf\r\n')
+                if _py3_init:
+                    # Asia：走完整工具链（make_gamedata_exe.bat 含 make_ready+ExportXlsmToPB）
+                    _f.write(f'call "{os.path.join(lang_path, "protobuf", "make_gamedata_exe.bat")}" "{xlsm_file}"\r\n')
+                else:
+                    # KR2：跳过 make_gamedata_exe.bat，避免 make_ready.bat 删额外文件
+                    _f.write('xcopy /y "proto\\*.py" "proto\\out\\" 2>nul\r\n')
+                    _f.write('xcopy /y "proto\\*.pb" "proto\\out\\" 2>nul\r\n')
+                    _f.write(f'call "%PYTHON_PATH%\\python.exe" "ExportXlsmToPB.py" "{xlsm_file}"\r\n')
+            _env = {"PATH": r"C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Python27;C:\Python27\DLLs",
+                    "COMSPEC": r"C:\Windows\System32\cmd.exe",
+                    "SYSTEMROOT": r"C:\Windows",
+                    "TEMP": tempfile.gettempdir(), "TMP": tempfile.gettempdir(),
+                    "USERPROFILE": os.environ.get("USERPROFILE", r"C:\Users\admin")}
+            r_bat = _sp.run(["cmd", "/c", _bf], capture_output=True, timeout=300, env=_env, **_get_subprocess_kwargs())
+            try:
+                os.unlink(_bf)
+            except Exception:
+                pass
+            copied = 0
+            if r_bat.returncode == 0 and os.path.isdir(proto_out):
+                proj_dir = os.path.normpath(os.path.join(lang_path, "..", "..", ".."))
+                lang_name = os.path.basename(lang_path)
+                for fn in os.listdir(proto_out):
+                    fl = fn.lower()
+                    if not os.path.isfile(os.path.join(proto_out, fn)) or fl == "base.pb" or fl.startswith("base_"):
+                        continue
+                    d = None
+                    if fl.endswith(".bin"):
+                        d = os.path.join(proj_dir, "client", "Assets", "StreamingAssets", "Language", lang_name, "BinData", "bin")
+                    elif fl.endswith(".pb"):
+                        d = os.path.join(proj_dir, "client", "Assets", "StreamingAssets", "Language", lang_name, "BinData", "pb")
+                    elif fl.endswith(".txt"):
+                        d = os.path.join(lang_path, "ExportTxt")
+                    if d:
+                        os.makedirs(d, exist_ok=True)
+                        shutil.copy2(os.path.join(proto_out, fn), os.path.join(d, fn))
+                        put("    " + fn + "\n")
+                        copied += 1
+            if copied > 0:
                 put("  [" + code + "] 客户端导出成功\n")
             else:
-                err = (r.stderr or r.stdout or "").strip()[:1000]
-                put("  [" + code + "] 客户端导出失败: " + err + "\n")
+                put("  [" + code + "] 客户端导出失败\n")
+                if r_bat.returncode != 0:
+                    _err = (r_bat.stderr or r_bat.stdout or b"").decode("gbk", errors="replace").strip()[:2000]
+                    put("  [" + code + "] 错误:\n")
+                    for _l in _err.split("\n"):
+                        put("    |" + _l.rstrip() + "\n")
                 ok = False
         except Exception as e:
             put("  [" + code + "] 客户端导出异常: " + str(e) + "\n")

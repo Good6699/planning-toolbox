@@ -2944,7 +2944,7 @@ def api_translate_run():  # noqa: C901
                 if ref_parts:
                     user_parts.append("\n".join(ref_parts))
 
-            numbered = [f"{i+1}|{t.replace(chr(13), ' ').replace(chr(10), ' ')}" for i, t in enumerate(texts)]
+            numbered = [f"{i+1}|{t.replace(chr(10), '{N}').replace(chr(13), '{R}')}" for i, t in enumerate(texts)]
             user_parts.append(
                 f"请将以下文本从 {clean_src} 一次性翻译为 {lang_display}。"
                 f"\n严格按照编号和分隔符格式返回，每行一条："
@@ -2992,7 +2992,7 @@ def api_translate_run():  # noqa: C901
                                     row_result = {}
                                     for ti, tgt in enumerate(tgt_names):
                                         if ti < len(parts) and parts[ti]:
-                                            row_result[tgt] = parts[ti]
+                                            row_result[tgt] = parts[ti].replace("{R}", "\r").replace("{N}", "\n")
                                     results[idx] = row_result
                         return results
                     elif resp.status_code == 429:

@@ -129,7 +129,7 @@ function runTranslate() {
     prompt:document.getElementById("tr_prompt").value.trim(),
     batch_size:parseInt(document.getElementById("tr_batch").value)||20
   };
-  saveConfig({tr_api_url:body.api_url,tr_model:body.model,tr_src_lang:body.src_lang,tr_out_dir:body.out_dir,tr_prompt:body.prompt,tr_batch_size:body.batch_size,api_key:apiKey});
+  saveConfig({tr_api_url:body.api_url,tr_model:body.model,tr_src_lang:body.src_lang,tr_out_dir:body.out_dir,tr_prompt:body.prompt,tr_batch_size:body.batch_size,tr_api_key:apiKey});
   runTask("/api/translate/run", body, document.querySelector("[data-action='run-translate']"), "tr_log");
 }
 function openTrLangAdvSettings() {

@@ -995,6 +995,8 @@ def _run_wf_task(q, wf, steps, task_id):
                 ok = _exec_revert_svn(step, _put, task_id)
             elif stype == "copy_files":
                 ok = _exec_copy_files(step, _put, task_id)
+            elif stype == "merge_error_code":
+                ok = _exec_merge_error_code(step, _put, task_id)
             else:
                 _line(f"未知步骤类型: {stype}", "error")
                 ok = False
@@ -1595,6 +1597,93 @@ def _get_svn_cached_user():
     except Exception:
         pass
     return None
+
+
+def _merge_error_code_resolve_lang(path):
+    """从路径中自动找到 gameData\\Language 目录"""
+    path = os.path.abspath(path)
+    if path.endswith("Language") and os.path.isdir(path):
+        return path
+    test = os.path.join(path, "Language")
+    if os.path.isdir(test):
+        return test
+    test = os.path.join(path, "gameData", "Language")
+    if os.path.isdir(test):
+        return test
+    return None
+
+
+def _exec_merge_error_code(step, put, task_id=None):
+    """整合错误码：复制每个语言目录的 Data2\\ErrorMessage.xlsm"""
+    src_path = step.get("src_path", "").strip()
+    tgt_path = step.get("tgt_path", "").strip()
+    if not src_path:
+        put("未指定源路径\n"); return False
+    if not tgt_path:
+        put("未指定目标路径\n"); return False
+
+    put(f"{'='*50}\n")
+    put("整合错误码\n")
+    put(f"源路径: {src_path}\n")
+    put(f"目标路径: {tgt_path}\n\n")
+
+    src_lang = _merge_error_code_resolve_lang(src_path)
+    if not src_lang:
+        put("无法在源路径找到 gameData\\Language 目录\n"); return False
+    tgt_lang = _merge_error_code_resolve_lang(tgt_path)
+    if not tgt_lang:
+        put("无法在目标路径找到 gameData\\Language 目录\n"); return False
+
+    put(f"源 Language: {src_lang}\n")
+    put(f"目标 Language: {tgt_lang}\n\n")
+
+    # 更新来源和目标 SVN 目录
+    svn = _get_svn_path()
+    src_gamedata = os.path.dirname(src_lang)
+    tgt_gamedata = os.path.dirname(tgt_lang)
+    tgt_base = os.path.dirname(tgt_gamedata)
+    tgt_streaming = os.path.join(tgt_base, "Client", "Assets", "StreamingAssets")
+
+    for label, d in [("来源 gameData", src_gamedata), ("目标 gameData", tgt_gamedata),
+                     ("目标 StreamingAssets", tgt_streaming)]:
+        if os.path.isdir(d):
+            put(f"正在更新 {label}: {d}\n")
+            _svn_update_with_cleanup(svn, d, put, task_id)
+        else:
+            put(f"路径不存在，跳过更新 {label}: {d}\n")
+
+    # 遍历源语言目录，复制 ErrorMessage.xlsm
+    put("\n开始复制...\n")
+    copied = 0
+    for code in sorted(os.listdir(src_lang)):
+        src_sub = os.path.join(src_lang, code)
+        if not os.path.isdir(src_sub):
+            continue
+        src_file = os.path.join(src_sub, "Data2", "ErrorMessage.xlsm")
+        if not os.path.isfile(src_file):
+            continue
+        tgt_sub = os.path.join(tgt_lang, code)
+        tgt_file = os.path.join(tgt_sub, "Data2", "ErrorMessage.xlsm")
+        try:
+            os.makedirs(os.path.dirname(tgt_file), exist_ok=True)
+            _copy2_force(src_file, tgt_file)
+            put(f"  ✓ [{code}] ErrorMessage.xlsm\n")
+            copied += 1
+        except Exception as e:
+            put(f"  ✗ [{code}] 复制失败: {e}\n")
+
+    put(f"\n共复制 {copied} 个文件\n")
+
+    # 打开 TortoiseSVN 提交对话框
+    upload_dirs = []
+    for d in [tgt_gamedata, tgt_streaming]:
+        if os.path.isdir(d):
+            upload_dirs.append(d)
+    if upload_dirs:
+        put("\n打开提交对话框...\n")
+        _exec_upload_svn({"dirs": upload_dirs}, put, task_id)
+
+    return copied > 0
 
 
 def _exec_lock_svn(step, put, task_id=None):

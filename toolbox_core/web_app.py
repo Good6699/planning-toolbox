@@ -1678,15 +1678,19 @@ def _exec_merge_error_code(step, put, task_id=None):
         put("没有需要导出的文件\n")
         return True
 
-    # 收集被复制的语言代码
-    codes = []
-    for code in sorted(os.listdir(tgt_lang)):
-        tgt_sub = os.path.join(tgt_lang, code)
-        if os.path.isdir(tgt_sub) and os.path.isfile(os.path.join(tgt_sub, "Data2", "ErrorMessage.xlsm")):
-            codes.append(code)
+    # 语言代码：优先用设置的，否则自动从目录识别
+    raw_codes = (step.get("lang_codes") or "").strip()
+    if raw_codes:
+        codes = [c.strip() for c in raw_codes.split(",") if c.strip()]
+        put(f"使用指定的语言代码: {', '.join(codes)}\n")
+    else:
+        codes = []
+        for code in sorted(os.listdir(tgt_lang)):
+            tgt_sub = os.path.join(tgt_lang, code)
+            if os.path.isdir(tgt_sub) and os.path.isfile(os.path.join(tgt_sub, "Data2", "ErrorMessage.xlsm")):
+                codes.append(code)
+        put(f"自动识别语言: {', '.join(codes)}\n")
 
-    # 复用导出错误码逻辑（导出.erl/.hrl + 客户端文件，完成后自动弹出提交）
-    put(f"\n已复制 ErrorMessage.xlsm 的语言: {', '.join(codes)}\n")
     put("开始执行导出错误码流程...\n\n")
     export_ok = _exec_export_error_code({
         "root_dir": tgt_gamedata,

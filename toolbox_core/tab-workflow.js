@@ -420,7 +420,8 @@ function buildWorkflowTab(panel) {
         ${_fb("目标目录","tgt_dir","wf_m_cf_tgt","dir")}`,
       merge_error_code: `
         ${_fb("源路径","src_path","wf_m_mec_src","dir")}
-        ${_fb("目标路径","tgt_path","wf_m_mec_tgt","dir")}`,
+        ${_fb("目标路径","tgt_path","wf_m_mec_tgt","dir")}
+        <div class="form-group"><label>语言代码（留空自动识别）</label><input type="text" class="wf-modal-input" id="wf_m_mec_lang" data-key="lang_codes" value="${v("lang_codes")}" placeholder="如: ZH_CN, KO_KR"></div>`,
     };
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
   }

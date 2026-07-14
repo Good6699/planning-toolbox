@@ -315,7 +315,7 @@ def _svn_revert_file(svn_exe, local_file):
         return False
 
 
-def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args, global_max_rev=None):
+def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, auth_args, global_max_rev=None, log_callback=None):
     """用源版本完整替换本地文件（最后手段）
 
     先 resolve 清除树冲突，再 svn cat 下载覆盖写入。
@@ -352,21 +352,21 @@ def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, 
                 break
             else:
                 err_text = _svn_decode_output(stderr)[:200] if stderr else ("返回码 " + str(proc.returncode))
-                _log("⚠ svn cat第" + str(_attempt + 1) + "次失败 (" + str(cat_rev) + "): " + err_text, "error")
+                log_callback("⚠ svn cat第" + str(_attempt + 1) + "次失败 (" + str(cat_rev) + "): " + err_text, "error")
                 if _attempt == 0:
-                    _log("🔄 1秒后重试...", "info")
+                    log_callback("🔄 1秒后重试...", "info")
                     import time
                     time.sleep(1)
         except subprocess.TimeoutExpired:
-            _log("❌ svn cat第" + str(_attempt + 1) + "次超时 (rev " + str(cat_rev) + ", 120s): " + file_path, "error")
+            log_callback("❌ svn cat第" + str(_attempt + 1) + "次超时 (rev " + str(cat_rev) + ", 120s): " + file_path, "error")
             if _attempt == 0:
-                _log("🔄 1秒后重试...", "info")
+                log_callback("🔄 1秒后重试...", "info")
                 import time
                 time.sleep(1)
         except Exception as e:
-            _log("❌ svn cat第" + str(_attempt + 1) + "次异常: " + str(e), "error")
+            log_callback("❌ svn cat第" + str(_attempt + 1) + "次异常: " + str(e), "error")
             if _attempt == 0:
-                _log("🔄 1秒后重试...", "info")
+                log_callback("🔄 1秒后重试...", "info")
                 import time
                 time.sleep(1)
     try:
@@ -486,7 +486,7 @@ def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
         _log(f"  ❌ 超时: {file_path}", "error")
         return 0, 0, 1, []
     _log(f"  ⚠ 合并失败，直接源版本覆盖: {file_path}", "warn")
-    _svn_resolve_conflict(svn_exe, source_url, latest_rev, file_path, local_file, auth_args, global_max_rev)
+    _svn_resolve_conflict(svn_exe, source_url, latest_rev, file_path, local_file, auth_args, global_max_rev, log_callback=_log)
     return 0, 1, 0, [file_path]
 
 

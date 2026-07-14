@@ -1674,16 +1674,27 @@ def _exec_merge_error_code(step, put, task_id=None):
 
     put(f"\n共复制 {copied} 个文件\n")
 
-    # 打开 TortoiseSVN 提交对话框
-    upload_dirs = []
-    for d in [tgt_gamedata, tgt_streaming]:
-        if os.path.isdir(d):
-            upload_dirs.append(d)
-    if upload_dirs:
-        put("\n打开提交对话框...\n")
-        _exec_upload_svn({"dirs": upload_dirs}, put, task_id)
+    if copied == 0:
+        put("没有需要导出的文件\n")
+        return True
 
-    return copied > 0
+    # 收集被复制的语言代码
+    codes = []
+    for code in sorted(os.listdir(tgt_lang)):
+        tgt_sub = os.path.join(tgt_lang, code)
+        if os.path.isdir(tgt_sub) and os.path.isfile(os.path.join(tgt_sub, "Data2", "ErrorMessage.xlsm")):
+            codes.append(code)
+
+    # 复用导出错误码逻辑（导出.erl/.hrl + 客户端文件，完成后自动弹出提交）
+    put(f"\n已复制 ErrorMessage.xlsm 的语言: {', '.join(codes)}\n")
+    put("开始执行导出错误码流程...\n\n")
+    export_ok = _exec_export_error_code({
+        "root_dir": tgt_gamedata,
+        "lang_codes": ",".join(codes),
+        "upload_svn_dir": [tgt_gamedata, tgt_streaming],
+    }, put, task_id)
+
+    return export_ok
 
 
 def _exec_lock_svn(step, put, task_id=None):

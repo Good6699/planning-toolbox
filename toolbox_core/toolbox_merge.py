@@ -5,6 +5,7 @@ AI SVN精准文件合并 — 后端逻辑模块
 功能：SVN日志查询、变更文件分析、文件级精准合并、冲突自动解决、唤起提交弹窗
 """
 import os
+import stat
 import sys
 import subprocess
 import xml.etree.ElementTree as ET
@@ -347,6 +348,10 @@ def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, 
                         os.makedirs(parent, exist_ok=True)
                     except Exception:
                         pass
+                try:
+                    os.chmod(local_file, stat.S_IWRITE | stat.S_IREAD)
+                except Exception:
+                    pass
                 with open(local_file, "wb") as f:
                     f.write(stdout)
                 break

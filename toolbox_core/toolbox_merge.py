@@ -413,9 +413,21 @@ def _svn_merge_single_file(svn_exe, cmd, log_callback):
         except UnicodeDecodeError:
             stdout = stdout_bytes.decode("utf-8", errors="replace")
         if proc.returncode != 0:
+            safe_cmd = []
+            hide_next = False
+            for part in cmd:
+                if hide_next:
+                    safe_cmd.append("***")
+                    hide_next = False
+                    continue
+                safe_cmd.append(str(part))
+                if str(part).lower() == "--password":
+                    hide_next = True
+            detail = stdout.strip() or "输出为空"
+            detail = "svn merge 返回码: " + str(proc.returncode) + "\n命令: " + " ".join(safe_cmd) + "\n" + detail
             if "E155010" in stdout:
-                return "e155010", stdout
-            return "error", stdout
+                return "e155010", detail
+            return "error", detail
         conflict_output = stdout.strip().lower()
         if "conflict" in conflict_output or "合并冲突" in conflict_output:
             return "conflict", stdout

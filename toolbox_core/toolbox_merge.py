@@ -488,6 +488,11 @@ def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
     if status == "timeout":
         _log(f"  ❌ 超时: {file_path}", "error")
         return 0, 0, 1, []
+    if out_text:
+        detail = out_text.strip()
+        if len(detail) > 1200:
+            detail = detail[:1200] + "..."
+        _log(f"  ❌ svn merge 失败详情:\n{detail}", "error")
     _log(f"  ⚠ 合并失败，直接源版本覆盖: {file_path}", "warn")
     _svn_resolve_conflict(svn_exe, source_url, latest_rev, file_path, local_file, auth_args, global_max_rev, log_callback=_log)
     return 0, 1, 0, [file_path]

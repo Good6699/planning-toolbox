@@ -137,65 +137,30 @@ function buildWorkflowTab(panel) {
       if (!wf || !wf.steps) return;
       const prefixes = _wfDetectPrefixes(wf.steps);
       if (!prefixes.length) { _showToast("未检测到需更新的路径前缀"); return; }
-      const stateKey = "update_" + wfIdx;
-      if (_wfPlayState[stateKey]) { _showToast("该工作流正在更新中"); return; }
       const logContainer = document.getElementById("wf_log");
-      // 清理已完成的工作流日志
-      logContainer.querySelectorAll(".wf-log-section").forEach(sec => {
-        const bodyEl = sec.querySelector(".wf-log-body");
-        if (bodyEl?.id) {
-          let done = false;
-          let m = bodyEl.id.match(/^wf_log_step_(\d+)_(\d+)_/);
-          if (m) { done = !_wfPlayState["step_" + m[1] + "_" + m[2]]; }
-          else {
-            m = bodyEl.id.match(/^wf_log_update_(\d+)_/);
-            if (m) { done = !_wfPlayState["update_" + m[1]]; }
-          }
-          if (done) sec.remove();
-        }
-      });
       const bodyId = "wf_log_update_" + wfIdx + "_" + Date.now();
       const section = document.createElement("div");
       section.className = "wf-log-section";
       section.innerHTML = `<div class="wf-log-section-header">${escapeHtml(wf.name)} > SVN 工作副本更新</div><div class="wf-log-body" id="${bodyId}"><div class="log-anchor"></div></div>`;
       logContainer.appendChild(section);
       section.scrollIntoView({behavior:"smooth", block:"nearest"});
-      _wfPlayState[stateKey] = {taskId: ""};
-      _updateWfDot(wfIdx);
-      _incRunning();
-      _incTabRunning("workflow");
       const bodyEl = document.getElementById(bodyId);
       try {
-        const r = await fetch("/api/workflow/update-wc", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prefixes, name: wf.name})});
+        const r = await fetch("/api/workflow/open-update-wc", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prefixes, name: wf.name})});
         const d = await r.json();
-        if (d.error) { bodyEl.innerHTML = '<div class="error">❌ '+escapeHtml(d.error)+'</div>'; _wfPlayDone(); return; }
-        _wfPlayState[stateKey].taskId = d.task_id;
-        const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
-        evtSrc.onmessage = (e) => {
-          if (e.data === "[DONE]") {
-            evtSrc.close();
-            _wfPlayDone();
-            return;
-          }
-          const lines = e.data.split("\n");
-          for (const raw of lines) {
-            if (!raw.trim()) continue;
-            const div = document.createElement("div");
-            div.textContent = raw;
-            _logAppend(bodyEl, div);
-          }
-          bodyEl.scrollTop = bodyEl.scrollHeight;
-        };
-        evtSrc.onerror = () => { evtSrc.close(); _wfPlayDone(); };
+        if (d.error) { bodyEl.innerHTML = '<div class="error">❌ '+escapeHtml(d.error)+'</div>'; return; }
+        d.opened.forEach(path => {
+          const div = document.createElement("div");
+          div.textContent = "已打开 TortoiseSVN 更新窗口: " + path;
+          _logAppend(bodyEl, div);
+        });
+        (d.missing || []).forEach(path => {
+          const div = document.createElement("div");
+          div.textContent = "跳过不存在目录: " + path;
+          _logAppend(bodyEl, div);
+        });
       } catch(err) {
         bodyEl.innerHTML = '<div class="error">❌ 请求失败: '+escapeHtml(err.message)+'</div>';
-        _wfPlayDone();
-      }
-      function _wfPlayDone() {
-        delete _wfPlayState[stateKey];
-        _updateWfDot(wfIdx);
-        _decRunning();
-        _decTabRunning("workflow");
       }
     });
     const addItem = el.querySelector(".wf-add-step-item");

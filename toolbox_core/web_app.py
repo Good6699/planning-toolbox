@@ -1016,6 +1016,33 @@ def _run_wf_task(q, wf, steps, task_id):
     _log_queues.pop(task_id, None)
 
 
+@app.route("/api/workflow/open-update-wc", methods=["POST"])
+def api_workflow_open_update_wc():
+    data = request.get_json(force=True)
+    prefixes = data.get("prefixes", [])
+    if not prefixes:
+        return jsonify({"error": "未提供路径前缀"}), 400
+
+    tortoise = _get_tortoise_proc_path()
+    if not tortoise:
+        return jsonify({"error": "未找到 TortoiseSVN，请安装后重试"}), 400
+
+    opened = []
+    missing = []
+    for prefix in prefixes:
+        for subdir in ["Client", "gameData"]:
+            d = os.path.join(prefix, subdir)
+            if os.path.isdir(d):
+                subprocess.Popen([tortoise, "/command:update", "/path:" + d])
+                opened.append(d)
+            else:
+                missing.append(d)
+
+    if not opened:
+        return jsonify({"error": "未找到可更新的 Client 或 gameData 目录", "missing": missing}), 400
+    return jsonify({"opened": opened, "missing": missing})
+
+
 @app.route("/api/workflow/update-wc", methods=["POST"])
 def api_workflow_update_wc():
     data = request.get_json(force=True)

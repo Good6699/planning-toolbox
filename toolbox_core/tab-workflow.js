@@ -138,6 +138,19 @@ function buildWorkflowTab(panel) {
       const prefixes = _wfDetectPrefixes(wf.steps);
       if (!prefixes.length) { _showToast("未检测到需更新的路径前缀"); return; }
       const logContainer = document.getElementById("wf_log");
+      logContainer.querySelectorAll(".wf-log-section").forEach(sec => {
+        const bodyEl = sec.querySelector(".wf-log-body");
+        if (bodyEl?.id) {
+          let done = false;
+          let m = bodyEl.id.match(/^wf_log_step_(\d+)_(\d+)_/);
+          if (m) { done = !_wfPlayState["step_" + m[1] + "_" + m[2]]; }
+          else {
+            m = bodyEl.id.match(/^wf_log_update_(\d+)_/);
+            if (m) { done = true; }
+          }
+          if (done) sec.remove();
+        }
+      });
       const bodyId = "wf_log_update_" + wfIdx + "_" + Date.now();
       const section = document.createElement("div");
       section.className = "wf-log-section";

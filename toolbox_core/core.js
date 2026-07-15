@@ -573,7 +573,9 @@ let _wfPlayState = {};
 
 function _updateWfDot(wfIdx) {
 
-  const dot = document.querySelector(`.wf-status-dot[data-idx="${wfIdx}"] span`);
+  const parent = document.querySelector(`.wf-parent[data-idx="${wfIdx}"]`);
+
+  const dot = parent?.querySelector(".wf-status-dot span");
 
   if (!dot) return;
 

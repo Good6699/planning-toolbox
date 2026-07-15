@@ -707,7 +707,11 @@ function buildWorkflowTab(panel) {
       const newOrder = [...document.querySelectorAll("#wf_tree > .wf-parent")].map(el => Number(el.dataset.idx));
       config.workflows = newOrder.map(i => config.workflows[i]);
       saveConfig({workflows:config.workflows});
-      document.querySelectorAll("#wf_tree > .wf-parent").forEach((el, i) => { el.dataset.idx = i; });
+      document.querySelectorAll("#wf_tree > .wf-parent").forEach((el, i) => {
+        el.dataset.idx = i;
+        const dot = el.querySelector(".wf-status-dot");
+        if (dot) dot.dataset.idx = i;
+      });
     },
   }));
 

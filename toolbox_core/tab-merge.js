@@ -136,9 +136,10 @@ function buildMergeTab(panel) {
     </div>
   `;
   S.merge.logEl = document.getElementById("merge_log");
-  const savedSource = config.svn_urls?.[0] || "";
+  const svnUrlHistory = getSvnUrlHistory();
+  const savedSource = isSvnUrl(config.merge_source_current) ? config.merge_source_current : (svnUrlHistory[0] || "");
   if (savedSource) document.getElementById("merge_source").value = savedSource;
-  initSuggest("merge_source", config.svn_urls||[]);
+  initSuggest("merge_source", svnUrlHistory);
   const savedTarget = config.merge_target_history?.[0] || "";
   if (savedTarget) document.getElementById("merge_target").value = savedTarget;
   initSuggest("merge_target", config.merge_target_history||[]);
@@ -299,13 +300,16 @@ function buildMergeTab(panel) {
   });
   document.getElementById("merge_source").addEventListener("blur", async ()=>{
     const val = document.getElementById("merge_source").value.trim();
-    if (val && val.startsWith("http") && !(config.svn_urls||[]).includes(val)) {
-      saveConfig({svn_urls:[val, ...(config.svn_urls||[])].slice(0,20)});
-      config.svn_urls = [val, ...(config.svn_urls||[])].slice(0,20);
-      initSuggest("merge_source", config.svn_urls);
+    if (val && !isSvnUrl(val)) {
+      document.getElementById("merge_source").value = "";
+      _showToast("已过滤非 SVN 链接");
+      return;
+    }
+    if (val && isSvnUrl(val)) {
+      saveSvnUrlValue("merge_source", val);
     }
     // 自动解析 SVN URL 到本地路径并填入目标路径
-    if (val && val.startsWith("http") && !document.getElementById("merge_target").value.trim()) {
+    if (val && isSvnUrl(val) && !document.getElementById("merge_target").value.trim()) {
       try {
         const r = await fetch("/api/svn/resolve-url", {
           method:"POST", headers:{"Content-Type":"application/json"},
@@ -542,6 +546,7 @@ async function runMergeQuery() {
   const startDate = document.getElementById("merge_start").value;
   const endDate = document.getElementById("merge_end").value;
   if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
+  if (!isSvnUrl(sourceUrl)) { _showToast("请输入有效的 SVN 链接"); return; }
   if (!targetPath) { _showToast("请输入目标本地工作副本路径"); return; }
   const btn = document.getElementById("merge_query_btn");
   btn.dataset.orig = btn.dataset.orig || btn.textContent;
@@ -557,9 +562,7 @@ async function runMergeQuery() {
       author: document.getElementById("merge_author").value.trim() || "",
       keyword: document.getElementById("merge_keyword").value.trim() || "",
     };
-    saveConfig({svn_urls:[sourceUrl, ...(config.svn_urls||[]).filter(u=>u!==sourceUrl)].slice(0,20)});
-    config.svn_urls = [sourceUrl, ...(config.svn_urls||[]).filter(u=>u!==sourceUrl)].slice(0,20);
-    initSuggest("merge_source", config.svn_urls);
+    saveSvnUrlValue("merge_source", sourceUrl);
     const r = await fetch("/api/merge/query", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await r.json();
     if (d.error) { _showToast(d.error); _focusAppOnError("merge", logEl); _decRunning(); _decTabRunning("merge"); return; }

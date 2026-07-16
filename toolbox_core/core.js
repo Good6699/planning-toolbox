@@ -369,13 +369,15 @@ function buildSvnTab(panel) {
 
   `;
 
-  initSuggest("svn_url", config.svn_urls||[]);
+  const svnUrlHistory = getSvnUrlHistory();
+
+  initSuggest("svn_url", svnUrlHistory);
 
   enablePathDrop("svn_url", { mode: "svn" });
 
   enablePathDrop("svn_output", { mode: "path" });
 
-  if (config.svn_urls?.length) document.getElementById("svn_url").value = config.svn_urls[0];
+  document.getElementById("svn_url").value = isSvnUrl(config.svn_url_current) ? config.svn_url_current : (svnUrlHistory[0] || "");
 
   document.getElementById("svn_url").addEventListener("keydown",e=>{
 
@@ -383,13 +385,9 @@ function buildSvnTab(panel) {
 
       const val = e.target.value.trim();
 
-      if (val && val.startsWith("http")) {
+      if (val && isSvnUrl(val)) {
 
-        saveConfig({svn_urls: [val, ...(config.svn_urls||[]).filter(u=>u!==val)].slice(0,20)});
-
-        config.svn_urls = [val, ...(config.svn_urls||[]).filter(u=>u!==val)].slice(0,20);
-
-        initSuggest("svn_url", config.svn_urls);
+        saveSvnUrlValue("svn_url", val);
 
       }
 
@@ -405,13 +403,19 @@ function buildSvnTab(panel) {
 
     const val = document.getElementById("svn_url").value.trim();
 
-    if (val && val.startsWith("http") && !config.svn_urls.includes(val)) {
+    if (val && !isSvnUrl(val)) {
 
-      saveConfig({svn_urls: [val, ...(config.svn_urls||[])].slice(0,20)});
+      document.getElementById("svn_url").value = "";
 
-      config.svn_urls = [val, ...(config.svn_urls||[])].slice(0,20);
+      _showToast("已过滤非 SVN 链接");
 
-      initSuggest("svn_url", config.svn_urls);
+      return;
+
+    }
+
+    if (val && isSvnUrl(val)) {
+
+      saveSvnUrlValue("svn_url", val);
 
     }
 
@@ -489,11 +493,21 @@ function runSvn() {
 
   };
 
+  if (!isSvnUrl(body.svn_url)) {
+
+    _showToast("请输入有效的 SVN 链接");
+
+    return;
+
+  }
+
   const out = body.output;
 
   const kw = body.keyword;
 
   const au = body.author;
+
+  const svnHist = isSvnUrl(body.svn_url) ? [body.svn_url, ...getSvnUrlHistory().filter(u=>u!==body.svn_url)].slice(0,20) : getSvnUrlHistory();
 
   saveConfig({
 
@@ -501,7 +515,9 @@ function runSvn() {
 
     output_dir_history: [out, ...(config.output_dir_history||[]).filter(u=>u!==out)].slice(0,10),
 
-    svn_urls: [body.svn_url, ...(config.svn_urls||[]).filter(u=>u!==body.svn_url)].slice(0,20),
+    svn_url_current: body.svn_url,
+
+    svn_urls: svnHist,
 
     svn_keyword_history: kw && !(config.svn_keyword_history||[]).includes(kw) ? [kw, ...(config.svn_keyword_history||[])].slice(0,20) : config.svn_keyword_history,
 
@@ -509,7 +525,9 @@ function runSvn() {
 
   });
 
-  config.svn_urls = [body.svn_url, ...(config.svn_urls||[]).filter(u=>u!==body.svn_url)].slice(0,20);
+  config.svn_url_current = body.svn_url;
+
+  config.svn_urls = svnHist;
 
   if (kw && !(config.svn_keyword_history||[]).includes(kw)) config.svn_keyword_history = [kw, ...(config.svn_keyword_history||[])].slice(0,20);
 
@@ -1857,12 +1875,7 @@ document.addEventListener("click",e=>{
           .then(r=>r.json()).then(d=>{
             if (d.ok) {
               document.getElementById("merge_source").value = d.url;
-              const urls = config.svn_urls || [];
-              if (!urls.includes(d.url)) {
-                saveConfig({svn_urls:[d.url, ...urls].slice(0,20)});
-                config.svn_urls = [d.url, ...urls].slice(0,20);
-                initSuggest("merge_source", config.svn_urls);
-              }
+              saveSvnUrlValue("merge_source", d.url);
             }
           });
       }, _msDir);
@@ -2315,6 +2328,42 @@ let _activeInputId = null;
 
 let _portal = null;
 
+function isSvnUrl(val) {
+
+  const s = (val || "").trim().toLowerCase();
+
+  return s.startsWith("svn://") || ((s.startsWith("http://") || s.startsWith("https://")) && s.includes("/svn/"));
+
+}
+
+function getSvnUrlHistory() {
+
+  return (config.svn_urls || []).filter(isSvnUrl);
+
+}
+
+function saveSvnUrlValue(inputId, val) {
+
+  if (!isSvnUrl(val)) return;
+
+  const key = inputId === "merge_source" ? "merge_source_current" : "svn_url_current";
+
+  const hist = [val, ...getSvnUrlHistory().filter(u => u !== val)].slice(0, 20);
+
+  config[key] = val;
+
+  config.svn_urls = hist;
+
+  saveConfig({[key]: val, svn_urls: hist});
+
+  ["svn_url", "merge_source"].forEach(id => {
+
+    if (document.getElementById(id)) initSuggest(id, hist);
+
+  });
+
+}
+
 function _getPortal() {
 
   if (!_portal) {
@@ -2333,9 +2382,7 @@ function _getPortal() {
 
 function initSuggest(inputId, items) {
 
-  if (!items.length) return;
-
-  _suggests[inputId] = { items };
+  _suggests[inputId] = { items: items || [] };
 
 }
 
@@ -2403,7 +2450,15 @@ function _selectSuggest(val) {
 
     inp.dispatchEvent(new Event("input", {bubbles:true}));
 
-    const _configMap = {svn_url:"svn_urls",merge_source:"svn_urls",svn_keyword:"svn_keyword_history",svn_author:"svn_author_history",svn_output:"output_dir_history",upload_src:"src_dir_history",upload_tgt:"tgt_dir_history",tr_src:"tr_src_history",tr_ref:"tr_ref_history",tr_out:"tr_out_dir",merge_target:"merge_target_history",merge_author:"svn_author_history",merge_keyword:"svn_keyword_history"};
+    if (_activeInputId === "svn_url" || _activeInputId === "merge_source") {
+
+      saveSvnUrlValue(_activeInputId, val);
+
+      return _hideSuggest();
+
+    }
+
+    const _configMap = {svn_keyword:"svn_keyword_history",svn_author:"svn_author_history",svn_output:"output_dir_history",upload_src:"src_dir_history",upload_tgt:"tgt_dir_history",tr_src:"tr_src_history",tr_ref:"tr_ref_history",tr_out:"tr_out_dir",merge_target:"merge_target_history",merge_author:"svn_author_history",merge_keyword:"svn_keyword_history"};
 
     const ck = _configMap[_activeInputId];
 
@@ -2639,15 +2694,21 @@ function onSvnUrlPicked() {
 
         input.value = d.url;
 
+        const svnHist = [d.url, ...getSvnUrlHistory().filter(u=>u!==d.url)].slice(0,20);
+
         saveConfig({
 
-          svn_urls: [d.url, ...(config.svn_urls||[]).filter(u=>u!==d.url)].slice(0,20),
+          svn_url_current: d.url,
+
+          svn_urls: svnHist,
 
           output_dir_history: [path, ...(config.output_dir_history||[]).filter(v=>v!==path)].slice(0,10)
 
         });
 
-        config.svn_urls = [d.url, ...(config.svn_urls||[]).filter(u=>u!==d.url)].slice(0,20);
+        config.svn_url_current = d.url;
+
+        config.svn_urls = svnHist;
 
         config.output_dir_history = [path, ...(config.output_dir_history||[]).filter(v=>v!==path)].slice(0,10);
 

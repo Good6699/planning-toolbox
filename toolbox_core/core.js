@@ -425,13 +425,17 @@ function buildSvnTab(panel) {
 
     const val = document.getElementById("svn_output").value.trim();
 
-    if (val && !config.output_dir_history.includes(val)) {
+    if (val) {
 
-      saveConfig({output_dir_history: [val, ...(config.output_dir_history||[])].slice(0,10)});
+      const hist = [val, ...(config.output_dir_history||[]).filter(u=>u!==val)].slice(0,10);
 
-      config.output_dir_history = [val, ...(config.output_dir_history||[])].slice(0,10);
+      saveConfig({output_dir: val, output_dir_history: hist});
 
-      initSuggest("svn_output", config.output_dir_history);
+      config.output_dir = val;
+
+      config.output_dir_history = hist;
+
+      initSuggest("svn_output", hist);
 
     }
 
@@ -1788,7 +1792,15 @@ document.addEventListener("click",e=>{
 
       const _so = document.getElementById("svn_output").value.trim();
 
-      browseDir("svn_output", null, _so || "");
+      browseDir("svn_output", () => {
+        const val = document.getElementById("svn_output").value.trim();
+        if (!val) return;
+        const hist = [val, ...(config.output_dir_history||[]).filter(u=>u!==val)].slice(0,10);
+        saveConfig({output_dir: val, output_dir_history: hist});
+        config.output_dir = val;
+        config.output_dir_history = hist;
+        initSuggest("svn_output", hist);
+      }, _so || "");
 
       break;
 

@@ -25,7 +25,7 @@ function buildWorkflowTab(panel) {
                   <div class="wf-child" data-step="${j}">
                     <input type="checkbox" class="wf-child-check">
                     <span class="wf-child-type ${s.type}">${typeIcon[s.type]||''} ${typeCn[s.type]||s.type}</span>
-                    <span class="wf-child-name">${escapeHtml(s.name)}</span>
+                    <span class="wf-child-name" title="点击修改名称">${escapeHtml(s.name)}</span>
                     <button class="wf-step-play-btn" title="执行本步骤">${_WF_ICONS.play}</button>
                     <button class="wf-settings-btn" title="步骤设置">${_WF_ICONS.settings}</button>
                     <button class="wf-child-del-btn" title="删除步骤">✕</button>
@@ -311,7 +311,7 @@ function buildWorkflowTab(panel) {
       step[inp.dataset.key] = inp.checked;
     });
     const autoName = _wfAutoName(step);
-    if (autoName) step.name = autoName;
+    if (!step.custom_name && autoName) step.name = autoName;
     saveConfig({workflows:config.workflows});
     overlay.classList.remove("show");
     _modalCtx = null;
@@ -343,7 +343,7 @@ function buildWorkflowTab(panel) {
       step[inp.dataset.key] = inp.checked;
     });
     const autoName = _wfAutoName(step);
-    if (autoName) step.name = autoName;
+    if (!step.custom_name && autoName) step.name = autoName;
     saveConfig({workflows:config.workflows});
     _wfSaving = false;
     const childEl = document.querySelector(`.wf-parent[data-idx="${wfIdx}"] .wf-child[data-step="${stepIdx}"] .wf-child-name`);
@@ -577,6 +577,45 @@ function buildWorkflowTab(panel) {
       const wfIdx = Number(parent.dataset.idx);
       const stepIdx = [...parent.querySelector(".wf-children").children].indexOf(child);
       _wfModalOpen(wfIdx, stepIdx);
+    });
+  });
+  panel.querySelectorAll(".wf-child-name").forEach(nameEl => {
+    nameEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (nameEl.querySelector("input")) return;
+      const child = nameEl.closest(".wf-child");
+      const parent = nameEl.closest(".wf-parent");
+      if (!child || !parent) return;
+      const wfIdx = Number(parent.dataset.idx);
+      const stepIdx = [...parent.querySelector(".wf-children").children].indexOf(child);
+      const step = config.workflows[wfIdx]?.steps?.[stepIdx];
+      if (!step) return;
+      const currentName = step.name || "";
+      const input = document.createElement("input");
+      input.className = "wf-name-input";
+      input.value = currentName;
+      nameEl.textContent = "";
+      nameEl.appendChild(input);
+      input.focus();
+      input.select();
+      let finished = false;
+      const finish = (save) => {
+        if (finished) return;
+        finished = true;
+        const val = input.value.trim();
+        if (save && val && config.workflows[wfIdx]?.steps?.[stepIdx]) {
+          config.workflows[wfIdx].steps[stepIdx].name = val;
+          config.workflows[wfIdx].steps[stepIdx].custom_name = true;
+          saveConfig({workflows:config.workflows});
+        }
+        const nextStep = config.workflows[wfIdx]?.steps?.[stepIdx];
+        nameEl.textContent = nextStep?.name || currentName;
+      };
+      input.addEventListener("blur", () => finish(true));
+      input.addEventListener("keydown", (ke) => {
+        if (ke.key === "Enter") { ke.preventDefault(); input.blur(); }
+        if (ke.key === "Escape") { ke.preventDefault(); finish(false); }
+      });
     });
   });
   panel.querySelectorAll(".wf-child-del-btn").forEach(btn => {

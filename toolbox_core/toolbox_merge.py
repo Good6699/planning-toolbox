@@ -397,6 +397,7 @@ def _svn_merge_single_file(svn_exe, cmd, log_callback):
       "ok"       — 合并成功，无冲突
       "conflict" — 合并成功但有冲突（已自动消解）
       "e155010"  — 找不到节点（文件未跟踪）
+      "tree_working" — tree conflict 只能 accept working
       "error"    — 其他错误
       "timeout"  — 超时
     """
@@ -427,6 +428,8 @@ def _svn_merge_single_file(svn_exe, cmd, log_callback):
             detail = "svn merge 返回码: " + str(proc.returncode) + "\n命令: " + " ".join(safe_cmd) + "\n" + detail
             if "E155010" in stdout:
                 return "e155010", detail
+            if "E155027" in stdout or "Tree conflict can only be resolved to 'working'" in stdout:
+                return "tree_working", detail
             return "error", detail
         conflict_output = stdout.strip().lower()
         if "conflict" in conflict_output or "合并冲突" in conflict_output:
@@ -497,6 +500,29 @@ def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
             _log(f"  ✅ 新增文件: {file_path}", "ok")
             return 1, 0, 0, []
         return 0, 1, 0, [file_path]
+    if status == "tree_working":
+        if out_text:
+            detail = out_text.strip()
+            if len(detail) > 1200:
+                detail = detail[:1200] + "..."
+            _log(f"  ⚠ tree conflict 需按 working 解决:\n{detail}", "warn")
+        rr = subprocess.run(
+            [svn_exe, "resolve", "--accept", "working", local_file] + auth_args,
+            capture_output=True, timeout=30,
+            **_get_subprocess_kwargs()
+        )
+        if rr.returncode != 0:
+            _log(f"  ⚠ tree conflict resolve 返回码 {rr.returncode}: {file_path}", "warn")
+        st = subprocess.run(
+            [svn_exe, "status", local_file] + auth_args,
+            capture_output=True, timeout=30,
+            **_get_subprocess_kwargs()
+        )
+        status_text = st.stdout.decode("utf-8", errors="replace") if st.stdout else ""
+        if rr.returncode == 0 and not any(line.startswith("C") for line in status_text.splitlines()):
+            _log(f"  ✅ tree conflict 已按 working 状态解决: {file_path}", "ok")
+            return 1, 0, 0, []
+        _log(f"  ⚠ tree conflict resolve 后仍有冲突: {file_path}", "warn")
     if status == "timeout":
         _log(f"  ❌ 超时: {file_path}", "error")
         return 0, 0, 1, []

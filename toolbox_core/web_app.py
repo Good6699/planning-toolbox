@@ -4008,7 +4008,8 @@ def api_log_stream(task_id):
                     if line is None:
                         yield "data: [DONE]\n\n"
                         break
-                    yield f"data: {line}\n\n"
+                    text = str(line).replace("\r\n", "\n").replace("\r", "\n")
+                    yield "".join(f"data: {part}\n" for part in text.split("\n")) + "\n"
                 except queue.Empty:
                     yield "data: \n\n"
         finally:

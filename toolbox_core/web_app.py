@@ -201,6 +201,8 @@ def api_get_config():
     cfg = load_config()
     safe = {
         "svn_urls": cfg.get("svn_urls", []),
+        "svn_url_current": cfg.get("svn_url_current", ""),
+        "merge_source_current": cfg.get("merge_source_current", ""),
         "src_dir_history": cfg.get("src_dir_history", []),
         "tgt_dir_history": cfg.get("tgt_dir_history", []),
         "tr_src_history": cfg.get("tr_src_history", []),

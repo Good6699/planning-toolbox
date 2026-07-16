@@ -25,7 +25,7 @@ function buildWorkflowTab(panel) {
                   <div class="wf-child" data-step="${j}">
                     <input type="checkbox" class="wf-child-check">
                     <span class="wf-child-type ${s.type}">${typeIcon[s.type]||''} ${typeCn[s.type]||s.type}</span>
-                    <span class="wf-child-name" title="点击修改名称">${escapeHtml(s.name)}</span>
+                    <span class="wf-child-name" title="双击修改名称">${escapeHtml(s.name)}</span>
                     <button class="wf-step-play-btn" title="执行本步骤">${_WF_ICONS.play}</button>
                     <button class="wf-settings-btn" title="步骤设置">${_WF_ICONS.settings}</button>
                     <button class="wf-child-del-btn" title="删除步骤">✕</button>
@@ -580,7 +580,7 @@ function buildWorkflowTab(panel) {
     });
   });
   panel.querySelectorAll(".wf-child-name").forEach(nameEl => {
-    nameEl.addEventListener("click", (e) => {
+    nameEl.addEventListener("dblclick", (e) => {
       e.stopPropagation();
       if (nameEl.querySelector("input")) return;
       const child = nameEl.closest(".wf-child");

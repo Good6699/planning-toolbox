@@ -2532,6 +2532,140 @@ def _exec_merge_translation(step, put, task_id=None):  # noqa: C901
         return False
 
 
+def _protect_tw_text(text):
+    placeholders = {}
+
+    def hold(match):
+        key = "{P" + str(len(placeholders)) + "}"
+        placeholders[key] = match.group(0)
+        return key
+
+    protected = re.sub(r"(<[^>]*>|\[[^\]\r\n]*\]|\{\d+\}|%[sdif])", hold, text)
+    out = []
+    i = 0
+    n = len(protected)
+    while i < n:
+        ch = protected[i]
+        if ch == "\r":
+            out.append("{R}")
+            i += 1
+        elif ch == "\n":
+            out.append("{N}")
+            i += 1
+        elif ch == "\t":
+            out.append("{T}")
+            i += 1
+        elif ch == " ":
+            j = i
+            while j < n and protected[j] == " ":
+                j += 1
+            run = j - i
+            if i == 0 or j == n or run > 1:
+                out.append("{S}" * run)
+            else:
+                out.append(" ")
+            i = j
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out), placeholders
+
+
+def _restore_tw_text(text, placeholders):
+    restored = (text.replace("{R}", "\r")
+                    .replace("{N}", "\n")
+                    .replace("{T}", "\t")
+                    .replace("{S}", " "))
+    for key, val in placeholders.items():
+        restored = restored.replace(key, val)
+    return restored
+
+
+def _ai_convert_to_tw(texts, cfg, put):
+    api_url = (cfg.get("tr_api_url") or "").strip()
+    api_key = (cfg.get("tr_api_key") or "").strip()
+    model = (cfg.get("tr_model") or "").strip() or "gpt-4o-mini"
+    if not api_url or not api_key:
+        put("  ⚠ 未配置翻译 API，跳过 ::TW:: AI繁体转换\n")
+        return None
+
+    import requests
+    protected_items = [_protect_tw_text(t) for t in texts]
+    numbered = [str(i + 1) + "|" + item[0] for i, item in enumerate(protected_items)]
+    messages = [
+        {"role": "system", "content": "你是简体中文转繁体中文工具。只做简体到繁体转换，不翻译、不解释、不改变格式、标签、占位符和换行。"},
+        {"role": "user", "content": "请将以下文本转换为繁体中文。严格按格式返回：编号|繁体文本。文本中的 {R}、{N}、{T}、{S}、{P数字} 是格式占位符，必须原样保留。\n\n" + "\n".join(numbered)}
+    ]
+    payload = {"model": model, "messages": messages, "temperature": 0.1, "max_tokens": 4096 + len(texts) * 200}
+    headers = {"Authorization": "Bearer " + api_key, "Content-Type": "application/json"}
+    try:
+        resp = requests.post(api_url, headers=headers, json=payload, timeout=300)
+        if resp.status_code != 200:
+            put("  ⚠ ::TW:: AI繁体转换失败: API返回 " + str(resp.status_code) + "\n")
+            return None
+        raw = resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        put("  ⚠ ::TW:: AI繁体转换异常: " + str(e) + "\n")
+        return None
+
+    results = [None] * len(texts)
+    for line in raw.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        m = re.match(r"^\s*(\d+)\s*[|.:、]\s*(.*)", line)
+        if not m:
+            continue
+        idx = int(m.group(1)) - 1
+        if 0 <= idx < len(texts):
+            results[idx] = _restore_tw_text(m.group(2), protected_items[idx][1])
+    return results
+
+
+def _apply_ai_tw_conversion(wb_tgt, source_ids_by_sheet, title_rows, id_col, cfg, put):
+    if not source_ids_by_sheet:
+        return
+    items = []
+    for sn, source_ids in source_ids_by_sheet.items():
+        if sn not in wb_tgt.sheetnames:
+            continue
+        ws = wb_tgt[sn]
+        sc_col = tw_col = None
+        for col in range(1, ws.max_column + 1):
+            h = ws.cell(row=title_rows, column=col).value
+            h_str = str(h).strip() if h is not None else ""
+            if h_str == "::SC::":
+                sc_col = col
+            elif h_str == "::TW::":
+                tw_col = col
+        if not sc_col or not tw_col:
+            continue
+        for row in range(title_rows + 1, ws.max_row + 1):
+            id_val = ws.cell(row=row, column=id_col).value
+            if id_val is None or str(id_val).strip() not in source_ids:
+                continue
+            sc_val = ws.cell(row=row, column=sc_col).value
+            if sc_val is None or not str(sc_val).strip():
+                continue
+            items.append((ws, row, tw_col, str(sc_val)))
+    if not items:
+        return
+
+    put("  正在 AI 转换 ::TW:: 繁体: " + str(len(items)) + " 行\n")
+    batch_size = int(cfg.get("tr_batch_size") or 20)
+    converted = 0
+    for start in range(0, len(items), batch_size):
+        batch = items[start:start + batch_size]
+        results = _ai_convert_to_tw([item[3] for item in batch], cfg, put)
+        if results is None:
+            continue
+        for (ws, row, tw_col, _), val in zip(batch, results):
+            if val:
+                ws.cell(row=row, column=tw_col).value = val
+                converted += 1
+    put("  ::TW:: AI繁体转换完成: " + str(converted) + "/" + str(len(items)) + " 行\n")
+
+
 def _exec_merge_table(step, put, task_id=None):
     from toolbox_config import load_config
     cfg = load_config()
@@ -2656,6 +2790,7 @@ def _exec_merge_table(step, put, task_id=None):
 
         input_count = 0
         processed_dup_logged = False
+        source_ids_by_sheet = {}
 
         for inp_sn in wb_in.sheetnames:
             ws_in = wb_in[inp_sn]
@@ -2687,9 +2822,11 @@ def _exec_merge_table(step, put, task_id=None):
                     if tgt_sn not in wb_tgt.sheetnames:
                         continue
                     ws_tgt = wb_tgt[tgt_sn]
-                    added, updated = _merge_sheet_rows(
+                    added, updated, source_ids = _merge_sheet_rows(
                         ws_in, ws_tgt, rows, title_rows, id_col, dup_ids, put)
                     input_count += added
+                    if source_ids:
+                        source_ids_by_sheet.setdefault(tgt_sn, set()).update(source_ids)
                 continue
 
             ws_tgt = wb_tgt[tgt_sn]
@@ -2699,10 +2836,13 @@ def _exec_merge_table(step, put, task_id=None):
                 if op_val is not None and str(op_val).strip() == "删除":
                     continue
                 all_rows.append(r)
-            added, updated = _merge_sheet_rows(
+            added, updated, source_ids = _merge_sheet_rows(
                 ws_in, ws_tgt, all_rows, title_rows, id_col, dup_ids, put)
             input_count += added
+            if source_ids:
+                source_ids_by_sheet.setdefault(tgt_sn, set()).update(source_ids)
 
+        _apply_ai_tw_conversion(wb_tgt, source_ids_by_sheet, title_rows, id_col, cfg, put)
         wb_in.close()
         wb_tgt.save(target_path)
         # 用 Excel/WPS COM 重写文件，修复 openpyxl 兼容性问题
@@ -2736,7 +2876,7 @@ def _exec_merge_table(step, put, task_id=None):
 
 
 def _merge_sheet_rows(ws_in, ws_tgt, inp_rows, title_rows, id_col, dup_ids, put):
-    """按 ID 合并 sheet：更新现有行、追加新增行。返回 (added, updated)
+    """按 ID 合并 sheet：更新现有行、追加新增行。返回 (added, updated, source_ids)
     
     对齐 Tkinter 旧版逻辑：
     - ID 列按列头文字匹配
@@ -2746,11 +2886,11 @@ def _merge_sheet_rows(ws_in, ws_tgt, inp_rows, title_rows, id_col, dup_ids, put)
     - dup_ids: 跨 sheet 重复的 ID 集合，用于日志标注 """
     id_col_num = id_col
     if id_col_num > ws_tgt.max_column:
-        return 0, 0
+        return 0, 0, set()
 
     tgt_id_header = str(ws_tgt.cell(row=title_rows, column=id_col_num).value or "").strip()
     if not tgt_id_header:
-        return 0, 0
+        return 0, 0, set()
 
     inp_id_col = None
     for col in range(1, ws_in.max_column + 1):
@@ -2759,7 +2899,7 @@ def _merge_sheet_rows(ws_in, ws_tgt, inp_rows, title_rows, id_col, dup_ids, put)
             inp_id_col = col
             break
     if inp_id_col is None:
-        return 0, 0
+        return 0, 0, set()
 
     # ── 查找连续数据区 ──
     last_continuous_id_row = title_rows
@@ -2791,6 +2931,7 @@ def _merge_sheet_rows(ws_in, ws_tgt, inp_rows, title_rows, id_col, dup_ids, put)
                 tgt_id_map[key] = r
 
     updated = 0
+    source_ids = set()
     new_rows_data = []  # 待插入行的 (inp_id, col_data) 列表
 
     for inp_r in inp_rows:
@@ -2800,6 +2941,7 @@ def _merge_sheet_rows(ws_in, ws_tgt, inp_rows, title_rows, id_col, dup_ids, put)
         inp_id = str(inp_id_val).strip()
         if not inp_id or inp_id in ("::ID::", "ID"):
             continue
+        source_ids.add(inp_id)
 
         # 读取输入行数据，按 (列头, 出现次数) 为 key（从列 2 开始，列 1 为 ID）
         inp_hdr_count = {}
@@ -2869,7 +3011,7 @@ def _merge_sheet_rows(ws_in, ws_tgt, inp_rows, title_rows, id_col, dup_ids, put)
 
     if added > 0 or updated > 0:
         put(f"    {ws_in.title}: 新增 {added} 行, 更新 {updated} 行\n")
-    return added, updated
+    return added, updated, source_ids
 
 
 # ═══════════════════════════════════════════════════════════

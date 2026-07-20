@@ -37,6 +37,13 @@ def _build_svn_auth_args(svn_user, svn_pass):
     return args
 
 
+def _svn_decode_output(data):
+    try:
+        return data.decode("gbk")
+    except UnicodeDecodeError:
+        return data.decode("utf-8", errors="replace")
+
+
 def _run_svn(cmd, timeout=120):
     svn_exe = _get_svn_path()
     full_cmd = [svn_exe] + cmd
@@ -78,9 +85,9 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
     if author:
         cmd += ["--search", author]
     keywords_list = [k.strip() for k in keyword.split(",")] if keyword else []
-    if len(keywords_list) == 1:
+    if len(keywords_list) == 1 and not author:
         cmd += ["--search", keywords_list[0]]
-    # multiple keywords: no --search, fetch all and filter Python-side later
+    # author + keyword must be AND; SVN --search is OR, so keyword is filtered Python-side when author exists
     if verbose:
         cmd += ["--verbose"]
     cmd += _build_svn_auth_args(svn_user, svn_pass)
@@ -112,7 +119,7 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
             versions.append(v)
     except ET.ParseError:
         pass
-    if len(keywords_list) > 1:
+    if len(keywords_list) > 1 or (author and keywords_list):
         versions = [v for v in versions if any(kw in v.get("msg", "") for kw in keywords_list)]
     return versions
 

@@ -14,7 +14,7 @@ function buildWorkflowTab(panel) {
               <div class="wf-parent-header">
                 <span class="wf-arrow">▶</span>
                 <input type="checkbox" class="wf-parent-check">
-                <span class="wf-parent-name">${escapeHtml(wf.name)}&nbsp;&nbsp;<span style="color:var(--dim);font-weight:400">${(wf.steps||[]).filter(Boolean).length}步骤</span><span class="wf-edit-icon"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5L10.5 3.5"/><path d="M2 10L3.5 6.5L8.5 1.5L10.5 3.5L5.5 8.5L2 10Z"/></svg></span></span>
+                <span class="wf-parent-name">${escapeHtml(wf.name)}<span class="wf-edit-icon"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5L10.5 3.5"/><path d="M2 10L3.5 6.5L8.5 1.5L10.5 3.5L5.5 8.5L2 10Z"/></svg></span></span>
                 <span class="wf-status-dot" data-idx="${i}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green,#4caf50);margin:0 4px"></span></span>
                 <button class="wf-update-btn" title="更新SVN工作副本"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7a5 5 0 019.9-1"/><path d="M12 7a5 5 0 01-9.9 1"/><path d="M12 2v4h-4"/><path d="M2 12V8h4"/></svg></button>
                 <button class="wf-copy-btn" title="复制工作流"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M10 4H11V11.5C11 12.328 10.328 13 9.5 13H3.5C2.672 13 2 12.328 2 11.5V5C2 4.172 2.672 3.5 3.5 3.5H4" stroke="currentColor" stroke-width="1.2"/></svg></button>
@@ -272,7 +272,7 @@ function buildWorkflowTab(panel) {
           saveConfig({workflows:config.workflows});
         }
         if (config.workflows[wfIdx]) {
-          nameSpan.innerHTML = `${escapeHtml(config.workflows[wfIdx].name)}&nbsp;&nbsp;<span style="color:var(--dim);font-weight:400">${(config.workflows[wfIdx].steps||[]).length}步骤</span><span class="wf-edit-icon"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5L10.5 3.5"/><path d="M2 10L3.5 6.5L8.5 1.5L10.5 3.5L5.5 8.5L2 10Z"/></svg></span>`;
+          nameSpan.innerHTML = `${escapeHtml(config.workflows[wfIdx].name)}<span class="wf-edit-icon"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5L10.5 3.5"/><path d="M2 10L3.5 6.5L8.5 1.5L10.5 3.5L5.5 8.5L2 10Z"/></svg></span>`;
         }
       };
       input.addEventListener("blur", () => finish(true));

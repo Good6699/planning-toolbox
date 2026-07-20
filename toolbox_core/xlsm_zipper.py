@@ -33,19 +33,36 @@ def _looks_like_excel_number(s):
 
 
 def _vbs_val(val):
-    """Serialize a Python value to VBScript literal, safe for VBS string rules."""
+    """Serialize a Python value to VBScript expression, preserving whitespace."""
     if val is None:
         return "Empty"
     if isinstance(val, bool):
         return "True" if val else "False"
     if isinstance(val, (int, float)):
         return str(val)
-    s = str(val)
-    s = s.replace('"', '""')
-    s = "".join(ch if ord(ch) >= 32 or ord(ch) == 9 else " " for ch in s)
-    while "  " in s:
-        s = s.replace("  ", " ")
-    return '"' + s.strip() + '"'
+
+    parts = []
+    buf = []
+
+    def flush_buf():
+        if buf:
+            parts.append('"' + ''.join(buf).replace('"', '""') + '"')
+            buf.clear()
+
+    for ch in str(val):
+        if ch == "\r":
+            flush_buf()
+            parts.append("vbCr")
+        elif ch == "\n":
+            flush_buf()
+            parts.append("vbLf")
+        elif ch == "\t":
+            flush_buf()
+            parts.append("vbTab")
+        else:
+            buf.append(ch)
+    flush_buf()
+    return " & ".join(parts) if parts else '""'
 
 
 def apply_via_excel(filepath, sheet_ops_list):
@@ -96,7 +113,7 @@ def apply_via_excel(filepath, sheet_ops_list):
         for row, col, val in ops.get("updates", []):
             if isinstance(val, str) and _looks_like_excel_number(val):
                 lines.append('ws.Cells(' + str(row) + ', ' + str(col) + ').NumberFormat = "@"')
-                lines.append('ws.Cells(' + str(row) + ', ' + str(col) + ').Value = "' + "'" + val.replace('"', '""') + '"')
+                lines.append('ws.Cells(' + str(row) + ', ' + str(col) + ').Value = ' + _vbs_val("'" + val))
             else:
                 lines.append('ws.Cells(' + str(row) + ', ' + str(col) + ').Value = ' + _vbs_val(val))
 
@@ -114,7 +131,7 @@ def apply_via_excel(filepath, sheet_ops_list):
                 val = col_data[col]
                 if isinstance(val, str) and _looks_like_excel_number(val):
                     lines.append('ws.Cells(' + str(new_row) + ', ' + str(col) + ').NumberFormat = "@"')
-                    lines.append('ws.Cells(' + str(new_row) + ', ' + str(col) + ').Value = "' + "'" + val.replace('"', '""') + '"')
+                    lines.append('ws.Cells(' + str(new_row) + ', ' + str(col) + ').Value = ' + _vbs_val("'" + val))
                 else:
                     lines.append('ws.Cells(' + str(new_row) + ', ' + str(col) + ').Value = ' + _vbs_val(val))
 

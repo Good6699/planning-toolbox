@@ -3034,6 +3034,112 @@ def api_translate_run():  # noqa: C901
         prompt = (prompt_template or "请将以下文本从{src_lang}翻译为{tgt_lang}，保持格式不变")
         system_prompt = prompt.replace("{src_lang}", clean_src).replace("{tgt_lang}", lang_display)
 
+        def _protect_translate_text(text):
+            placeholders = {}
+
+            def hold(match):
+                key = "{P" + str(len(placeholders)) + "}"
+                placeholders[key] = match.group(0)
+                return key
+
+            protected = _re.sub(r"(<[^>]*>|\[[^\]\r\n]*\]|\{\d+\}|%[sdif])", hold, text)
+            out = []
+            i = 0
+            n = len(protected)
+            while i < n:
+                ch = protected[i]
+                if ch == "\r":
+                    out.append("{R}")
+                    i += 1
+                elif ch == "\n":
+                    out.append("{N}")
+                    i += 1
+                elif ch == "\t":
+                    out.append("{T}")
+                    i += 1
+                elif ch == " ":
+                    j = i
+                    while j < n and protected[j] == " ":
+                        j += 1
+                    run = j - i
+                    if i == 0 or j == n or run > 1:
+                        out.append("{S}" * run)
+                    else:
+                        out.append(" ")
+                    i = j
+                else:
+                    out.append(ch)
+                    i += 1
+            return "".join(out), placeholders
+
+        def _restore_translate_text(text, placeholders=None):
+            restored = (text.replace("{R}", "\r")
+                            .replace("{N}", "\n")
+                            .replace("{T}", "\t")
+                            .replace("{S}", " "))
+            if placeholders:
+                for key, val in placeholders.items():
+                    restored = restored.replace(key, val)
+            return restored
+
+        def _number_format_rule(lang):
+            rules = {
+                "英语": (",", "."), "英文": (",", "."),
+                "俄语": ("", ","), "俄文": ("", ","),
+                "法语": (" ", ","), "法文": (" ", ","),
+                "德语": (".", ","), "德文": (".", ","),
+                "葡萄牙语": (".", ","), "葡萄牙文": (".", ","),
+                "西班牙语": (",", "."), "西班牙文": (",", "."),
+                "土耳其语": (".", ","), "土耳其文": (".", ","),
+            }
+            return rules.get(_clean(lang))
+
+        def _format_number_token(token, thousands_sep, decimal_sep):
+            compact = token.replace(" ", "")
+            dot_pos = compact.rfind(".")
+            comma_pos = compact.rfind(",")
+            sep_pos = max(dot_pos, comma_pos)
+            frac = None
+            head = compact
+            if sep_pos > 0:
+                tail = compact[sep_pos + 1:]
+                before = compact[:sep_pos]
+                if tail.isdigit() and 1 <= len(tail) <= 2 and any(ch.isdigit() for ch in before):
+                    head = before
+                    frac = tail
+            digits = _re.sub(r"[., ]", "", head)
+            if not digits.isdigit():
+                return token
+            if len(digits) < 4 and frac is None:
+                return token
+            if thousands_sep:
+                groups = []
+                while len(digits) > 3:
+                    groups.insert(0, digits[-3:])
+                    digits = digits[:-3]
+                groups.insert(0, digits)
+                out = thousands_sep.join(groups)
+            else:
+                out = digits
+            if frac is not None:
+                out += decimal_sep + frac
+            return out
+
+        def _format_numbers_for_lang(text, lang):
+            rule = _number_format_rule(lang)
+            if not rule:
+                return text
+            thousands_sep, decimal_sep = rule
+            protected_re = _re.compile(r"(<[^>]*>|\[[^\]]*\]|\{\d+\}|%[sdif])")
+            number_re = _re.compile(r"(?<![\w])\d[\d., ]*\d|(?<![\w])\d(?![\w])")
+            parts = protected_re.split(text)
+            for i in range(0, len(parts), 2):
+                parts[i] = number_re.sub(
+                    lambda m: _format_number_token(m.group(0), thousands_sep, decimal_sep),
+                    parts[i]
+                )
+            return "".join(parts)
+
         def _load_ref(tgt_lang_name):
             refs = {}
             if not ref_path or not os.path.isfile(ref_path):
@@ -3077,12 +3183,15 @@ def api_translate_run():  # noqa: C901
                 if ref_parts:
                     user_parts.append("\n".join(ref_parts))
 
-            numbered = [f"{i+1}|{t.replace(chr(10), '{N}').replace(chr(13), '{R}')}" for i, t in enumerate(texts)]
+            protected_items = [_protect_translate_text(t) for t in texts]
+            numbered = [f"{i+1}|{item[0]}" for i, item in enumerate(protected_items)]
+            placeholder_maps = [item[1] for item in protected_items]
             user_parts.append(
                 f"请将以下文本从 {clean_src} 一次性翻译为 {lang_display}。"
                 f"\n严格按照编号和分隔符格式返回，每行一条："
                 f"\n编号|翻译1|翻译2|翻译3..."
                 f"\n不要包含任何额外说明、解释或空行。"
+                f"\n文本中的 {{R}}、{{N}}、{{T}}、{{S}}、{{P数字}} 是格式占位符，必须原样保留。"
                 f"\n\n待翻译文本：\n" + "\n".join(numbered)
             )
 
@@ -3121,11 +3230,12 @@ def api_translate_run():  # noqa: C901
                             if m:
                                 idx = int(m.group(1)) - 1
                                 if 0 <= idx < len(texts):
-                                    parts = [p.strip() for p in m.group(2).split("|")]
+                                    parts = m.group(2).split("|")
                                     row_result = {}
                                     for ti, tgt in enumerate(tgt_names):
                                         if ti < len(parts) and parts[ti]:
-                                            row_result[tgt] = parts[ti].replace("{R}", "\r").replace("{N}", "\n")
+                                            restored = _restore_translate_text(parts[ti], placeholder_maps[idx])
+                                            row_result[tgt] = _format_numbers_for_lang(restored, tgt)
                                     results[idx] = row_result
                         return results
                     elif resp.status_code == 429:
@@ -3196,7 +3306,8 @@ def api_translate_run():  # noqa: C901
                 src_val = vals[src_col - 1]
                 if src_val is None or not str(src_val).strip():
                     continue
-                src_text = str(src_val).strip()
+                src_text = str(src_val)
+                src_key = src_text.strip()
 
                 missing_targets = set()
                 for tgt_name, tgt_col in tgt_col_map.items():
@@ -3204,7 +3315,7 @@ def api_translate_run():  # noqa: C901
                     if tgt_val and str(tgt_val).strip():
                         continue
                     if not has_raw:
-                        ref_val = all_refs.get(tgt_name, {}).get(src_text)
+                        ref_val = all_refs.get(tgt_name, {}).get(src_key)
                         if ref_val:
                             ws.cell(row=ri, column=tgt_col, value=ref_val)
                             ref_matched += 1

@@ -6,9 +6,9 @@ graphify_quick.py — 策划工具箱知识图谱一键构建
   python graphify_quick.py --no-viz    # 跳过 HTML 生成
   python graphify_quick.py --full --no-viz
 """
-import json, sys, time, argparse
+import json, sys, time, argparse, hashlib, os
 from pathlib import Path
-from graphify.detect import detect, detect_incremental, save_manifest
+from graphify.detect import detect, save_manifest, load_manifest, classify_file, FileType
 from graphify.extract import collect_files, extract as ast_extract
 from graphify.cache import check_semantic_cache, save_semantic_cache
 from graphify.build import build_from_json
@@ -21,6 +21,144 @@ import networkx as nx
 
 OUT = Path('graphify-out')
 OUT.mkdir(exist_ok=True)
+
+QUICK_DIRS = [
+    'templates',
+    'toolbox_core',
+    'skills',
+    '.trae/skills',
+    '.trae/rules',
+    '.workbuddy/memory',
+    '自动学习',
+]
+QUICK_ROOT_FILES = {'AGENT.md', 'MEMORY.md', 'TOOLS.md', 'USER.md', 'CLAUDE.md'}
+QUICK_ROOT_EXTS = {'.py', '.js', '.html', '.css', '.bat', '.ps1'}
+EXCLUDE_DIRS = {
+    'graphify-out', '.git', '.svn', '__pycache__', '.pytest_cache', '.mypy_cache',
+    '.ruff_cache', 'node_modules', '.venv', 'venv', 'dist', 'build', 'release',
+}
+EXCLUDE_SUFFIXES = {
+    '.pyc', '.log', '.exe', '.zip', '.7z', '.png', '.jpg', '.jpeg', '.gif', '.webp',
+    '.bmp', '.svg', '.mp4', '.mov', '.avi', '.xlsx', '.xlsm', '.xls', '.pdf',
+}
+EXCLUDE_PREFIXES = ('_test', '_debug', '_tmp')
+EXCLUDE_CONTAINS = ('_out.', '_err.')
+
+def is_quick_excluded(path: Path) -> bool:
+    parts = set(path.parts)
+    if parts & EXCLUDE_DIRS:
+        return True
+    name = path.name
+    lower = name.lower()
+    stem = path.stem.lower()
+    if path.suffix.lower() in EXCLUDE_SUFFIXES:
+        return True
+    if stem.startswith(EXCLUDE_PREFIXES):
+        return True
+    if any(x in lower for x in EXCLUDE_CONTAINS):
+        return True
+    return False
+
+def quick_scan_files(root: Path) -> dict[str, list[str]]:
+    root = root.resolve()
+    files = {ft.value: [] for ft in FileType}
+    candidates: list[Path] = []
+
+    for rel in QUICK_DIRS:
+        base = root / rel
+        if not base.exists():
+            continue
+        if base.is_file():
+            candidates.append(base)
+            continue
+        for dirpath, dirnames, filenames in os.walk(base):
+            dp = Path(dirpath)
+            dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS and not is_quick_excluded(dp / d)]
+            for fname in filenames:
+                candidates.append(dp / fname)
+
+    for p in root.iterdir():
+        if p.is_file() and (p.name in QUICK_ROOT_FILES or p.suffix.lower() in QUICK_ROOT_EXTS):
+            candidates.append(p)
+
+    # MEMORY.md is the memory index. Historical memory files are intentionally not scanned by default.
+    memory_index = root / 'MEMORY.md'
+    if memory_index.exists():
+        candidates.append(memory_index)
+
+    seen: set[str] = set()
+    for p in sorted(candidates, key=lambda x: str(x)):
+        if is_quick_excluded(p):
+            continue
+        try:
+            resolved = str(p.resolve())
+        except OSError:
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        ftype = classify_file(p)
+        if ftype in (FileType.CODE, FileType.DOCUMENT):
+            files[ftype.value].append(resolved)
+
+    return files
+
+def file_hash(path: Path) -> str:
+    h = hashlib.md5()
+    with path.open('rb') as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+def quick_detect_incremental(root: Path) -> dict:
+    root = root.resolve()
+    files = quick_scan_files(root)
+    manifest = load_manifest(root=root)
+    new_files = {k: [] for k in files}
+    unchanged_files = {k: [] for k in files}
+
+    for ftype, file_list in files.items():
+        for f in file_list:
+            p = Path(f)
+            stored = manifest.get(f)
+            changed = stored is None
+            if isinstance(stored, (int, float)):
+                try:
+                    changed = p.stat().st_mtime != stored
+                except OSError:
+                    changed = True
+            elif isinstance(stored, dict):
+                try:
+                    current_mtime = p.stat().st_mtime
+                except OSError:
+                    current_mtime = 0
+                stored_mtime = stored.get('mtime')
+                stored_hash = stored.get('semantic_hash') or stored.get('ast_hash') or stored.get('hash') or ''
+                if not stored_hash or not isinstance(stored_mtime, (int, float)):
+                    changed = True
+                elif current_mtime == stored_mtime:
+                    changed = False
+                else:
+                    try:
+                        changed = file_hash(p) != stored_hash
+                    except OSError:
+                        changed = True
+            if changed:
+                new_files[ftype].append(f)
+            else:
+                unchanged_files[ftype].append(f)
+
+    total_files = sum(len(v) for v in files.values())
+    return {
+        'files': files,
+        'incremental': True,
+        'new_files': new_files,
+        'unchanged_files': unchanged_files,
+        'new_total': sum(len(v) for v in new_files.values()),
+        'total_files': total_files,
+        'total_words': 0,
+        'skipped_sensitive': [],
+    }
 
 def main():
     ap = argparse.ArgumentParser(description='策划工具箱 知识图谱一键构建')
@@ -38,15 +176,13 @@ def main():
 
     # ─── Step 1: 检测文件 ───
     if not args.full and existing_graph:
-        print('[1/5] detect (incremental)...', end=' ', flush=True)
-        inc = detect_incremental(Path('.'))
-        changed = [f for files in inc.get('new_files', {}).values() for f in files]
-        print(f'{len(changed)} changed files in {time.time()-t0:.1f}s')
+        print('[1/5] detect (quick incremental)...', end=' ', flush=True)
+        detection = quick_detect_incremental(Path('.'))
+        changed = [f for files in detection.get('new_files', {}).values() for f in files]
+        print(f'{len(changed)} changed files / {detection["total_files"]} scanned in {time.time()-t0:.1f}s')
         if not changed:
             print('       No changes since last build. Skipping.')
             return
-        # Full detect still needed for report accuracy
-        detection = detect(Path('.'))
     else:
         mode = 'full' if args.full else 'initial'
         print(f'[1/5] detect ({mode})...', end=' ', flush=True)

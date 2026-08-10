@@ -99,13 +99,190 @@ _instance_socket = None
 _tray_icon = None
 _tray_nid = None
 _flask_server = None
+_main_window = None
+_main_hwnd = None
 _window_visible = True
 _force_close = False
 _docker = None
 _is_dragging = False
+_splash_hwnd = None
+_splash_progress = 0
+_splash_text = "初始化中..."
+_splash_ready = threading.Event()
+_splash_root = None
+_splash_should_close = False
 
 WS_EX_TOOLWINDOW = 0x80
 WS_EX_APPWINDOW = 0x40000
+
+
+def _native_splash_proc(hwnd, msg, wparam, lparam):
+    global _splash_hwnd
+    if msg == win32con.WM_PAINT:
+        hdc, ps = win32gui.BeginPaint(hwnd)
+        try:
+            rect = win32gui.GetClientRect(hwnd)
+            bg = win32gui.CreateSolidBrush(win32api.RGB(15, 17, 21))
+            panel = win32gui.CreateSolidBrush(win32api.RGB(23, 27, 36))
+            bar = win32gui.CreateSolidBrush(win32api.RGB(94, 162, 255))
+            try:
+                win32gui.FillRect(hdc, rect, bg)
+                w = rect[2] - rect[0]
+                h = rect[3] - rect[1]
+                cx = w // 2
+                win32gui.SetBkMode(hdc, win32con.TRANSPARENT)
+                title_font = win32gui.CreateFont(30, 0, 0, 0, 700, 0, 0, 0, win32con.DEFAULT_CHARSET, 0, 0, 0, 0, "Microsoft YaHei UI")
+                sub_font = win32gui.CreateFont(13, 0, 0, 0, 500, 0, 0, 0, win32con.DEFAULT_CHARSET, 0, 0, 0, 0, "Microsoft YaHei UI")
+                small_font = win32gui.CreateFont(11, 0, 0, 0, 500, 0, 0, 0, win32con.DEFAULT_CHARSET, 0, 0, 0, 0, "Microsoft YaHei UI")
+                try:
+                    logo_rect = (cx - 50, h // 2 - 120, cx + 50, h // 2 - 20)
+                    win32gui.FillRect(hdc, logo_rect, panel)
+                    old = win32gui.SelectObject(hdc, title_font)
+                    win32gui.SetTextColor(hdc, win32api.RGB(242, 245, 255))
+                    win32gui.DrawText(hdc, "策划工具箱", -1, (0, h // 2, w, h // 2 + 42), win32con.DT_CENTER | win32con.DT_SINGLELINE)
+                    win32gui.SelectObject(hdc, sub_font)
+                    win32gui.SetTextColor(hdc, win32api.RGB(139, 150, 173))
+                    win32gui.DrawText(hdc, "Game Pipeline Toolkit", -1, (0, h // 2 + 44, w, h // 2 + 70), win32con.DT_CENTER | win32con.DT_SINGLELINE)
+                    win32gui.SelectObject(hdc, small_font)
+                    win32gui.DrawText(hdc, _splash_text, -1, (0, h - 96, w, h - 70), win32con.DT_CENTER | win32con.DT_SINGLELINE)
+                    bar_rect = (cx - 400, h - 64, cx + 400, h - 55)
+                    win32gui.FillRect(hdc, bar_rect, bg)
+                    fill_w = int(800 * max(0, min(100, _splash_progress)) / 100)
+                    if fill_w > 0:
+                        win32gui.FillRect(hdc, (bar_rect[0], bar_rect[1], bar_rect[0] + fill_w, bar_rect[3]), bar)
+                    win32gui.SetTextColor(hdc, win32api.RGB(95, 107, 128))
+                    win32gui.DrawText(hdc, f"{_splash_progress}%", -1, (0, h - 48, w, h - 24), win32con.DT_CENTER | win32con.DT_SINGLELINE)
+                    win32gui.SelectObject(hdc, old)
+                finally:
+                    win32gui.DeleteObject(title_font)
+                    win32gui.DeleteObject(sub_font)
+                    win32gui.DeleteObject(small_font)
+            finally:
+                win32gui.DeleteObject(bg)
+                win32gui.DeleteObject(panel)
+                win32gui.DeleteObject(bar)
+        finally:
+            win32gui.EndPaint(hwnd, ps)
+        return 0
+    if msg == win32con.WM_CLOSE:
+        win32gui.DestroyWindow(hwnd)
+        return 0
+    if msg == win32con.WM_DESTROY:
+        _splash_hwnd = None
+        win32gui.PostQuitMessage(0)
+        return 0
+    return win32gui.DefWindowProc(hwnd, msg, wparam, lparam)
+
+
+def _show_native_splash(x, y, w, h):
+    def _run():
+        global _splash_hwnd, _splash_root, _splash_should_close
+        import tkinter as tk
+        _splash_should_close = False
+        root = tk.Tk()
+        _splash_root = root
+        root.withdraw()
+        root.overrideredirect(True)
+        root.configure(bg="#0f1115")
+        root.geometry(f"{w}x{h}+{x}+{y}")
+        root.attributes("-topmost", True)
+        try:
+            root.attributes("-toolwindow", True)
+        except Exception:
+            pass
+        canvas = tk.Canvas(root, width=w, height=h, bg="#0f1115", highlightthickness=0, bd=0)
+        canvas.pack(fill="both", expand=True)
+        cx = w // 2
+        logo_top = h // 2 - 120
+        canvas.create_rectangle(cx - 50, logo_top, cx + 50, logo_top + 100, fill="#171b24", outline="#2a3142", width=1)
+        canvas.create_text(cx, logo_top + 50, text="◇", fill="#5ea2ff", font=("Microsoft YaHei UI", 46, "bold"))
+        canvas.create_text(cx, h // 2 + 20, text="策划工具箱", fill="#f2f5ff", font=("Microsoft YaHei UI", 30, "bold"))
+        canvas.create_text(cx, h // 2 + 62, text="Game Pipeline Toolkit", fill="#8b96ad", font=("Segoe UI", 13))
+        text_id = canvas.create_text(cx, h - 86, text=_splash_text, fill="#8b96ad", font=("Microsoft YaHei UI", 11))
+        bar_x = cx - 400
+        bar_y = h - 64
+        canvas.create_rectangle(bar_x, bar_y, bar_x + 800, bar_y + 9, fill="#151821", outline="")
+        fill_id = canvas.create_rectangle(bar_x, bar_y, bar_x, bar_y + 9, fill="#5ea2ff", outline="")
+        pct_id = canvas.create_text(cx, h - 38, text="0%", fill="#5f6b80", font=("Segoe UI", 11))
+
+        def _tick():
+            if _splash_should_close:
+                root.destroy()
+                return
+            pct = max(0, min(100, int(_splash_progress)))
+            canvas.itemconfigure(text_id, text=_splash_text)
+            canvas.coords(fill_id, bar_x, bar_y, bar_x + int(800 * pct / 100), bar_y + 9)
+            canvas.itemconfigure(pct_id, text=f"{pct}%")
+            root.after(80, _tick)
+
+        root.update_idletasks()
+        _splash_hwnd = root.winfo_id()
+        _splash_ready.set()
+        root.deiconify()
+        root.after(80, _tick)
+        root.mainloop()
+    _splash_ready.clear()
+    threading.Thread(target=_run, daemon=True).start()
+    _splash_ready.wait(timeout=2)
+
+
+def _set_native_splash(pct, text):
+    global _splash_progress, _splash_text
+    _splash_progress = int(pct)
+    _splash_text = text
+
+
+def _close_native_splash():
+    global _splash_should_close
+    _splash_should_close = True
+
+
+def _hwnd_belongs_to_current_process(hwnd):
+    if not hwnd or not win32gui.IsWindow(hwnd):
+        return False
+    process_id = ctypes.wintypes.DWORD()
+    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+    return process_id.value == os.getpid()
+
+
+def _resolve_main_window_hwnd(window=None):
+    global _main_hwnd
+    if _hwnd_belongs_to_current_process(_main_hwnd):
+        return _main_hwnd
+    _main_hwnd = None
+    target = window or _main_window
+    if not target:
+        return None
+    try:
+        handle = target.native.Handle
+        hwnd = int(handle.ToInt64() if hasattr(handle, "ToInt64") else handle.ToInt32())
+        if _hwnd_belongs_to_current_process(hwnd):
+            _main_hwnd = hwnd
+            return hwnd
+    except Exception:
+        pass
+    return None
+
+
+def _hide_main_window():
+    global _window_visible
+    if not _main_window:
+        return False
+    try:
+        _main_window.hide()
+        _window_visible = False
+        return True
+    except Exception:
+        return False
+
+
+def _is_main_window_visible():
+    hwnd = _resolve_main_window_hwnd()
+    if not hwnd:
+        return True
+    return bool(ctypes.windll.user32.IsWindowVisible(hwnd)) and not bool(
+        ctypes.windll.user32.IsIconic(hwnd)
+    )
 
 
 def _hide_from_taskbar(hwnd):
@@ -195,16 +372,10 @@ class EdgeDocker:
         self._taskbar_activate = False
 
     def _resolve_hwnd(self):
-        if self.hwnd and win32gui.IsWindow(self.hwnd):
+        if _hwnd_belongs_to_current_process(self.hwnd):
             return self.hwnd
-        try:
-            h = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
-            if h:
-                self.hwnd = h
-                return h
-        except Exception:
-            pass
-        return None
+        self.hwnd = _resolve_main_window_hwnd(self.window)
+        return self.hwnd
 
     def _monitor_bounds(self, hwnd):
         try:
@@ -566,17 +737,23 @@ def _start_flask():
     import web_app as _wa
     _wa._on_notification_click = lambda: _show_window(None, None)
     _wa._quit_app_callback = _quit_app
+    _wa._hide_window_callback = _hide_main_window
+    _wa._is_window_visible_callback = _is_main_window_visible
     from werkzeug.serving import make_server
     _flask_server = make_server("127.0.0.1", 18123, app, threaded=True)
     _flask_server.serve_forever()
 
 
 def _wait_for_flask(timeout=10):
-    url = "http://127.0.0.1:18123/api/config"
+    urls = [
+        "http://127.0.0.1:18123/api/config",
+        "http://127.0.0.1:18123/api/static/core.js",
+    ]
     start = time.time()
     while time.time() - start < timeout:
         try:
-            urllib.request.urlopen(url, timeout=1)
+            for url in urls:
+                urllib.request.urlopen(url, timeout=1).close()
             return True
         except Exception:
             time.sleep(0.2)
@@ -586,22 +763,20 @@ def _wait_for_flask(timeout=10):
 
 def _show_window(icon, item=None):
     global _window_visible
-    hwnd = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
-    if hwnd:
-        ctypes.windll.user32.ShowWindow(hwnd, 9)
+    if not _main_window:
+        return
     try:
-        for w in webview.windows:
-            w.restore()
-            w.show()
-            _window_visible = True
+        _main_window.restore()
+        _main_window.show()
+        _window_visible = True
+    except Exception:
+        return
+    try:
+        _main_window.evaluate_js("triggerUpdateCheck()")
+        _main_window.evaluate_js("scrollLogToBottom()")
     except Exception:
         pass
-    try:
-        for w in webview.windows:
-            w.evaluate_js("triggerUpdateCheck()")
-            w.evaluate_js("scrollLogToBottom()")
-    except Exception:
-        pass
+    hwnd = _resolve_main_window_hwnd(_main_window)
     if hwnd:
         if _docker and _docker.docked:
             _undock_and_center(hwnd)
@@ -645,17 +820,18 @@ class ResizeApi:
         self._win_w = 0
         self._win_h = 0
         self._active = False
+        self.ready_event = threading.Event()
 
     def set_window(self, window):
         self._window = window
 
     def set_window_rect(self):
         if not self._window:
-            return
+            return False
         try:
-            hwnd = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
+            hwnd = _resolve_main_window_hwnd(self._window)
             if not hwnd:
-                return
+                return False
             rect = ctypes.wintypes.RECT()
             ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
             self._win_x = rect.left
@@ -663,15 +839,16 @@ class ResizeApi:
             self._win_w = rect.right - rect.left
             self._win_h = rect.bottom - rect.top
             self._cursor_x, self._cursor_y = win32api.GetCursorPos()
+            return True
         except Exception:
-            pass
+            return False
 
     def start_resize(self, edge):
         global _is_dragging
-        _is_dragging = True
-        self.set_window_rect()
+        self._active = self.set_window_rect()
+        _is_dragging = self._active
         self._edge = edge
-        self._active = True
+        return self._active
 
     def move(self):
         if not self._active or not self._window:
@@ -710,10 +887,10 @@ class ResizeApi:
                 w = 200
             if h < 200:
                 h = 200
-            ctypes.windll.user32.SetWindowPos(
-                ctypes.windll.user32.FindWindowW(None, "策划工具箱"),
-                0, x, y, w, h, 0x0004
-            )
+            hwnd = _resolve_main_window_hwnd(self._window)
+            if not hwnd:
+                return False
+            ctypes.windll.user32.SetWindowPos(hwnd, 0, x, y, w, h, 0x0004)
         except Exception:
             return False
         return True
@@ -725,7 +902,11 @@ class ResizeApi:
         _save_window_rect()
 
     def app_ready(self):
-        pass
+        self.ready_event.set()
+        return True
+
+    def hide_window(self):
+        return _hide_main_window()
 
     def focusWindow(self):
         hwnd = _find_window_hwnd(timeout=0.1)
@@ -987,7 +1168,7 @@ def _center_on_cursor_screen(hwnd):
 
 def _save_window_rect():
     try:
-        hwnd = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
+        hwnd = _resolve_main_window_hwnd()
         if not hwnd:
             return
         rect = ctypes.wintypes.RECT()
@@ -1016,15 +1197,12 @@ def _undock_and_center(hwnd):
         pass
 
 
-def _find_window_hwnd(timeout=5):
+def _find_window_hwnd(timeout=5, window=None):
     start = time.time()
     while time.time() - start < timeout:
-        try:
-            h = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
-            if h:
-                return h
-        except Exception:
-            pass
+        hwnd = _resolve_main_window_hwnd(window)
+        if hwnd:
+            return hwnd
         time.sleep(0.1)
     return None
 
@@ -1079,6 +1257,7 @@ def _init_dnd(window):
 
 
 def _set_progress(window, pct, text):
+    _set_native_splash(pct, text)
     try:
         window.evaluate_js(
             f"var e=document.getElementById('sbar');if(e)e.style.width='{pct}%';"
@@ -1090,6 +1269,7 @@ def _set_progress(window, pct, text):
 
 
 def main():
+    global _main_window, _main_hwnd
     _acquire_instance_lock()
     _ensure_app_id()
     _ensure_frozen_config()
@@ -1108,18 +1288,22 @@ def main():
     win_h = saved_h if has_saved else WINDOW_H
     init_cx, init_cy = _get_cursor_screen_center(win_w, win_h)
 
+    if not _wait_for_flask(timeout=15):
+        print("[错误] Flask 未能在 15 秒内就绪", file=sys.stderr)
+
     resize_api = ResizeApi()
 
     window = webview.create_window(
         "策划工具箱",
-        html=SPLASH_HTML,
+        url="http://127.0.0.1:18123",
         width=win_w,
         height=win_h,
         x=init_cx,
         y=init_cy,
         frameless=True,
         easy_drag=False,
-        shadow=True,
+        shadow=False,
+        hidden=False,
         background_color="#0f1115",
         min_size=(400, 300),
         text_select=True,
@@ -1127,6 +1311,8 @@ def main():
         resizable=True,
         js_api=resize_api,
     )
+    _main_window = window
+    _main_hwnd = None
     resize_api.set_window(window)
 
     _init_dnd(window)
@@ -1137,11 +1323,7 @@ def main():
         if _force_close:
             _force_close = False
             return True
-        try:
-            for w in webview.windows:
-                w.hide()
-        except Exception:
-            pass
+        _hide_main_window()
         return False
 
     window.events.closing += _on_closing
@@ -1165,46 +1347,73 @@ def main():
     def _boot_app(window):
         print("[DEBUG] _boot_app 开始", file=sys.stderr)
         window.events.loaded.wait(timeout=30)
+        loading_started = time.time()
+        _set_progress(window, 15, "界面资源已加载")
         print("[DEBUG] 窗口已加载", file=sys.stderr)
-        _set_progress(window, 15, "界面就绪")
         _set_window_icon()
+        _set_progress(window, 30, "应用图标已设置")
         print("[DEBUG] 图标已设置", file=sys.stderr)
 
         global _docker
         docker = EdgeDocker(window)
         _docker = docker
         docker.start()
-        _set_progress(window, 30, "初始化服务中")
+        _set_progress(window, 45, "窗口行为已就绪")
         print("[DEBUG] EdgeDocker 已启动", file=sys.stderr)
-
-        if not _wait_for_flask(timeout=15):
-            print("[错误] Flask 未能在 15 秒内就绪", file=sys.stderr)
-            return
-        print("[DEBUG] Flask 就绪", file=sys.stderr)
-        _set_progress(window, 55, "后端就绪")
-        time.sleep(0.35)
-        _set_progress(window, 70, "准备渲染")
-        time.sleep(0.3)
-        _set_progress(window, 90, "准备就绪")
-        time.sleep(0.35)
-        _set_progress(window, 100, "启动完成")
-        time.sleep(1.0)
-
-        try:
-            print("[DEBUG] 正在加载 URL...", file=sys.stderr)
-            window.load_url("http://127.0.0.1:18123")
-            print("[DEBUG] URL 已加载", file=sys.stderr)
-        except Exception as e:
-            print(f"[load_url] {e}", file=sys.stderr)
 
         hwnd = _find_window_hwnd(timeout=0.5)
         if hwnd:
             _show_taskbar_icon(hwnd)
-        print("[DEBUG] _boot_app 完成", file=sys.stderr)
+            try:
+                win32gui.SetForegroundWindow(hwnd)
+            except Exception:
+                pass
+        print("[DEBUG] Loading 已显示", file=sys.stderr)
+
+        def _finish_loading_when_ready():
+            ready = resize_api.ready_event.wait(timeout=0.5)
+            if not ready:
+                start = time.time()
+                while time.time() - start < 8:
+                    try:
+                        ready = bool(window.evaluate_js(
+                            "!!(document.querySelector('.nav-btn.active') && "
+                            "document.getElementById('tab-svn') && "
+                            "document.getElementById('svn_log'))"
+                        ))
+                    except Exception:
+                        ready = False
+                    if ready:
+                        break
+                    time.sleep(0.1)
+            if ready:
+                _set_progress(window, 85, "主界面已生成")
+                print("[DEBUG] 前端已完成初始化", file=sys.stderr)
+            else:
+                _set_progress(window, 85, "启动检查超时")
+                print("[警告] 前端初始化检查超时，显示窗口用于诊断", file=sys.stderr)
+
+            min_loading_secs = 2.0
+            remain = min_loading_secs - (time.time() - loading_started)
+            if remain > 0:
+                time.sleep(remain)
+            _set_progress(window, 100, "启动完成")
+            time.sleep(0.28)
+            try:
+                window.evaluate_js(
+                    "requestAnimationFrame(() => requestAnimationFrame(() => "
+                    "document.body.classList.add('app-ready')))"
+                )
+            except Exception:
+                pass
+            print("[DEBUG] _boot_app 完成", file=sys.stderr)
+
+        threading.Thread(target=_finish_loading_when_ready, daemon=True).start()
 
     try:
         webview.start(_boot_app, window, debug=False)
     finally:
+        _close_native_splash()
         _stop_flask()
         if _tray_icon:
             try:

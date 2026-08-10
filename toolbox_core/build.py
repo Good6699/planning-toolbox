@@ -34,6 +34,7 @@ CORE_DIR = os.path.join(WORKSPACE, "toolbox_core")
 DIST_DIR = os.path.join(WORKSPACE, "dist")
 UPDATE_DIR = os.path.join(WORKSPACE, "update-server")
 APP_NAME = "策划工具箱"
+HELP_DOC = "策划工具箱_交互说明书.html"
 
 # 从 update_version.py 读取版本号（唯一来源）
 _ver_line = [l for l in open(os.path.join(CORE_DIR, "update_version.py"), encoding="utf-8") if "APP_VERSION" in l and "=" in l]
@@ -71,6 +72,17 @@ DATA_DIRS = [
     ("splash", "splash"),
     ("py_modules/_tcl_data", "_tcl_data"),
     ("py_modules/_tk_data", "_tk_data"),
+]
+
+DATA_FILES = [
+    "core.js",
+    "tab-merge.js",
+    "tab-upload.js",
+    "tab-workflow.js",
+    "tab-translate.js",
+    "tab-textcheck.js",
+    "tab-prefab.js",
+    "tab-assist.js",
 ]
 
 # ── 更新器辅助脚本 ──
@@ -164,6 +176,11 @@ def _get_data_args():
         if os.path.exists(src):
             args.append(f"--add-data={src};{dst_rel}")
             print(f"  [数据] {src_rel}/ → {dst_rel}/")
+    for name in DATA_FILES:
+        src = os.path.join(CORE_DIR, name)
+        if os.path.isfile(src):
+            args.append(f"--add-data={src};.")
+            print(f"  [数据] {name} → ./")
     for name in WORKER_SCRIPTS:
         src = os.path.join(WORKSPACE, name)
         if os.path.isfile(src):
@@ -469,7 +486,15 @@ def build():
         shutil.copy2(ver_src, ver_dst)
         print(f"  [版本] update_version.py → _internal/toolbox_core/")
 
-    # ── Step 8: 复制 text_check_exclude_ids.txt 到 dist ──
+    # ── Step 9: 复制用户帮助说明书到 exe 同级目录 ──
+    help_src = os.path.join(CORE_DIR, HELP_DOC)
+    if os.path.isfile(help_src):
+        shutil.copy2(help_src, os.path.join(dist_app, HELP_DOC))
+        print(f"  [说明] {HELP_DOC} → exe 同级目录")
+    else:
+        print(f"  [警告] 未找到说明书: {HELP_DOC}")
+
+    # ── Step 10: 复制 text_check_exclude_ids.txt 到 dist ──
     tc_exclude_src = os.path.join(CORE_DIR, "text_check_exclude_ids.txt")
     tc_exclude_dst = os.path.join(dist_app, "_internal", "text_check_exclude_ids.txt")
     if os.path.isfile(tc_exclude_src):

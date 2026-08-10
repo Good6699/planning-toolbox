@@ -1,0 +1,162 @@
+// ============================================
+// 成人教育管理平台 - 自动答题工具
+// 使用方式: 在考试页面控制台粘贴运行
+// ============================================
+
+(function() {
+  // 防止重复注入
+  if (document.getElementById('xbk-exam-toolbar')) return;
+
+  // === 创建工具栏 UI ===
+  const toolbar = document.createElement('div');
+  toolbar.id = 'xbk-exam-toolbar';
+  toolbar.innerHTML = `
+    <div style="position:fixed;top:60px;right:20px;z-index:99999;background:#1a1a2e;border:1px solid #30305a;border-radius:12px;padding:16px 20px;width:300px;font-family:'Microsoft YaHei UI','Segoe UI',sans-serif;font-size:13px;color:#e0e0e0;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#7b8cff;">📋 自动答题工具</div>
+      
+      <button id="xbk-extract-btn" style="width:100%;padding:8px 0;background:#7b8cff;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin-bottom:8px;">📤 提取所有题目</button>
+      
+      <div id="xbk-status" style="font-size:12px;color:#888;margin-bottom:8px;min-height:18px;"></div>
+      
+      <textarea id="xbk-answer-input" placeholder="在这里粘贴我给你的答案 JSON..." style="width:100%;height:60px;background:#0f0f23;border:1px solid #30305a;border-radius:6px;color:#e0e0e0;padding:8px;font-size:12px;resize:vertical;box-sizing:border-box;outline:none;"></textarea>
+      
+      <button id="xbk-fill-btn" style="width:100%;padding:8px 0;background:#2ecc71;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin-top:8px;">✏️ 填入答案</button>
+      
+      <div style="margin-top:8px;font-size:11px;color:#666;text-align:center;">提取题目 → 发给我 → 粘贴答案 → 自动填入</div>
+    </div>
+  `;
+  document.body.appendChild(toolbar);
+
+  // === 状态提示 ===
+  function setStatus(msg, isError) {
+    const el = document.getElementById('xbk-status');
+    if (el) el.innerHTML = msg;
+  }
+
+  // === 提取题目逻辑 ===
+  function extractQuestions() {
+    const cards = document.querySelectorAll('.el-card.box-card');
+    if (!cards.length) {
+      setStatus('⚠️ 未找到题目，请确认你在考试页面');
+      return null;
+    }
+
+    const questions = [];
+    cards.forEach((card, idx) => {
+      const title = card.querySelector('[id^="IdDiv"]')?.textContent?.trim() || '';
+      const questionText = card.querySelector('.content')?.textContent?.trim() || '';
+      const options = [];
+      
+      card.querySelectorAll('.el-radio').forEach(radio => {
+        const labelEl = radio.querySelector('.el-radio__label');
+        if (labelEl) {
+          options.push(labelEl.textContent.trim());
+        }
+      });
+
+      questions.push({
+        index: idx,
+        title,
+        question: questionText,
+        options
+      });
+    });
+
+    return questions;
+  }
+
+  // === 提取并复制到剪贴板 ===
+  document.getElementById('xbk-extract-btn').addEventListener('click', function() {
+    const questions = extractQuestions();
+    if (!questions) return;
+    
+    // 简化输出：只保留题目和选项
+    const simple = questions.map(q => ({
+      q: q.question,
+      opts: q.options
+    }));
+    
+    const output = JSON.stringify(simple, null, 2);
+    
+    navigator.clipboard.writeText(output).then(() => {
+      setStatus(`✅ 已复制 ${questions.length} 道题到剪贴板！<br><span style="color:#7b8cff;">请发给我，我来搜索答案</span>`);
+    }).catch(() => {
+      // 降级：选中文本
+      const ta = document.createElement('textarea');
+      ta.value = output;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setStatus(`✅ 已复制 ${questions.length} 道题！请发给我`);
+    });
+  });
+
+  // === 填入答案逻辑 ===
+  document.getElementById('xbk-fill-btn').addEventListener('click', function() {
+    const input = document.getElementById('xbk-answer-input');
+    let data;
+    try {
+      data = JSON.parse(input.value.trim());
+    } catch(e) {
+      setStatus('❌ JSON 解析失败，检查格式');
+      return;
+    }
+
+    // 支持两种格式: {answers: [0,1,2,3]} 或 [{answer: 0}, {answer: 1}]
+    let answerList;
+    if (Array.isArray(data)) {
+      answerList = data.map((d, i) => {
+        if (typeof d === 'number') return d;
+        if (d.answer !== undefined) return d.answer;
+        return null;
+      });
+    } else if (data.answers && Array.isArray(data.answers)) {
+      answerList = data.answers;
+    } else {
+      setStatus('❌ 格式不对，请使用 {answers: [0,1,2,3]} 格式');
+      return;
+    }
+
+    const cards = document.querySelectorAll('.el-card.box-card');
+    let filled = 0;
+    let errors = [];
+
+    answerList.forEach((answerIdx, i) => {
+      const card = cards[i];
+      if (!card) {
+        errors.push(`第${i+1}题: 未找到题目卡片`);
+        return;
+      }
+
+      const radios = card.querySelectorAll('.el-radio');
+      const targetRadio = radios[answerIdx];
+      if (!targetRadio) {
+        errors.push(`第${i+1}题: 选项索引 ${answerIdx} 超出范围`);
+        return;
+      }
+
+      // 检查是否已禁用（已批改的试卷）
+      if (targetRadio.classList.contains('is-disabled')) {
+        errors.push(`第${i+1}题: 已批改无法修改`);
+        return;
+      }
+
+      // 触发点击 - 点 label 触发 Vue 的响应
+      targetRadio.click();
+      filled++;
+    });
+
+    if (errors.length) {
+      setStatus(`✅ 已填 ${filled} 题 ⚠️ ${errors.length} 题跳过:<br>${errors.slice(0,3).join('<br>')}`);
+    } else {
+      setStatus(`✅ 全部 ${filled} 题已填入！检查无误后提交`);
+    }
+  });
+
+  // === 帮助提示 ===
+  setStatus('💡 点击"提取题目"开始');
+
+  console.log('✅ 自动答题工具已加载 (工具栏在右上角)');
+  console.log('📖 使用流程: 提取题目 → 发给我 → 粘贴答案 → 填入');
+})();

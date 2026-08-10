@@ -12,7 +12,7 @@ function buildTranslateTab(panel) {
           <div class="form-group">
             <label>文件路径</label>
             <div class="flex-row">
-              <input type="text" id="tr_src" placeholder="选择要翻译的 Excel 文件" style="flex:1" autocomplete="off">
+              <input type="text" id="tr_src" placeholder="输入要翻译的 Excel 文件路径，支持 .xlsx" style="flex:1" autocomplete="off">
               <button class="btn btn-normal" data-action="browse-tr-src"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
               <button class="btn btn-normal" data-action="open-tr-src" title="打开文件所在目录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
             </div>
@@ -20,7 +20,7 @@ function buildTranslateTab(panel) {
           <div class="form-group">
             <label>参考文件</label>
             <div class="flex-row">
-              <input type="text" id="tr_ref" placeholder="参考翻译文件（可选）" style="flex:1" autocomplete="off">
+              <input type="text" id="tr_ref" placeholder="可选，输入已有的翻译文件用于术语参考" style="flex:1" autocomplete="off">
               <button class="btn btn-normal" data-action="browse-tr-ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
               <button class="btn btn-normal" data-action="open-tr-ref" title="打开文件所在目录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
             </div>
@@ -31,7 +31,7 @@ function buildTranslateTab(panel) {
           <div class="form-group">
             <label>源语言列</label>
             <div class="flex-row">
-              <input type="text" id="tr_src_lang" value="${escapeHtml(src_lang)}" placeholder="如: 中文" style="width:6.25rem">
+              <input type="text" id="tr_src_lang" value="${escapeHtml(src_lang)}" placeholder="输入 Excel 中代表原文的列名，如 zh、SC、::SC::" style="width:6.25rem">
               <button class="btn btn-normal btn-sm" data-action="tr-lang-adv-settings" title="语言ID高级设置" style="font-size:16px;padding:0 8px;line-height:1">⚙</button>
             </div>
           </div>
@@ -49,15 +49,15 @@ function buildTranslateTab(panel) {
           <div class="section-label">API 设置</div>
           <div class="form-group">
             <label>API URL</label>
-            <input type="text" id="tr_api_url" value="${escapeHtml(api_url)}">
+            <input type="text" id="tr_api_url" value="${escapeHtml(api_url)}" placeholder="输入翻译接口地址，需以 http:// 或 https:// 开头">
           </div>
           <div class="form-group">
             <label>API Key</label>
-            <input type="password" id="tr_api_key" placeholder="输入 API Key">
+            <input type="password" id="tr_api_key" placeholder="输入翻译服务的 API Key">
           </div>
           <div class="form-group">
             <label>模型</label>
-            <input type="text" id="tr_model" value="${escapeHtml(model)}">
+            <input type="text" id="tr_model" value="${escapeHtml(model)}" placeholder="输入翻译使用的模型名，如 gpt-4o-mini、deepseek-chat">
           </div>
         </div>
         <div class="card">
@@ -65,18 +65,18 @@ function buildTranslateTab(panel) {
           <div class="form-group">
             <label>输出目录</label>
             <div class="flex-row">
-              <input type="text" id="tr_out" value="${escapeHtml(out)}" style="flex:1">
+              <input type="text" id="tr_out" value="${escapeHtml(out)}" placeholder="输入翻译结果的保存目录，不存在会自动创建" style="flex:1">
               <button class="btn btn-normal" data-action="browse-tr-out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
               <button class="btn btn-normal" data-action="open-tr-out" title="打开输出目录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
             </div>
           </div>
           <div class="form-group">
             <label>翻译 Prompt</label>
-            <textarea id="tr_prompt">${escapeHtml(prompt)}</textarea>
+            <textarea id="tr_prompt" placeholder="输入翻译指令，支持 {src_lang} 和 {tgt_lang} 变量">${escapeHtml(prompt)}</textarea>
           </div>
           <div class="form-group">
             <label>批处理量</label>
-            <input type="number" id="tr_batch" value="${config.tr_batch_size||20}">
+            <input type="number" id="tr_batch" value="${config.tr_batch_size||20}" placeholder="每次发送给 API 的条目数，正整数，默认 20">
           </div>
         </div>
       </div>
@@ -117,6 +117,7 @@ function runTranslate() {
   const tgtLangs = [];
   document.querySelectorAll("#tr_tgt_langs input:checked").forEach(cb=>tgtLangs.push(cb.value));
   const apiKey = document.getElementById("tr_api_key").value.trim();
+  const batchValue = Number(document.getElementById("tr_batch").value);
   const body = {
     src_path:document.getElementById("tr_src").value.trim(),
     ref_path:document.getElementById("tr_ref").value.trim(),
@@ -127,8 +128,29 @@ function runTranslate() {
     tgt_langs:tgtLangs,
     out_dir:document.getElementById("tr_out").value.trim(),
     prompt:document.getElementById("tr_prompt").value.trim(),
-    batch_size:parseInt(document.getElementById("tr_batch").value)||20
+    batch_size:batchValue
   };
+  if (!body.src_path) { _showToast("请选择要翻译的 Excel 文件"); document.getElementById("tr_src").focus(); return; }
+  if (!body.src_lang) { _showToast("请输入源语言列"); document.getElementById("tr_src_lang").focus(); return; }
+  if (!body.tgt_langs.length) { _showToast("请选择目标语言"); return; }
+  if (!body.api_url) { _showToast("请输入 API URL"); document.getElementById("tr_api_url").focus(); return; }
+  try {
+    const parsedUrl = new URL(body.api_url);
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") throw new Error();
+  } catch (_) {
+    _showToast("请输入有效的 HTTP 或 HTTPS API URL");
+    document.getElementById("tr_api_url").focus();
+    return;
+  }
+  if (!body.api_key) { _showToast("请输入 API Key"); document.getElementById("tr_api_key").focus(); return; }
+  if (!body.model) { _showToast("请输入模型名称"); document.getElementById("tr_model").focus(); return; }
+  if (!body.out_dir) { _showToast("请选择输出目录"); document.getElementById("tr_out").focus(); return; }
+  if (!body.prompt) { _showToast("请输入翻译 Prompt"); document.getElementById("tr_prompt").focus(); return; }
+  if (!Number.isInteger(body.batch_size) || body.batch_size < 1) {
+    _showToast("批处理量必须是大于等于 1 的整数");
+    document.getElementById("tr_batch").focus();
+    return;
+  }
   saveConfig({tr_api_url:body.api_url,tr_model:body.model,tr_src_lang:body.src_lang,tr_out_dir:body.out_dir,tr_prompt:body.prompt,tr_batch_size:body.batch_size,tr_api_key:apiKey});
   runTask("/api/translate/run", body, document.querySelector("[data-action='run-translate']"), "tr_log");
 }
@@ -173,8 +195,8 @@ function openTrLangAdvSettings() {
         const row = document.createElement("tr");
         row.style.borderBottom = "1px solid rgba(255,255,255,.05)";
         row.innerHTML = `
-          <td style="padding:0.375rem"><input type="text" class="tr-lang-name" placeholder="如: 中文" style="width:6rem;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0.3rem 0.5rem;color:var(--text);font-size:0.8rem"></td>
-          <td style="padding:0.375rem"><input type="text" class="tr-lang-ids" placeholder="如: SC, ::SC::" style="width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0.3rem 0.5rem;color:var(--text);font-size:0.8rem"></td>
+          <td style="padding:0.375rem"><input type="text" class="tr-lang-name" placeholder="输入语言显示名，如 中文、英文" style="width:6rem;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0.3rem 0.5rem;color:var(--text);font-size:0.8rem"></td>
+          <td style="padding:0.375rem"><input type="text" class="tr-lang-ids" placeholder="输入匹配 Excel 表头的 ID，逗号分隔" style="width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0.3rem 0.5rem;color:var(--text);font-size:0.8rem"></td>
           <td style="padding:0.375rem;text-align:center"><button class="btn btn-normal btn-sm" style="font-size:12px;padding:0 6px;color:var(--danger)" data-action="tr-lang-del-row">✕</button></td>
         `;
         tbody.appendChild(row);
@@ -193,8 +215,8 @@ function openTrLangAdvSettings() {
       const row = document.createElement("tr");
       row.style.borderBottom = "1px solid rgba(255,255,255,.05)";
       row.innerHTML = `
-        <td style="padding:0.375rem"><input type="text" class="tr-lang-name" value="${escapeHtml(lang)}" style="width:6rem;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0.3rem 0.5rem;color:var(--text);font-size:0.8rem"></td>
-        <td style="padding:0.375rem"><input type="text" class="tr-lang-ids" value="${escapeHtml(ids)}" style="width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0.3rem 0.5rem;color:var(--text);font-size:0.8rem"></td>
+        <td style="padding:0.375rem"><input type="text" class="tr-lang-name" value="${escapeHtml(lang)}" placeholder="输入语言显示名，如 中文、英文" style="width:6rem;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0.3rem 0.5rem;color:var(--text);font-size:0.8rem"></td>
+        <td style="padding:0.375rem"><input type="text" class="tr-lang-ids" value="${escapeHtml(ids)}" placeholder="输入匹配 Excel 表头的 ID，逗号分隔" style="width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0.3rem 0.5rem;color:var(--text);font-size:0.8rem"></td>
         <td style="padding:0.375rem;text-align:center"><button class="btn btn-normal btn-sm" style="font-size:12px;padding:0 6px;color:var(--danger)" data-action="tr-lang-del-row">✕</button></td>
       `;
       tbody.appendChild(row);
@@ -220,16 +242,31 @@ function closeTrLangAdvSettings() {
 function saveTrLangAdvSettings() {
   const rows = document.querySelectorAll("#tr_lang_adv_body tr");
   const data = {};
-  rows.forEach(tr => {
+  for (const tr of rows) {
     const nameInput = tr.querySelector(".tr-lang-name");
     const idsInput = tr.querySelector(".tr-lang-ids");
-    if (!nameInput || !idsInput) return;
+    if (!nameInput || !idsInput) continue;
     const name = nameInput.value.trim();
     const idsText = idsInput.value.trim();
-    if (!name || !idsText) return;
+    if (!name && !idsText) continue;
+    if (!name || !idsText) {
+      _showToast("语言名称和匹配 ID 必须同时填写");
+      (name ? idsInput : nameInput).focus();
+      return;
+    }
     const ids = idsText.split(",").map(s => s.trim()).filter(Boolean);
-    if (ids.length) data[name] = ids;
-  });
+    if (!ids.length) {
+      _showToast("请至少填写一个有效的匹配 ID");
+      idsInput.focus();
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(data, name)) {
+      _showToast("语言名称不能重复：" + name);
+      nameInput.focus();
+      return;
+    }
+    data[name] = ids;
+  }
   const btn = document.querySelector("[data-action='tr-lang-save-adv']");
   const orig = btn.textContent;
   btn.textContent = "保存中...";
@@ -241,7 +278,11 @@ function saveTrLangAdvSettings() {
   }).then(r=>r.json()).then(d => {
     if (d.ok) {
       closeTrLangAdvSettings();
+    } else {
+      _showToast(d.error || "语言设置保存失败");
     }
+  }).catch(error => {
+    _showToast("语言设置保存失败：" + error.message);
   }).finally(() => {
     btn.textContent = orig;
     btn.disabled = false;

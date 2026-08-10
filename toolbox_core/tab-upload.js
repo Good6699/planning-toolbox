@@ -5,7 +5,7 @@ function buildUploadTab(panel) {
         <div class="card">
           <div class="card-title">源目录</div>
           <div class="flex-row">
-            <input type="text" id="upload_src" placeholder="选择源目录" style="flex:1" autocomplete="off">
+            <input type="text" id="upload_src" placeholder="输入待上传文件所在的本地目录" style="flex:1" autocomplete="off">
             <button class="btn btn-normal" data-action="browse-upload-src"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
             <button class="btn btn-normal" data-action="refresh-files" title="刷新文件列表"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115.4-5.6L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15.4 5.6L3 16"/></svg></button>
           </div>
@@ -17,7 +17,7 @@ function buildUploadTab(panel) {
           <div class="form-group">
             <label>SVN 目标目录</label>
             <div class="flex-row">
-              <input type="text" id="upload_tgt" placeholder="选择目标 SVN 工作目录" style="flex:1" autocomplete="off">
+              <input type="text" id="upload_tgt" placeholder="输入 SVN 工作副本中要上传到的目标目录" style="flex:1" autocomplete="off">
               <button class="btn btn-normal" data-action="browse-upload-tgt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
             </div>
           </div>
@@ -82,6 +82,9 @@ function runUpload() {
   const src = document.getElementById("upload_src").value.trim();
   const tgt = document.getElementById("upload_tgt").value.trim();
   const files = uploadFilesData.filter(f => f._sel).map(f => ({name:f.name,path:f.path,is_dir:f.is_dir}));
+  if (!src) { _showToast("请输入源目录"); document.getElementById("upload_src").focus(); return; }
+  if (!tgt) { _showToast("请输入 SVN 目标目录"); document.getElementById("upload_tgt").focus(); return; }
+  if (!files.length) { _showToast("请至少选择一个待上传文件"); return; }
   saveConfig({tgt_dir_history: [tgt, ...(config.tgt_dir_history||[]).filter(u=>u!==tgt)].slice(0,20)});
   runTask("/api/upload/run", {src_dir:src, tgt_dir:tgt, files}, document.querySelector("[data-action='run-upload']"), "upload_log");
 }
@@ -90,7 +93,7 @@ async function refreshFiles() {
   if (!src) return;
   const r = await fetch("/api/files/list", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:src})});
   const d = await r.json();
-  if (d.error) { await showAlert(d.error); return; }
+  if (d.error) { _showToast(d.error); return; }
   uploadFilesData = d.entries;
   renderFileList();
 }

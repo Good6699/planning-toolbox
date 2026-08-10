@@ -7,7 +7,7 @@ function buildTextCheckTab(panel) {
         <div class="form-group">
           <label>检测文件路径</label>
           <div class="flex-row">
-            <input type="text" id="tc_path" value="${escapeHtml(config.tc_path||defaultPath)}" style="flex:1" autocomplete="off">
+            <input type="text" id="tc_path" value="${escapeHtml(config.tc_path||defaultPath)}" placeholder="输入要检测的 .xlsm 文件路径，必须是已存在的文件" style="flex:1" autocomplete="off">
             <button class="btn btn-normal" data-action="browse-tc-file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
           </div>
           <div style="font-size:12px;color:var(--dim);margin-top:4px">检测内容：空值、漏翻、占位符不一致、颜色/代码标签丢失、全局重复ID</div>
@@ -111,6 +111,7 @@ async function runTextCheck() {
     div.className = "error";
     div.textContent = "❌ 请求失败: " + err.message;
     _logAppend(logEl, div);
+    _showToast("请求失败：" + err.message);
     _decRunning();
   }
 }

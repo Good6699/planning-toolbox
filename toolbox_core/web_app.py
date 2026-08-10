@@ -16,6 +16,7 @@ import concurrent.futures
 from datetime import datetime
 import locale
 import re
+import secrets
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _pm = os.path.join(_script_dir, "py_modules")
@@ -56,6 +57,8 @@ from toolbox_config import (  # noqa: E402
 from toolbox_platform import _get_subprocess_kwargs, _get_bat_subprocess_kwargs, _get_svn_path, _check_office_lock, _diagnose_svn_missing, _auto_install_svn_cli  # noqa: E402
 from xlsm_zipper import apply_via_excel  # noqa: E402
 from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path, resolve_svn_url_to_local, migrate_old_svn_mappings  # noqa: E402
+from exceltool_export import run_export  # noqa: E402
+from atlas_migration import AtlasMigrationError, AtlasMigrationService  # noqa: E402
 
 if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
     if len(sys.argv) < 3:
@@ -85,8 +88,15 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
     sys.exit(proc.returncode)
 
 _quit_app_callback = lambda: None
+_hide_window_callback = lambda: False
+_is_window_visible_callback = lambda: True
 
 app = Flask(__name__)
+_atlas_migration = AtlasMigrationService()
+_atlas_tasks_lock = threading.Lock()
+_notify_task_lock = threading.Lock()
+_atlas_active_drafts = {}
+_atlas_task_results = {}
 # 生产环境关闭模板自动重载（减少文件系统调用）
 if os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true"):
     app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -114,7 +124,7 @@ _log_queues = {}  # task_id -> queue.Queue
 
 
 def _get_next_task_id():
-    return str(int(time.time() * 1000))
+    return secrets.token_hex(16)
 
 
 _active_subprocesses = []
@@ -781,15 +791,89 @@ def api_prefab_scan():
                 for fn in fnames:
                     if fn.lower().endswith(".prefab"):
                         files.append(os.path.join(root, fn))
-    files.sort(key=lambda x: x.lower())
+    unique_files = {}
+    for fp in files:
+        key = os.path.normcase(os.path.realpath(os.path.abspath(fp)))
+        unique_files.setdefault(key, fp)
+    files = sorted(unique_files.values(), key=lambda x: x.lower())
     return jsonify({"files": files, "count": len(files)})
 
 
+@app.route("/api/assist/consume-dropped", methods=["POST"])
 @app.route("/api/prefab/consume-dropped", methods=["POST"])
 def api_prefab_consume_dropped():
-    paths = [p[1] for p in _dnd_state.get('paths', [])]
-    _dnd_state['paths'].clear()
+    dropped = _dnd_state.get("paths", [])
+    _dnd_state["paths"] = []
+    paths = [item[1] for item in dropped]
     return jsonify({"paths": paths, "count": len(paths)})
+
+
+def _exec_gen_meta(template, folder, q):
+    succeeded = 0
+    failed = 0
+
+    def log(message, level="info"):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        tag = "[%s][%s]" % (timestamp, level) if level != "info" else "[%s]" % timestamp
+        q.put("%s %s\n" % (tag, message))
+
+    try:
+        log("模板文件: " + template)
+        log("目标文件夹: " + folder)
+        log("开始生成 .meta 文件...")
+        with os.scandir(folder) as entries:
+            for entry in entries:
+                if not entry.is_file() or entry.name.lower().endswith(".meta"):
+                    continue
+                try:
+                    shutil.copy2(template, entry.path + ".meta")
+                    succeeded += 1
+                except Exception as exc:
+                    failed += 1
+                    log("%s -> %s" % (entry.name, exc), "error")
+        if failed:
+            log("任务结束：成功 %d 个，失败 %d 个" % (succeeded, failed), "warn")
+        else:
+            log("完成！共生成 %d 个 .meta 文件" % succeeded, "success")
+    except Exception as exc:
+        log("执行失败: " + str(exc), "error")
+    finally:
+        _notify_task_done("一键生成meta")
+        q.put(None)
+
+
+@app.route("/api/assist/run", methods=["POST"])
+def api_assist_run():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "请求数据格式错误"}), 400
+    template = data.get("template")
+    folder = data.get("folder")
+    if not isinstance(template, str) or not template.strip():
+        return jsonify({"error": "请选择 .meta 模板文件"}), 400
+    if not isinstance(folder, str) or not folder.strip():
+        return jsonify({"error": "请选择目标文件夹"}), 400
+    template = os.path.realpath(os.path.abspath(template.strip()))
+    folder = os.path.realpath(os.path.abspath(folder.strip()))
+    if not template.lower().endswith(".meta") or not os.path.isfile(template):
+        return jsonify({"error": ".meta 模板文件不存在或格式不正确"}), 400
+    if not os.path.isdir(folder):
+        return jsonify({"error": "目标文件夹不存在"}), 400
+
+    task_id = _get_next_task_id()
+    q = queue.Queue()
+    _log_queues[task_id] = q
+    try:
+        threading.Thread(
+            target=_exec_gen_meta,
+            args=(template, folder, q),
+            daemon=True,
+        ).start()
+    except Exception:
+        _log_queues.pop(task_id, None)
+        raise
+    return jsonify({"task_id": task_id})
+
 
 @app.route("/api/prefab/clear-text", methods=["POST"])
 def api_prefab_clear_text():
@@ -807,11 +891,17 @@ def api_prefab_clear_text():
 
 
 def _exec_prefab_clear_text(files, q, task_id):
+    unique_files = {}
+    for fp in files:
+        key = os.path.normcase(os.path.realpath(os.path.abspath(fp)))
+        unique_files.setdefault(key, fp)
+    files = list(unique_files.values())
+
     total_cleared = 0
     total_files = 0
     for fp in files:
         if not fp.lower().endswith(".prefab"):
-            q.put("[\u8df3\u8fc7] " + os.path.basename(fp) + " \u2014 \u4e0d\u662f .prefab \u6587\u4ef6\n")
+            q.put("[\u8df3\u8fc7] " + fp + " \u2014 \u4e0d\u662f .prefab \u6587\u4ef6\n")
             continue
         try:
             with open(fp, "rb") as f:
@@ -832,15 +922,16 @@ def _exec_prefab_clear_text(files, q, task_id):
             cleared = 0
             for i, line in enumerate(file_lines):
                 m = re.match(r"^( +)(m_Text:)(.*)$", line)
-                if m and m.group(3).strip():
+                if m:
                     new_lines.append(m.group(1) + m.group(2))
-                    val = m.group(3).strip()
-                    msg = "[\u6e05\u7406] " + os.path.basename(fp) + " L" + str(i+1) + ": " + val[:50]
-                    if len(val) > 50:
-                        msg += "..."
-                    msg += " \u2192 \u5df2\u6e05\u9664\n"
-                    q.put(msg)
-                    cleared += 1
+                    if m.group(3).strip():
+                        val = m.group(3).strip()
+                        msg = "[\u6e05\u7406] " + fp + " L" + str(i+1) + ": " + val[:50]
+                        if len(val) > 50:
+                            msg += "..."
+                        msg += " \u2192 \u5df2\u6e05\u9664\n"
+                        q.put(msg)
+                        cleared += 1
                 else:
                     new_lines.append(line)
             if cleared:
@@ -848,12 +939,208 @@ def _exec_prefab_clear_text(files, q, task_id):
                     f.write(nl.join(new_lines).encode("utf-8"))
                 total_cleared += cleared
             total_files += 1
-            q.put("[\u5b8c\u6210] " + os.path.basename(fp) + " \u2014 \u6e05\u7406 " + str(cleared) + " \u5904 m_Text\n")
+            q.put("[\u5b8c\u6210] " + fp + " \u2014 \u6e05\u7406 " + str(cleared) + " \u5904 m_Text\n")
         except Exception as e:
-            q.put("[\u9519\u8bef] " + os.path.basename(fp) + ": " + str(e) + "\n")
+            q.put("[\u9519\u8bef] " + fp + ": " + str(e) + "\n")
     q.put("\n[DONE] \u5171\u5904\u7406 " + str(total_files) + " \u4e2a\u6587\u4ef6\uff0c\u6e05\u7406 " + str(total_cleared) + " \u5904\u6587\u672c\n")
     _notify_task_done("\u4e00\u952e\u6e05\u7406\u6587\u5b57")
     q.put(None)
+
+
+def _atlas_json():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise AtlasMigrationError("请求数据格式错误")
+    return data
+
+
+def _atlas_error(exc):
+    return jsonify({"error": str(exc)}), 400
+
+
+def _run_atlas_task(task_id, operation, draft_id, q):
+    titles = {
+        "copy": "图集资源复制",
+        "resolve": "图集最终引用解析",
+        "rewrite": "图集预制引用修改",
+    }
+    methods = {
+        "copy": _atlas_migration.copy_files,
+        "resolve": _atlas_migration.resolve_final,
+        "rewrite": _atlas_migration.rewrite_prefabs,
+    }
+    outcome = {"ok": False, "operation": operation, "draft_id": draft_id}
+    try:
+        result = methods[operation](draft_id, lambda message: q.put(message + "\n"))
+        outcome.update({"ok": True, "result": result})
+        if result.get("txt_path"):
+            q.put("[输出路径] " + result["txt_path"] + "\n")
+        _notify_task_done(titles[operation])
+    except Exception as exc:
+        outcome["error"] = str(exc)
+        q.put("[错误] " + str(exc) + "\n")
+    finally:
+        with _atlas_tasks_lock:
+            _atlas_active_drafts.pop(draft_id, None)
+            if operation == "rewrite":
+                _atlas_task_results[task_id] = outcome
+                while len(_atlas_task_results) > 100:
+                    _atlas_task_results.pop(next(iter(_atlas_task_results)))
+        q.put(None)
+
+
+def _start_atlas_task(operation, draft_id):
+    if not isinstance(draft_id, str) or not draft_id:
+        raise AtlasMigrationError("草稿 ID 无效")
+    _atlas_migration.get_draft(draft_id)
+    task_id = _get_next_task_id()
+    with _atlas_tasks_lock:
+        if draft_id in _atlas_active_drafts:
+            raise AtlasMigrationError("该草稿已有任务正在执行")
+        _atlas_active_drafts[draft_id] = task_id
+    q = queue.Queue()
+    _log_queues[task_id] = q
+    try:
+        threading.Thread(
+            target=_run_atlas_task,
+            args=(task_id, operation, draft_id, q),
+            daemon=True,
+        ).start()
+    except Exception:
+        with _atlas_tasks_lock:
+            _atlas_active_drafts.pop(draft_id, None)
+        _log_queues.pop(task_id, None)
+        raise
+    return jsonify({"task_id": task_id})
+
+
+@app.route("/api/prefab/atlas/drafts", methods=["GET"])
+def api_prefab_atlas_drafts():
+    return jsonify({"drafts": _atlas_migration.list_drafts()})
+
+
+@app.route("/api/prefab/atlas/task-result", methods=["POST"])
+def api_prefab_atlas_task_result():
+    try:
+        task_id = _atlas_json().get("task_id", "")
+        if not isinstance(task_id, str) or not task_id:
+            raise AtlasMigrationError("任务 ID 无效")
+        with _atlas_tasks_lock:
+            outcome = _atlas_task_results.pop(task_id, None)
+        if outcome is None:
+            raise AtlasMigrationError("任务结果尚未就绪或已被读取")
+        return jsonify(outcome)
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
+@app.route("/api/prefab/atlas/draft/get", methods=["POST"])
+def api_prefab_atlas_draft_get():
+    try:
+        data = _atlas_json()
+        return jsonify({"draft": _atlas_migration.get_draft(data.get("draft_id", ""))})
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
+@app.route("/api/prefab/atlas/scan", methods=["POST"])
+def api_prefab_atlas_scan():
+    try:
+        data = _atlas_json()
+        return jsonify({"draft": _atlas_migration.create_draft(data.get("paths", []))})
+    except (AtlasMigrationError, OSError, UnicodeError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
+@app.route("/api/prefab/atlas/plan-groups", methods=["POST"])
+def api_prefab_atlas_plan_groups():
+    try:
+        data = _atlas_json()
+        draft = _atlas_migration.plan_groups(
+            data.get("draft_id", ""), data.get("prefab_id", ""),
+            data.get("source_group_ids", []), data.get("target_group_id", ""),
+        )
+        return jsonify({"draft": draft})
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
+@app.route("/api/prefab/atlas/rename", methods=["POST"])
+def api_prefab_atlas_rename():
+    try:
+        data = _atlas_json()
+        draft = _atlas_migration.rename_plan(
+            data.get("draft_id", ""), data.get("plan_id", ""), data.get("target_name", "")
+        )
+        return jsonify({"draft": draft})
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
+@app.route("/api/prefab/atlas/remove-plan", methods=["POST"])
+def api_prefab_atlas_remove_plan():
+    try:
+        data = _atlas_json()
+        draft = _atlas_migration.remove_plan(data.get("draft_id", ""), data.get("plan_id", ""))
+        return jsonify({"draft": draft})
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
+@app.route("/api/prefab/atlas/plan-manual-reference", methods=["POST"])
+def api_prefab_atlas_plan_manual_reference():
+    try:
+        data = _atlas_json()
+        draft = _atlas_migration.plan_manual_reference(
+            data.get("draft_id", ""), data.get("prefab_id", ""),
+            data.get("reference_id", ""), data.get("target_sprite_id", ""),
+        )
+        return jsonify({"draft": draft})
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
+@app.route("/api/prefab/atlas/refresh-atlas-catalog", methods=["POST"])
+def api_prefab_atlas_refresh_atlas_catalog():
+    try:
+        data = _atlas_json()
+        return jsonify(_atlas_migration.refresh_atlas_catalog(data.get("draft_id", "")))
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
+@app.route("/api/prefab/atlas/discard", methods=["POST"])
+def api_prefab_atlas_discard():
+    try:
+        data = _atlas_json()
+        return jsonify(_atlas_migration.discard(data.get("draft_id", "")))
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
+@app.route("/api/prefab/atlas/copy", methods=["POST"])
+def api_prefab_atlas_copy():
+    try:
+        return _start_atlas_task("copy", _atlas_json().get("draft_id", ""))
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
+@app.route("/api/prefab/atlas/resolve", methods=["POST"])
+def api_prefab_atlas_resolve():
+    try:
+        return _start_atlas_task("resolve", _atlas_json().get("draft_id", ""))
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
+@app.route("/api/prefab/atlas/rewrite", methods=["POST"])
+def api_prefab_atlas_rewrite():
+    try:
+        return _start_atlas_task("rewrite", _atlas_json().get("draft_id", ""))
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
 
 @app.route("/api/workflow/list", methods=["GET"])
 def api_workflow_list():
@@ -884,13 +1171,7 @@ def _focus_app_window():
 
 def _is_window_visible():
     try:
-        import ctypes
-        hwnd = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
-        if not hwnd:
-            return True
-        if not ctypes.windll.user32.IsWindowVisible(hwnd):
-            return False
-        return ctypes.windll.user32.IsIconic(hwnd) == 0
+        return bool(_is_window_visible_callback())
     except Exception:
         return True
 
@@ -898,53 +1179,60 @@ def _is_window_visible():
 def _notify_task_done(name):
     if _is_window_visible():
         return
-    try:
-        ico_path = os.path.join(_script_dir, "assets", "app_icon.ico")
-        if os.path.isfile(ico_path):
-            toast_icon = os.path.join(
-                os.environ.get("APPDATA", os.path.expanduser("~")),
-                "planning-toolbox", "toast_icon.png"
+    threading.Thread(
+        target=_notify_task_done_worker, args=(name,), daemon=True
+    ).start()
+
+
+def _notify_task_done_worker(name):
+    with _notify_task_lock:
+        try:
+            ico_path = os.path.join(_script_dir, "assets", "app_icon.ico")
+            if os.path.isfile(ico_path):
+                toast_icon = os.path.join(
+                    os.environ.get("APPDATA", os.path.expanduser("~")),
+                    "planning-toolbox", "toast_icon.png"
+                )
+                if not os.path.isfile(toast_icon):
+                    try:
+                        from PIL import Image
+                        src = Image.open(ico_path)
+                        if hasattr(src, 'seek'):
+                            best = src
+                            for i in range(src.n_frames if hasattr(src, 'n_frames') else 1):
+                                src.seek(i)
+                                w, h = src.size
+                                if w >= 48 and h >= 48:
+                                    best = src.copy()
+                                    break
+                            src = best
+                        raw = src.convert("RGBA")
+                        raw.thumbnail((34, 34), Image.LANCZOS)
+                        canvas = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
+                        left = (48 - raw.width) // 2
+                        top = (48 - raw.height) // 2
+                        canvas.paste(raw, (left, top), raw)
+                        os.makedirs(os.path.dirname(toast_icon), exist_ok=True)
+                        canvas.save(toast_icon, "PNG")
+                    except Exception:
+                        toast_icon = None
+            else:
+                toast_icon = None
+
+            from win11toast import toast
+            toast(
+                body=f"「{name}」任务已完成，点击查看结果",
+                on_click=lambda args: _focus_app_window(),
+                app_id="策划工具箱",
+                icon=toast_icon,
             )
-            if not os.path.isfile(toast_icon):
-                try:
-                    from PIL import Image
-                    src = Image.open(ico_path)
-                    if hasattr(src, 'seek'):
-                        best = src
-                        for i in range(src.n_frames if hasattr(src, 'n_frames') else 1):
-                            src.seek(i)
-                            w, h = src.size
-                            if w >= 48 and h >= 48:
-                                best = src.copy()
-                                break
-                        src = best
-                    raw = src.convert("RGBA")
-                    raw.thumbnail((34, 34), Image.LANCZOS)
-                    canvas = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
-                    left = (48 - raw.width) // 2
-                    top = (48 - raw.height) // 2
-                    canvas.paste(raw, (left, top), raw)
-                    os.makedirs(os.path.dirname(toast_icon), exist_ok=True)
-                    canvas.save(toast_icon, "PNG")
-                except Exception:
-                    toast_icon = None
-        else:
-            toast_icon = None
-
-        from win11toast import toast
-        toast(
-            body=f"「{name}」任务已完成，点击查看结果",
-            on_click=lambda args: _focus_app_window(),
-            app_id="策划工具箱",
-            icon=toast_icon,
-        )
-    except ImportError:
-        pass
-    except Exception:
-        pass
+        except ImportError:
+            pass
+        except Exception:
+            pass
 
 
-def _run_wf_task(q, wf, steps, task_id):
+def _run_wf_task(q, wf, steps, task_id, skip_lock=False):
     prefix = {"error": "❌ ", "ok": "✓ ", "warn": "⚠ ", "head": ""}
 
     def _put(msg, tag=""):
@@ -979,6 +1267,8 @@ def _run_wf_task(q, wf, steps, task_id):
         try:
             if stype == "export_text":
                 ok = _exec_export_text(step, _put, task_id)
+            elif stype == "export_modified_config":
+                ok = _exec_export_modified_config(step, _put, task_id)
             elif stype == "upload_svn":
                 ok = _exec_upload_svn(step, _put, task_id)
             elif stype == "merge_table":
@@ -992,7 +1282,7 @@ def _run_wf_task(q, wf, steps, task_id):
             elif stype == "unlock_svn":
                 ok = _exec_unlock_svn(step, _put, task_id)
             elif stype == "open_tables":
-                ok = _exec_open_tables(step, _put, task_id)
+                ok = _exec_open_tables(step, _put, task_id, skip_lock=skip_lock)
             elif stype == "revert_svn":
                 ok = _exec_revert_svn(step, _put, task_id)
             elif stype == "copy_files":
@@ -1127,10 +1417,11 @@ def api_workflow_run():
             return jsonify({"error": "未选中有效步骤"}), 400
         steps = filtered
 
+    skip_lock = data.get("skip_lock", False)
     task_id = _get_next_task_id()
     q = queue.Queue()
     _log_queues[task_id] = q
-    threading.Thread(target=_run_wf_task, args=(q, wf, steps, task_id), daemon=True).start()
+    threading.Thread(target=_run_wf_task, args=(q, wf, steps, task_id, skip_lock), daemon=True).start()
     return jsonify({"task_id": task_id})
 
 
@@ -1249,6 +1540,48 @@ def _exec_export_text(step, put, task_id=None):
         _exec_upload_svn({"dirs": upload_svn_dirs}, put, task_id)
 
     return True
+
+
+def _exec_export_modified_config(step, put, task_id=None):
+    source_path = step.get("source_path", "").strip()
+    upload_svn_dirs = step.get("upload_svn_dir", [])
+    if isinstance(upload_svn_dirs, str):
+        upload_svn_dirs = [d.strip() for d in upload_svn_dirs.split(",") if d.strip()]
+    if not source_path:
+        put("未指定本地 SVN 副本路径\n")
+        return False
+    if not upload_svn_dirs:
+        put("未指定上传 SVN 路径\n")
+        return False
+    invalid_dirs = [d for d in upload_svn_dirs if not os.path.isdir(d)]
+    if invalid_dirs:
+        put("上传 SVN 路径无效: " + "、".join(invalid_dirs) + "\n")
+        return False
+
+    proc = None
+
+    def _on_launch(started):
+        nonlocal proc
+        proc = started
+        _register_proc(proc, task_id)
+
+    def _cancelled():
+        with _cancel_lock:
+            return task_id in _cancelled_tasks
+
+    try:
+        result = run_export(source_path, _get_svn_path(), put, _cancelled, _on_launch)
+        if result is None:
+            return True
+        if not result:
+            return False
+        return _exec_upload_svn({"dirs": upload_svn_dirs}, put, task_id)
+    except Exception as e:
+        put("导出修改配置表失败: " + str(e) + "\n")
+        return False
+    finally:
+        if proc:
+            _unregister_proc(proc, task_id)
 
 
 def _get_tortoise_proc_path():
@@ -1478,6 +1811,70 @@ def _exec_copy_files(step, put, task_id=None):
     return True
 
 
+def _svn_check_no_lock(svn, target_path):
+    """通过 svn info 验证工作副本无残留锁。"""
+    try:
+        r = subprocess.run(
+            [svn, "info", "--show-item", "repos-root-url", target_path],
+            capture_output=True, timeout=30,
+            **_get_subprocess_kwargs()
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def _svn_cleanup_wait(svn, target_path, put, task_id=None, max_wait=300):
+    """执行 svn cleanup 并串行等待其真正完成（cleanup 成功且无残留锁）。
+
+    大工作副本的 wc.db 可能很大，cleanup 耗时数分钟；同一副本并发多个
+    cleanup 会互相竞争 SQLite 锁导致锁残留。这里串行执行、失败重试、
+    完成后用 svn info 验证锁已清除，未完成则返回 False 供调用方中止。
+    """
+    deadline = time.time() + max_wait
+    attempt = 0
+    while time.time() < deadline:
+        attempt += 1
+        put(f"  执行 svn cleanup（第 {attempt} 次）...\n")
+        proc = None
+        try:
+            proc = subprocess.Popen(
+                [svn, "cleanup", target_path],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                **_get_subprocess_kwargs())
+            if task_id:
+                _register_proc(proc, task_id)
+            out_bytes, err_bytes = proc.communicate(timeout=180)
+        except subprocess.TimeoutExpired:
+            if proc:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            put("  cleanup 超时（>180s），3 秒后重试...\n")
+            time.sleep(3)
+            continue
+        except Exception as exc:
+            put(f"  cleanup 失败: {exc}\n")
+            time.sleep(3)
+            continue
+        finally:
+            if proc and task_id:
+                _unregister_proc(proc, task_id)
+        if proc.returncode != 0:
+            err = _svn_decode_output(err_bytes)[:200] if err_bytes else ""
+            put(f"  cleanup 异常: {err}\n")
+            time.sleep(3)
+            continue
+        if _svn_check_no_lock(svn, target_path):
+            put("  cleanup 完成，工作副本已解锁\n")
+            return True
+        put("  cleanup 完成但工作副本仍被锁定，等待后重试...\n")
+        time.sleep(3)
+    put(f"  cleanup 在 {max_wait}s 内未完成，工作副本可能仍处于锁定状态\n")
+    return False
+
+
 def _svn_update_with_cleanup(svn, d, put, task_id, accept_mine=False):  # noqa: C901
     """执行 svn update，遇到 E155004/E155037 时自动 cleanup 重试一次"""
     accept_flag = "mine-full" if accept_mine else "theirs-full"
@@ -1508,46 +1905,19 @@ def _svn_update_with_cleanup(svn, d, put, task_id, accept_mine=False):  # noqa: 
                 return True
             err = stderr.strip()
             if "E155004" in err or "E155037" in err:
-                put("检测到 SVN 锁，正在执行 cleanup...\n")
-                cleanup_proc = subprocess.Popen(
-                    [svn, "cleanup", d],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    **_get_subprocess_kwargs())
-                _register_proc(cleanup_proc, task_id)
-                try:
-                    cl_out, cl_err = cleanup_proc.communicate(timeout=60)
-                    cl_stdout = _svn_decode_output(cl_out)
-                    cl_stderr = _svn_decode_output(cl_err)
-                    for line in cl_stdout.strip().splitlines():
-                        line = line.strip()
-                        if line:
-                            put(f"  [cleanup] {line}\n")
-                    if cleanup_proc.returncode != 0:
-                        put(f"  cleanup 失败 ({cleanup_proc.returncode}): {cl_stderr.strip()[-200:]}\n")
-                        put(f"  正在重试 svn cleanup（无参数模式）...\n")
-                        cl2 = subprocess.Popen(
-                            [svn, "cleanup", d, "--remove-unversioned"],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            **_get_subprocess_kwargs())
-                        _register_proc(cl2, task_id)
-                        try:
-                            cl2.communicate(timeout=60)
-                        finally:
-                            _unregister_proc(cl2, task_id)
-                        if cl2.returncode != 0:
-                            put(f"  cleanup 重试仍失败，尝试强制回退本地修改...\n")
-                            revert_proc = subprocess.Popen(
-                                [svn, "revert", "-R", d],
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                **_get_subprocess_kwargs())
-                            _register_proc(revert_proc, task_id)
-                            try:
-                                revert_proc.communicate(timeout=60)
-                            finally:
-                                _unregister_proc(revert_proc, task_id)
-                            put(f"  本地回退完成，重试更新...\n")
-                finally:
-                    _unregister_proc(cleanup_proc, task_id)
+                put("检测到 SVN 锁，正在执行 cleanup（串行等待完成）...\n")
+                if not _svn_cleanup_wait(svn, d, put, task_id):
+                    put("  cleanup 未能在限定时间内完成，尝试强制回退本地修改...\n")
+                    revert_proc = subprocess.Popen(
+                        [svn, "revert", "-R", d],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        **_get_subprocess_kwargs())
+                    _register_proc(revert_proc, task_id)
+                    try:
+                        revert_proc.communicate(timeout=60)
+                    finally:
+                        _unregister_proc(revert_proc, task_id)
+                    put("  本地回退完成，重试更新...\n")
                 put("cleanup 完成，重试更新...\n")
                 retry_proc = subprocess.Popen(
                     [svn, "update", "--accept", accept_flag, d],
@@ -1833,7 +2203,7 @@ def _exec_unlock_svn(step, put, task_id=None):
     return True
 
 
-def _exec_open_tables(step, put, task_id=None):
+def _exec_open_tables(step, put, task_id=None, skip_lock=False):
     file_paths = step.get("file_paths", [])
     if not file_paths:
         put("没有要打开的文件\n")
@@ -1843,10 +2213,12 @@ def _exec_open_tables(step, put, task_id=None):
         if not fp or not os.path.exists(fp):
             put(f"文件不存在: {fp}\n")
             continue
-        # 打开前更新 gameData 目录并锁定文件
+        # 打开前更新 gameData 目录
         _find_and_update_gamedata(fp, put, task_id)
-        if not _exec_lock_svn({"target_path": fp, "lock_msg": "打开表格前锁定", "update_dirs": []}, put, task_id):
-            continue
+        # 锁定文件（skip_lock=True 时跳过）
+        if not skip_lock:
+            if not _exec_lock_svn({"target_path": fp, "lock_msg": "打开表格前锁定", "update_dirs": []}, put, task_id):
+                continue
         try:
             os.startfile(fp)
             put(f"打开: {os.path.basename(fp)}\n")
@@ -1889,14 +2261,11 @@ def _revert_one_path(svn, target_path, step, put, task_id):
     put(f"{'='*50}\n")
     put(f"SVN回退: {target_path}\n")
 
-    # 先 cleanup 确保无残留锁
+    # 先 cleanup 确保无残留锁（串行等待真正完成，大库 cleanup 可能较慢）
     put("正在 cleanup 工作副本...\n")
-    try:
-        subprocess.run([svn, "cleanup", target_path],
-                       capture_output=True, timeout=60,
-                       **_get_subprocess_kwargs())
-    except Exception:
-        pass
+    if not _svn_cleanup_wait(svn, target_path, put, task_id):
+        put("[error] cleanup 未完成，工作副本仍被锁定，中止回退\n")
+        return False
 
     # 更新到服务器最新版本
     put("正在更新工作副本至最新版本...\n")
@@ -4253,7 +4622,7 @@ def _merge_analyze_worker(task_id, source_url, target_path, revisions,
 def api_log_stream(task_id):
     q = _log_queues.get(task_id)
     if not q:
-        return Response("data: 任务已结束\n\n", mimetype="text/event-stream")
+        return Response("data: [DONE]\n\n", mimetype="text/event-stream")
 
     def _stream():
         try:
@@ -4472,12 +4841,8 @@ def api_update_apply():
 
 @app.route("/api/close", methods=["POST"])
 def api_close():
-    import ctypes
     try:
-        hwnd = ctypes.windll.user32.FindWindowW(None, "策划工具箱")
-        if hwnd:
-            ctypes.windll.user32.ShowWindow(hwnd, 0)
-        return jsonify({"ok": True})
+        return jsonify({"ok": bool(_hide_window_callback())})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 

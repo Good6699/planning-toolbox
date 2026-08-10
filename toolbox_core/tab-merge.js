@@ -41,7 +41,7 @@ function buildMergeTab(panel) {
           <div class="form-group">
             <label>源SVN地址（读取版本、变更文件）</label>
             <div class="flex-row">
-              <input type="text" id="merge_source" placeholder="输入源SVN仓库URL，如 http://svn/repo/branches/xxx" autocomplete="off" style="flex:1">
+              <input type="text" id="merge_source" placeholder="输入要合入的分支 SVN 链接，或拖入本地工作副本自动识别" autocomplete="off" style="flex:1">
               <button class="btn btn-normal" data-action="browse-merge-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
               <button class="btn btn-normal" data-action="open-merge-source" title="打开文件夹"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
             </div>
@@ -49,7 +49,7 @@ function buildMergeTab(panel) {
           <div class="form-group">
             <label>目标路径（合并落地的本地工作副本路径）</label>
             <div class="flex-row">
-              <input type="text" id="merge_target" placeholder="输入本地SVN工作副本路径，如 D:/workspace/project" autocomplete="off" style="flex:1">
+              <input type="text" id="merge_target" placeholder="输入要合入到的本地 SVN 工作副本路径" autocomplete="off" style="flex:1">
               <button class="btn btn-normal" data-action="browse-merge-target"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
               <button class="btn btn-normal" data-action="open-merge-target" title="打开文件夹"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
             </div>
@@ -62,18 +62,18 @@ function buildMergeTab(panel) {
           <div class="form-group">
             <label>时间范围</label>
             <div class="flex-row" style="align-items:center">
-              <input type="text" id="merge_start" value="${yearStart}" placeholder="YYYY-MM-DD" style="flex:1;min-width:0">
+              <input type="text" id="merge_start" value="${yearStart}" placeholder="YYYY-MM-DD 格式，默认当年 1 月 1 日" style="flex:1;min-width:0">
               <span style="color:var(--dim)">—</span>
-              <input type="text" id="merge_end" value="${today}" placeholder="YYYY-MM-DD" style="flex:1;min-width:0">
+              <input type="text" id="merge_end" value="${today}" placeholder="YYYY-MM-DD 格式，默认今天" style="flex:1;min-width:0">
             </div>
           </div>
           <div class="form-group">
             <label>备注关键词（留空不限）</label>
-            <input type="text" id="merge_keyword" placeholder="按提交备注模糊匹配（逗号分隔多个）" autocomplete="off">
+            <input type="text" id="merge_keyword" placeholder="输入提交信息中的关键字，多个用逗号分隔" autocomplete="off">
           </div>
           <div class="form-group">
             <label>提交者（留空不限）</label>
-            <input type="text" id="merge_author" placeholder="按SVN用户名过滤" autocomplete="off">
+            <input type="text" id="merge_author" placeholder="SVN提交者的账户名" autocomplete="off">
           </div>
         </div>
       </div>
@@ -201,7 +201,7 @@ function buildMergeTab(panel) {
     modeBar.appendChild(mkModeBtn("include", "只包含"));
     modeBar.appendChild(mkModeBtn("exclude", "只排除"));
     const ta = document.createElement("textarea");
-    ta.placeholder = "config\nData2/腐败秘境开发";
+    ta.placeholder = "输入要排除的路径，每行一个，不需要完整路径";
     Object.assign(ta.style, {
       width:"100%", boxSizing:"border-box", minHeight:"250px",
       background:"var(--bg2)", border:"1px solid var(--panel2)", borderRadius:"8px",
@@ -267,12 +267,12 @@ function buildMergeTab(panel) {
     inp.className = "wf-modal-input";
     inp.id = "merge_exclude_input";
     inp.value = curVal;
-    inp.placeholder = "多个路径用,分隔";
+    inp.placeholder = "输入不参与回退的路径，多个用逗号分隔";
     inp.style.cssText = "flex:1";
     row.appendChild(inp);
     var browseBtn = document.createElement("button");
     browseBtn.className = "btn btn-normal btn-sm";
-    browseBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>';
+    browseBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>';
     browseBtn.onclick = function() { browseDir("merge_exclude_input"); };
     row.appendChild(browseBtn);
     grp.appendChild(row);
@@ -547,7 +547,9 @@ async function runMergeQuery() {
   const endDate = document.getElementById("merge_end").value;
   if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
   if (!isSvnUrl(sourceUrl)) { _showToast("请输入有效的 SVN 链接"); return; }
-  if (!targetPath) { _showToast("请输入目标本地工作副本路径"); return; }
+  if (!targetPath) { _showToast("请输入目标本地工作副本路径"); document.getElementById("merge_target").focus(); return; }
+  const dateError = _dateRangeError(startDate, endDate);
+  if (dateError) { _showToast(dateError); document.getElementById("merge_start").focus(); return; }
   const btn = document.getElementById("merge_query_btn");
   btn.dataset.orig = btn.dataset.orig || btn.textContent;
   const logEl = document.getElementById("merge_log");
@@ -632,6 +634,7 @@ async function runMergeAnalysis() {
   const sourceUrl = document.getElementById("merge_source").value.trim();
   const targetPath = document.getElementById("merge_target").value.trim();
   if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
+  if (!isSvnUrl(sourceUrl)) { _showToast("请输入有效的 SVN 链接"); document.getElementById("merge_source").focus(); return; }
   if (!targetPath) { _showToast("请输入目标路径（用于GUID映射查询）"); return; }
   const _hasCheckedFiles = Object.values(_mergeData.checkedFiles).some(Boolean);
   const revFileMap = {};
@@ -732,6 +735,7 @@ async function runMergeRun() {
   const sourceUrl = document.getElementById("merge_source").value.trim();
   const targetPath = document.getElementById("merge_target").value.trim();
   if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
+  if (!isSvnUrl(sourceUrl)) { _showToast("请输入有效的 SVN 链接"); document.getElementById("merge_source").focus(); return; }
   if (!targetPath) { _showToast("请输入目标路径"); return; }
   const checkedPaths = Object.keys(_mergeData.checkedFiles).filter(k => _mergeData.checkedFiles[k]);
   if (!checkedPaths.length) { _showToast("请至少选择一个文件"); return; }
@@ -770,6 +774,7 @@ async function runMergeRun() {
     const d = await r.json();
     if (d.error) {
       logEl.innerHTML = '<span class="error">❌ '+escapeHtml(d.error)+'</span>';
+      _showToast(d.error);
       _focusAppOnError("merge", logEl);
       _decRunning();
       _decTabRunning("merge");
@@ -807,6 +812,7 @@ async function runMergeRun() {
     };
   } catch (err) {
     logEl.innerHTML = '<span class="error">❌ 请求失败: '+escapeHtml(err.message)+'</span>';
+    _showToast("请求失败：" + err.message);
     _focusAppOnError("merge", logEl);
     if (btn.dataset.taskId) { btn.dataset.taskId = ''; btn.classList.remove("stop"); btn.innerHTML = btn.dataset.orig; }
     _decRunning();

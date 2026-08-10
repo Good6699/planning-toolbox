@@ -1,7 +1,7 @@
 function buildWorkflowTab(panel) {
   const wfs = config.workflows || [];
-  const typeCn = {export_text:"导出文字表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表",merge_error_code:"整合错误码"};
-  const typeIcon = {export_text:"📄",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📋",merge_error_code:"📋"};
+  const typeCn = {export_text:"导出文字表",export_modified_config:"导出修改配置表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表",merge_error_code:"整合错误码"};
+  const typeIcon = {export_text:"📄",export_modified_config:"📋",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📋",merge_error_code:"📋"};
   const isEmpty = !wfs.length;
   panel.innerHTML = `
     <div class="wf-layout">
@@ -26,6 +26,7 @@ function buildWorkflowTab(panel) {
                     <input type="checkbox" class="wf-child-check">
                     <span class="wf-child-type ${s.type}">${typeIcon[s.type]||''} ${typeCn[s.type]||s.type}</span>
                     <span class="wf-child-name" title="双击修改名称">${escapeHtml(s.name)}</span>
+                    ${s.type === 'open_tables' ? '<button class="wf-step-open-btn" title="打开（不锁定SVN）">' + _WF_ICONS.open + '</button>' : ''}
                     <button class="wf-step-play-btn" title="执行本步骤">${_WF_ICONS.play}</button>
                     <button class="wf-settings-btn" title="步骤设置">${_WF_ICONS.settings}</button>
                     <button class="wf-child-del-btn" title="删除步骤">✕</button>
@@ -161,7 +162,7 @@ function buildWorkflowTab(panel) {
       try {
         const r = await fetch("/api/workflow/open-update-wc", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prefixes, name: wf.name})});
         const d = await r.json();
-        if (d.error) { bodyEl.innerHTML = '<div class="error">❌ '+escapeHtml(d.error)+'</div>'; return; }
+        if (d.error) { bodyEl.innerHTML = '<div class="error">❌ '+escapeHtml(d.error)+'</div>'; _showToast(d.error); return; }
         d.opened.forEach(path => {
           const div = document.createElement("div");
           div.textContent = "已打开 TortoiseSVN 更新窗口: " + path;
@@ -174,6 +175,7 @@ function buildWorkflowTab(panel) {
         });
       } catch(err) {
         bodyEl.innerHTML = '<div class="error">❌ 请求失败: '+escapeHtml(err.message)+'</div>';
+        _showToast("请求失败：" + err.message);
       }
     });
     const addItem = el.querySelector(".wf-add-step-item");
@@ -260,13 +262,18 @@ function buildWorkflowTab(panel) {
       const currentName = config.workflows[wfIdx]?.name || "";
       const input = document.createElement("input");
       input.className = "wf-name-input";
+      input.placeholder = "输入工作流名称";
       input.value = currentName;
       nameSpan.textContent = "";
       nameSpan.appendChild(input);
       input.focus();
       input.select();
+      let finished = false;
       const finish = (save) => {
+        if (finished) return;
+        finished = true;
         const val = input.value.trim();
+        if (save && !val) _showToast("工作流名称不能为空");
         if (save && val && config.workflows[wfIdx]) {
           config.workflows[wfIdx].name = val;
           saveConfig({workflows:config.workflows});
@@ -289,6 +296,41 @@ function buildWorkflowTab(panel) {
   let _modalCtx = null;
   let _wfSaving = false;
 
+  function _wfStepValidation(step) {
+    const required = {
+      export_text:["input_file"],
+      export_modified_config:["source_path","upload_svn_dir"],
+      upload_svn:["dirs"],
+      merge_table:["input_dir","target_dir"],
+      merge_translation:["input_file","original_file"],
+      export_error_code:["root_dir","lang_codes"],
+      lock_svn:["target_path"],
+      unlock_svn:["target_path"],
+      open_tables:["file_paths"],
+      revert_svn:["revert_paths"],
+      copy_files:["src_dir","tgt_dir"],
+      merge_error_code:["src_path","tgt_path"]
+    };
+    const labels = {
+      input_file:"输入文件", source_path:"本地 SVN 副本路径", upload_svn_dir:"上传 SVN 路径",
+      dirs:"源目录", input_dir:"输入文件", target_dir:"输出文件", original_file:"目标文件",
+      root_dir:"根目录", lang_codes:"语言代码", target_path:"目标文件路径", file_paths:"文件路径",
+      revert_paths:"回退路径", src_dir:"源目录", tgt_dir:"目标目录", src_path:"源路径", tgt_path:"目标路径"
+    };
+    for (const key of required[step.type] || []) {
+      const value = step[key];
+      const empty = Array.isArray(value) ? !value.length : !String(value || "").trim();
+      if (empty) return {key, message:"请填写" + (labels[key] || key)};
+    }
+    if (step.type === "merge_table") {
+      const titleRows = Number(step.title_rows);
+      if (!Number.isInteger(titleRows) || titleRows < 1) return {key:"title_rows", message:"标题行必须是大于等于 1 的整数"};
+      const idCol = Number(step.id_col);
+      if (!Number.isInteger(idCol) || idCol < 1) return {key:"id_col", message:"ID 列必须是大于等于 1 的整数"};
+    }
+    return null;
+  }
+
   function _wfModalDoSave() {
     if (_wfSaving) return;
     const ctx = _modalCtx || (overlay.dataset.modalCtx ? JSON.parse(overlay.dataset.modalCtx) : null);
@@ -297,19 +339,28 @@ function buildWorkflowTab(panel) {
     const { wfIdx, stepIdx } = ctx;
     const step = config.workflows[wfIdx]?.steps?.[stepIdx];
     if (!step) { _wfSaving = false; return; }
+    const nextStep = Object.assign({}, step);
     modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
       const key = inp.dataset.key;
       if (!key) return;
       const arrKeys = ["tools","dirs","file_paths","update_dirs","exclude_paths","upload_svn_dir","revert_paths"];
       if (arrKeys.includes(key)) {
-        step[key] = inp.value.split(",").map(s => s.trim()).filter(Boolean);
+        nextStep[key] = inp.value.split(",").map(s => s.trim()).filter(Boolean);
       } else {
-        step[key] = inp.value;
+        nextStep[key] = inp.value;
       }
     });
     modalBody.querySelectorAll("input[type=checkbox][data-key]").forEach(inp => {
-      step[inp.dataset.key] = inp.checked;
+      nextStep[inp.dataset.key] = inp.checked;
     });
+    const validation = _wfStepValidation(nextStep);
+    if (validation) {
+      _wfSaving = false;
+      _showToast(validation.message);
+      modalBody.querySelector(`[data-key="${validation.key}"]`)?.focus();
+      return;
+    }
+    Object.assign(step, nextStep);
     const autoName = _wfAutoName(step);
     if (!step.custom_name && autoName) step.name = autoName;
     saveConfig({workflows:config.workflows});
@@ -353,53 +404,56 @@ function buildWorkflowTab(panel) {
 
   function _wfModalFields(type, step) {
     const v = (key) => escapeHtml(Array.isArray(step[key]) ? step[key].join(", ") : step[key]||"");
-    const _fb = (label, dataKey, id, browseType, append) => `
+    const _fb = (label, dataKey, id, browseType, append, placeholder) => `
       <div class="form-group"><label>${label}</label>
-        <div class="flex-row"><input type="text" class="wf-modal-input" id="${id}" data-key="${dataKey}" value="${v(dataKey)}" style="flex:1" placeholder="${browseType==='dir'?'选择目录':'选择文件'}">
-        <button class="btn btn-normal btn-sm" onclick="(function(t,i,a){if(a){_browseDirAppend(i)}else{var v=document.getElementById(i).value.trim(),d=v.substring(0,v.lastIndexOf('\\\\'));if(!d)d=v;if(t==='file')browseFile(i,d||'');else browseDir(i,null,d||'');}})('${browseType.replace(/'/g,"\\'")}','${id}',${!!append})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>`;
+        <div class="flex-row"><input type="text" class="wf-modal-input" id="${id}" data-key="${dataKey}" value="${v(dataKey)}" style="flex:1" placeholder="${escapeHtml(placeholder || (browseType==='dir'?'输入本地目录路径':'输入文件路径'))}">
+        <button class="btn btn-normal btn-sm" onclick="(function(t,i,a){if(a){_browseDirAppend(i)}else{var v=document.getElementById(i).value.trim(),d=v.substring(0,v.lastIndexOf('\\\\'));if(!d)d=v;if(t==='file')browseFile(i,d||'');else browseDir(i,null,d||'');}})('${browseType.replace(/'/g,"\\'")}','${id}',${!!append})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>`;
     const m = {
       export_text: `
-        ${_fb("主文件路径","input_file","wf_m_input_file","file")}
-        ${_fb("上传SVN目录","upload_svn_dir","wf_m_upload_svn_dir","dir", true)}`,
+        ${_fb("主文件路径","input_file","wf_m_input_file","file",false,"输入要导出的 Excel 文件路径")}
+        ${_fb("上传SVN目录","upload_svn_dir","wf_m_upload_svn_dir","dir",true,"输入导出后要上传的本地SVN路径，多个用逗号分隔")}`,
+      export_modified_config: `
+        ${_fb("本地SVN副本路径","source_path","wf_m_source_path","dir",false,"输入本地 SVN 工作副本路径")}
+        ${_fb("上传SVN路径（逗号分隔）","upload_svn_dir","wf_m_upload_svn_dir_modified","dir",true,"输入导出后要上传的本地SVN路径，多个用逗号分隔")}`,
       upload_svn: `
-        <div class="form-group"><label>源目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_dirs" data-key="dirs" value="${v("dirs")}" placeholder="多个目录用,分隔"></div>`,
+        <div class="form-group"><label>源目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_dirs" data-key="dirs" value="${v("dirs")}" placeholder="输入待上传的本地目录，多个用逗号分隔"></div>`,
       merge_table: `
-        ${_fb("输入文件","input_dir","wf_m_input_dir","file")}
-        ${_fb("输出文件","target_dir","wf_m_target_dir","file")}
-        <div class="form-group"><label>标题行</label><input type="number" class="wf-modal-input" id="wf_m_title_rows" data-key="title_rows" value="${v("title_rows")||"1"}" min="1" step="1"></div>
-        <div class="form-group"><label>ID列</label><input type="number" class="wf-modal-input" id="wf_m_id_col" data-key="id_col" value="${v("id_col")||"1"}" min="1" step="1"></div>`,
+        ${_fb("输入文件","input_dir","wf_m_input_dir","file",false,"输入要合并的 Excel 文件路径")}
+        ${_fb("输出文件","target_dir","wf_m_target_dir","file",false,"输入合并后的输出文件路径")}
+        <div class="form-group"><label>标题行</label><input type="number" class="wf-modal-input" id="wf_m_title_rows" data-key="title_rows" value="${v("title_rows")||"1"}" placeholder="表头占几行，正整数" min="1" step="1"></div>
+        <div class="form-group"><label>ID列</label><input type="number" class="wf-modal-input" id="wf_m_id_col" data-key="id_col" value="${v("id_col")||"1"}" placeholder="ID 列是第几列，从 1 开始" min="1" step="1"></div>`,
       merge_translation: `
-        ${_fb("翻译文件","input_file","wf_m_tr_input","file")}
-        ${_fb("目标文件","original_file","wf_m_orig_file","file")}`,
+        ${_fb("翻译文件","input_file","wf_m_tr_input","file",false,"输入已翻译完成的 Excel 文件")}
+        ${_fb("目标文件","original_file","wf_m_orig_file","file",false,"输入要合入翻译的目标文件")}`,
       export_error_code: `
-        ${_fb("根目录","root_dir","wf_m_root_dir","dir")}
-        <div class="form-group"><label>语言代码</label><input type="text" class="wf-modal-input" id="wf_m_ec_lang" data-key="lang_codes" value="${v("lang_codes")}"></div>
-        ${_fb("上传SVN目录","upload_svn_dir","wf_m_upload_svn_dir_ec","dir", true)}`,
+        ${_fb("根目录","root_dir","wf_m_root_dir","dir",false,"输入错误码文件所在的根目录")}
+        <div class="form-group"><label>语言代码</label><input type="text" class="wf-modal-input" id="wf_m_ec_lang" data-key="lang_codes" value="${v("lang_codes")}" placeholder="输入语言代码，多个用逗号分隔，留空自动识别"></div>
+        ${_fb("上传SVN目录","upload_svn_dir","wf_m_upload_svn_dir_ec","dir",true,"输入导出后要上传的本地SVN路径，多个用逗号分隔")}`,
       lock_svn: `
-        ${_fb("目标文件路径","target_path","wf_m_target_path","file")}
-        <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="多个目录用,分隔"></div>
-        <div class="form-group"><label>锁定消息</label><input type="text" class="wf-modal-input" id="wf_m_lock_msg" data-key="lock_msg" value="${v("lock_msg")}"></div>`,
+        ${_fb("目标文件路径","target_path","wf_m_target_path","file",false,"输入要锁定的文件路径")}
+        <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="锁定前先更新的目录，多个用逗号分隔"></div>
+        <div class="form-group"><label>锁定消息</label><input type="text" class="wf-modal-input" id="wf_m_lock_msg" data-key="lock_msg" value="${v("lock_msg")}" placeholder="输入 SVN 锁定的说明信息"></div>`,
       unlock_svn: `
-        ${_fb("目标文件路径","target_path","wf_m_target_path","file")}
-        <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="多个目录用,分隔"></div>
-        <div class="form-group"><label>解锁消息</label><input type="text" class="wf-modal-input" id="wf_m_lock_msg" data-key="lock_msg" value="${v("lock_msg")}"></div>`,
+        ${_fb("目标文件路径","target_path","wf_m_target_path","file",false,"输入要解锁的文件路径")}
+        <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="解锁前先更新的目录，多个用逗号分隔"></div>
+        <div class="form-group"><label>解锁消息</label><input type="text" class="wf-modal-input" id="wf_m_lock_msg" data-key="lock_msg" value="${v("lock_msg")}" placeholder="输入 SVN 解锁的说明信息"></div>`,
       open_tables: `
-        <div class="form-group"><label>文件路径（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_file_paths" data-key="file_paths" value="${v("file_paths")}" placeholder="多个文件用,分隔"></div>`,
+        <div class="form-group"><label>文件路径（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_file_paths" data-key="file_paths" value="${v("file_paths")}" placeholder="输入要打开的 Excel 文件路径，多个用逗号分隔"></div>`,
       revert_svn: `
         <div class="form-group"><label>回退路径（逗号分隔）</label>
-          <div class="flex-row"><input type="text" class="wf-modal-input" id="wf_m_rv_paths" data-key="revert_paths" value="${v("revert_paths")}" style="flex:1" placeholder="多个路径用,分隔">
-          <button class="btn btn-normal btn-sm" onclick="browseDir('wf_m_rv_paths',null,null,true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>
+          <div class="flex-row"><input type="text" class="wf-modal-input" id="wf_m_rv_paths" data-key="revert_paths" value="${v("revert_paths")}" style="flex:1" placeholder="输入要回退的目录或文件路径，多个用逗号分隔">
+          <button class="btn btn-normal btn-sm" onclick="browseDir('wf_m_rv_paths',null,null,true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>
         <div class="form-group"><label>排除路径（逗号分隔）</label>
-          <input type="text" class="wf-modal-input" id="wf_m_rv_exclude" data-key="exclude_paths" value="${v("exclude_paths")}" placeholder="多个路径用,分隔">
+          <input type="text" class="wf-modal-input" id="wf_m_rv_exclude" data-key="exclude_paths" value="${v("exclude_paths")}" placeholder="输入不参与回退的路径，多个用逗号分隔">
         </div>
         <label class="wf-rv-check"><input type="checkbox" data-key="delete_unversioned" ${step.delete_unversioned?'checked':''}> 永久删除未版本控制的文件</label>`,
       copy_files: `
-        ${_fb("源目录","src_dir","wf_m_cf_src","dir")}
-        ${_fb("目标目录","tgt_dir","wf_m_cf_tgt","dir")}`,
+        ${_fb("源目录","src_dir","wf_m_cf_src","dir",false,"输入源文件所在目录")}
+        ${_fb("目标目录","tgt_dir","wf_m_cf_tgt","dir",false,"输入要复制到的目标目录")}`,
       merge_error_code: `
-        ${_fb("源路径","src_path","wf_m_mec_src","dir")}
-        ${_fb("目标路径","tgt_path","wf_m_mec_tgt","dir")}
-        <div class="form-group"><label>语言代码（留空自动识别）</label><input type="text" class="wf-modal-input" id="wf_m_mec_lang" data-key="lang_codes" value="${v("lang_codes")}" placeholder="如: ZH_CN, KO_KR"></div>`,
+        ${_fb("源路径","src_path","wf_m_mec_src","dir",false,"输入错误码源文件所在目录")}
+        ${_fb("目标路径","tgt_path","wf_m_mec_tgt","dir",false,"输入要合入到的目标目录")}
+        <div class="form-group"><label>语言代码（留空自动识别）</label><input type="text" class="wf-modal-input" id="wf_m_mec_lang" data-key="lang_codes" value="${v("lang_codes")}" placeholder="输入语言代码，多个用逗号分隔，留空自动识别"></div>`,
     };
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
   }
@@ -593,6 +647,7 @@ function buildWorkflowTab(panel) {
       const currentName = step.name || "";
       const input = document.createElement("input");
       input.className = "wf-name-input";
+      input.placeholder = "输入步骤名称";
       input.value = currentName;
       nameEl.textContent = "";
       nameEl.appendChild(input);
@@ -603,6 +658,7 @@ function buildWorkflowTab(panel) {
         if (finished) return;
         finished = true;
         const val = input.value.trim();
+        if (save && !val) _showToast("步骤名称不能为空");
         if (save && val && config.workflows[wfIdx]?.steps?.[stepIdx]) {
           config.workflows[wfIdx].steps[stepIdx].name = val;
           config.workflows[wfIdx].steps[stepIdx].custom_name = true;
@@ -657,6 +713,8 @@ function buildWorkflowTab(panel) {
         btn.title = "执行本步骤";
         return;
       }
+      const validation = _wfStepValidation(step);
+      if (validation) { _showToast(validation.message); return; }
       const wfName = config.workflows[wfIdx]?.name || "工作流";
       const logContainer = document.getElementById("wf_log");
 
@@ -695,6 +753,72 @@ function buildWorkflowTab(panel) {
           btn.innerHTML = _WF_ICONS.play;
           btn.classList.remove("stop");
           btn.title = "执行本步骤";
+        }
+        _updateWfDot(wfIdx);
+      });
+    });
+  });
+
+  panel.querySelectorAll(".wf-step-open-btn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      triggerUpdateCheck();
+      const child = btn.closest(".wf-child");
+      const parent = btn.closest(".wf-parent");
+      if (!child || !parent) return;
+      const wfIdx = Number(parent.dataset.idx);
+      const stepIdx = [...parent.querySelector(".wf-children").children].indexOf(child);
+      const step = config.workflows[wfIdx]?.steps?.[stepIdx];
+      if (!step) return;
+      const stateKey = "open_" + wfIdx + "_" + stepIdx;
+      const state = _wfPlayState[stateKey];
+      if (state) {
+        if (!(await showConfirm({title:"确认", message:"确定要结束打开操作吗？"}))) return;
+        fetch("/api/task/cancel", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task_id: state.taskId})}).catch(()=>{});
+        delete _wfPlayState[stateKey];
+        btn.innerHTML = _WF_ICONS.open;
+        btn.title = "打开（不锁定SVN）";
+        return;
+      }
+      const validation = _wfStepValidation(step);
+      if (validation) { _showToast(validation.message); return; }
+      const wfName = config.workflows[wfIdx]?.name || "工作流";
+      const logContainer = document.getElementById("wf_log");
+
+      logContainer.querySelectorAll(".wf-log-section").forEach(sec => {
+        const bodyEl = sec.querySelector(".wf-log-body");
+        if (bodyEl?.id) {
+          let done = false;
+          let m = bodyEl.id.match(/^wf_log_step_(\d+)_(\d+)_/);
+          if (m) { done = !_wfPlayState["step_" + m[1] + "_" + m[2]] && !_wfPlayState["open_" + m[1] + "_" + m[2]]; }
+          else {
+            m = bodyEl.id.match(/^wf_log_update_(\d+)_/);
+            if (m) { done = !_wfPlayState["update_" + m[1]]; }
+            else {
+              m = bodyEl.id.match(/^wf_log_(\d+)_/);
+              if (m) { done = !_wfPlayState[Number(m[1])]; }
+            }
+          }
+          if (done) sec.remove();
+        }
+      });
+
+      const bodyId = "wf_log_step_" + wfIdx + "_" + stepIdx + "_" + Date.now();
+      const section = document.createElement("div");
+      section.className = "wf-log-section";
+      section.innerHTML = `<div class="wf-log-section-header">${escapeHtml(wfName)} > ${escapeHtml(step.name||"步骤"+(stepIdx+1))}（不锁定）</div><div class="wf-log-body" id="${bodyId}"></div>`;
+      logContainer.appendChild(section);
+      btn.innerHTML = _WF_ICONS.stop;
+      btn.classList.add("stop");
+      btn.title = "点击停止";
+      _wfPlayState[stateKey] = {taskId: ""};
+      _updateWfDot(wfIdx);
+      runTask("/api/workflow/run", {wf_idx: wfIdx, step_indices: [stepIdx], skip_lock: true, _stateKey: stateKey}, null, bodyId, wfName, () => {
+        if (_wfPlayState[stateKey]) {
+          delete _wfPlayState[stateKey];
+          btn.innerHTML = _WF_ICONS.open;
+          btn.classList.remove("stop");
+          btn.title = "打开（不锁定SVN）";
         }
         _updateWfDot(wfIdx);
       });
@@ -795,7 +919,7 @@ function _wfShowPrefixModal(prefixes, onConfirm) {
       ${prefixes.map(p => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <code style="flex-shrink:0;background:rgba(255,255,255,.04);padding:4px 8px;border-radius:4px;font-size:12px">${escapeHtml(p)}</code>
         <span style="color:var(--dim)">→</span>
-        <input class="_pfx_input" data-old="${escapeHtml(p)}" type="text" placeholder="新路径（留空不替换）" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:#090b10;color:#e0e0e0;font-size:13px">
+        <input class="_pfx_input" data-old="${escapeHtml(p)}" type="text" placeholder="输入替换后的路径，留空不替换" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:#090b10;color:#e0e0e0;font-size:13px">
       </div>`).join("")}
     </div>
     <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
@@ -848,6 +972,11 @@ function _wfAutoName(step) {
   }
   if (t === "export_text") {
     const p = step.input_file || "";
+    const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
+    return i >= 0 ? p.substring(i+1) : p;
+  }
+  if (t === "export_modified_config") {
+    const p = (step.source_path || "").replace(/[\\/]$/, "");
     const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
     return i >= 0 ? p.substring(i+1) : p;
   }

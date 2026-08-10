@@ -6,7 +6,8 @@ const _WF_ICONS = {
 
   stop: '<svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/></svg>',
 
-  settings: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="7" cy="7" r="2.8"/><path d="M7 1v2M7 11v2M13 7h-2M3 7H1M11.3 2.7l-1.4 1.4M4.1 9.9l-1.4 1.4M11.3 11.3l-1.4-1.4M4.1 4.1 2.7 2.7"/></svg>'
+  settings: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="7" cy="7" r="2.8"/><path d="M7 1v2M7 11v2M13 7h-2M3 7H1M11.3 2.7l-1.4 1.4M4.1 9.9l-1.4 1.4M11.3 11.3l-1.4-1.4M4.1 4.1 2.7 2.7"/></svg>',
+  open: '<svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M1.5 3.5h3.5l1.5-1.5h5a1 1 0 011 1v8a1 1 0 01-1 1h-10a1 1 0 01-1-1v-6.5a1 1 0 011-1z" opacity=".5"/></svg>'
 
 };
 
@@ -237,7 +238,7 @@ function buildSvnTab(panel) {
 
           <div class="flex-row">
 
-            <input type="text" id="svn_url" placeholder="输入 SVN 仓库 URL" style="flex:1" autocomplete="off" class="svn-url-drop-target">
+            <input type="text" id="svn_url" placeholder="输入 SVN 链接（svn:// 或 http(s)://*/svn/*），或拖入本地工作副本自动识别" style="flex:1" autocomplete="off" class="svn-url-drop-target">
 
             <button class="btn btn-normal" style="flex-shrink:0" data-action="browse-svn-url" title="浏览本地SVN工作副本"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
 
@@ -275,11 +276,11 @@ function buildSvnTab(panel) {
 
             <div class="flex-row" style="align-items:center">
 
-              <input type="text" id="svn_start" value="${yearStart}" placeholder="YYYY-MM-DD" style="flex:1;min-width:0">
+              <input type="text" id="svn_start" value="${yearStart}" placeholder="YYYY-MM-DD 格式，默认当年 1 月 1 日" style="flex:1;min-width:0">
 
               <span style="color:var(--dim)">—</span>
 
-              <input type="text" id="svn_end" value="${today}" placeholder="YYYY-MM-DD" style="flex:1;min-width:0">
+              <input type="text" id="svn_end" value="${today}" placeholder="YYYY-MM-DD 格式，默认今天" style="flex:1;min-width:0">
 
             </div>
 
@@ -305,7 +306,7 @@ function buildSvnTab(panel) {
 
             <label>关键词过滤</label>
 
-            <input type="text" id="svn_keyword" placeholder="按SVN提交备注过滤（逗号分隔多个）" autocomplete="off">
+            <input type="text" id="svn_keyword" placeholder="输入提交信息中的关键字，多个用逗号分隔" autocomplete="off">
 
           </div>
 
@@ -313,7 +314,7 @@ function buildSvnTab(panel) {
 
             <label>提交者过滤</label>
 
-            <input type="text" id="svn_author" placeholder="按作者过滤" autocomplete="off">
+            <input type="text" id="svn_author" placeholder="SVN提交者的账户名" autocomplete="off">
 
           </div>
 
@@ -323,7 +324,7 @@ function buildSvnTab(panel) {
 
             <div class="flex-row">
 
-              <input type="text" id="svn_output" placeholder="选择输出目录" style="flex:1" autocomplete="off">
+              <input type="text" id="svn_output" placeholder="选择导出文件的保存目录，导出前会清空该目录内容" style="flex:1" autocomplete="off">
 
               <button class="btn btn-normal" style="flex-shrink:0" data-action="browse-svn-output" id="svn_browse_btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
 
@@ -501,6 +502,20 @@ function runSvn() {
 
     _showToast("请输入有效的 SVN 链接");
 
+    document.getElementById("svn_url").focus();
+
+    return;
+
+  }
+
+  const dateError = _dateRangeError(body.start_date, body.end_date);
+
+  if (dateError) {
+
+    _showToast(dateError);
+
+    document.getElementById("svn_start").focus();
+
     return;
 
   }
@@ -642,6 +657,10 @@ const _URL_TAB = {
   "/api/translate/run":"translate", "/api/workflow/run":"workflow",
 
   "/api/assist/run":"assist",
+
+  "/api/prefab/clear-text":"prefab", "/api/prefab/atlas/copy":"prefab",
+
+  "/api/prefab/atlas/resolve":"prefab", "/api/prefab/atlas/rewrite":"prefab",
 };
 
 
@@ -888,6 +907,34 @@ async function runTask(url, body, btn, logId, label, onDone) {
 
   const MAX_LOG_LINES = 2000;
 
+  let _taskId = "";
+
+  let _finished = false;
+
+  function _done() {
+
+    if (_finished) return;
+
+    _finished = true;
+
+    _decRunning();
+
+    if (tabKey) _decTabRunning(tabKey);
+
+    if (!label && btn && btn.dataset.taskId) {
+
+      btn.dataset.taskId = '';
+
+      btn.classList.remove('stop');
+
+      btn.innerHTML = btn.dataset.orig || '执行';
+
+    }
+
+    if (onDone) onDone(_outputPath, _taskId);
+
+  }
+
   function _logFlush() {
 
     if (!_logBuf.length) return;
@@ -900,17 +947,27 @@ async function runTask(url, body, btn, logId, label, onDone) {
 
       const m = raw.match(/^\[(\d{2}:\d{2}:\d{2})\](?:\[(\w+)\])?\s*(.*)/);
 
-      let tag = "", msg = raw;
+      let tag = "", plainMsg = raw;
 
       if (m) {
 
-        msg = m[3] || "";
+        plainMsg = m[3] || "";
 
         tag = (m[2] || "").toLowerCase();
 
-        msg = `<span class="ts">${m[1]}</span> ${msg}`;
-
       }
+
+      const _m = plainMsg.match(/(?:已生成修改总结|修改总结)[:\s]+(.+?)\\修改总结\.txt/);
+
+      if (_m) _outputPath = _m[1].trim();
+
+      const _pm = plainMsg.match(/\[输出路径\]\s+(.+)/);
+
+      if (_pm) _outputPath = _pm[1].trim();
+
+      let msg = escapeHtml(plainMsg);
+
+      if (m) msg = `<span class="ts">${m[1]}</span> ${msg}`;
 
       if (label) {
 
@@ -927,14 +984,6 @@ async function runTask(url, body, btn, logId, label, onDone) {
       div.className = cls;
 
       div.innerHTML = msg;
-
-      const _m = msg.match(/(?:已生成修改总结|修改总结)[:\s]+(.+?)\\修改总结\.txt/);
-
-      if (_m) _outputPath = _m[1].trim();
-
-      const _pm = msg.match(/\[输出路径\]\s+(.+)/);
-
-      if (_pm) _outputPath = _pm[1].trim();
 
       frag.appendChild(div);
 
@@ -992,23 +1041,55 @@ async function runTask(url, body, btn, logId, label, onDone) {
 
   _logClear(logEl);
 
-  const r = await fetch(url, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  let d;
 
-  const d = await r.json();
+  try {
+
+    const r = await fetch(url, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+
+    d = await r.json();
+
+    if (!d || typeof d !== "object") throw new Error("服务器返回了无效响应");
+
+    if (!r.ok && !d.error) d.error = "请求失败（HTTP " + r.status + "）";
+
+  } catch (error) {
+
+    const errorMessage = error && error.message ? error.message : "网络请求失败";
+
+    const div = document.createElement("div");
+
+    div.className = "error";
+
+    div.textContent = "❌ 任务启动失败：" + errorMessage;
+
+    _logAppend(logEl, div);
+
+    _showToast("任务启动失败：" + errorMessage);
+
+    _focusAppOnError(tabKey, logEl);
+
+    _done();
+
+    return;
+
+  }
+
+  _taskId = d.task_id || "";
 
   if (body.wf_idx !== undefined) {
 
     const sk = body._stateKey || body.wf_idx;
 
-    if (_wfPlayState[sk]) _wfPlayState[sk].taskId = d.task_id;
+    if (_wfPlayState[sk]) _wfPlayState[sk].taskId = _taskId;
 
   }
 
-  if (!label && btn && d.task_id) {
+  if (!label && btn && _taskId) {
 
     if (!btn.dataset.orig) btn.dataset.orig = btn.textContent;
 
-    btn.dataset.taskId = d.task_id;
+    btn.dataset.taskId = _taskId;
 
     btn.innerHTML = _WF_ICONS.stop;
 
@@ -1016,39 +1097,39 @@ async function runTask(url, body, btn, logId, label, onDone) {
 
   }
 
+  if (d.error) {
 
+    const div = document.createElement("div");
 
-  function _done() {
+    div.className = "error";
 
-    _decRunning();
+    div.textContent = "❌ " + d.error;
 
-    if (tabKey) { _tabCount[tabKey] = Math.max(0, _tabCount[tabKey] - 1); if (_tabCount[tabKey] === 0) _setTabDot(tabKey, false); }
+    _logAppend(logEl, div);
 
-    if (label) {
+    _showToast(d.error);
 
-      if (onDone) onDone();
+    _focusAppOnError(tabKey, logEl);
 
-    } else if (btn && btn.dataset.taskId) {
+    _taskId = "";
 
-      btn.dataset.taskId = '';
+    _done();
 
-      btn.classList.remove('stop');
-
-      btn.innerHTML = btn.dataset.orig || '执行';
-
-    } else if (onDone) {
-
-      onDone();
-
-    }
+    return;
 
   }
 
+  if (!_taskId) {
 
+    const div = document.createElement("div");
 
-  if (d.error) {
+    div.className = "error";
 
-    logEl.innerHTML = '<span class="error">❌ '+escapeHtml(d.error)+'</span>';
+    div.textContent = "❌ 任务启动失败：服务器未返回任务 ID";
+
+    _logAppend(logEl, div);
+
+    _showToast("任务启动失败：服务器未返回任务 ID");
 
     _focusAppOnError(tabKey, logEl);
 
@@ -1060,11 +1141,19 @@ async function runTask(url, body, btn, logId, label, onDone) {
 
   const esKey = body._stateKey || url;
 
-  if (_esMap[esKey]) _esMap[esKey].close();
+  const prev = _esMap[esKey];
 
-  const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
+  if (prev) {
 
-  _esMap[esKey] = evtSrc;
+    prev.es.close();
+
+    prev.done();
+
+  }
+
+  const evtSrc = new EventSource("/api/log/stream/" + _taskId);
+
+  _esMap[esKey] = { es: evtSrc, done: _done };
 
   evtSrc.onmessage = (e) => {
 
@@ -1122,7 +1211,13 @@ async function runTask(url, body, btn, logId, label, onDone) {
 
     _done();
 
-    logEl.innerHTML += "\n⚠ 日志连接中断\n";
+    const div = document.createElement("div");
+
+    div.className = "warn";
+
+    div.textContent = "⚠ 日志连接中断";
+
+    _logAppend(logEl, div);
 
     _focusAppOnError(tabKey, logEl);
 
@@ -1372,7 +1467,7 @@ function openAdvSettings() {
 
             <label>用户名</label>
 
-            <input type="text" id="adv_svn_user" placeholder="SVN 用户名" autocomplete="off" style="width:100%">
+            <input type="text" id="adv_svn_user" placeholder="SVN提交者的账户名" autocomplete="off" style="width:100%">
 
           </div>
 
@@ -1380,7 +1475,7 @@ function openAdvSettings() {
 
             <label>密码</label>
 
-            <input type="password" id="adv_svn_pass" placeholder="SVN 密码" style="width:100%">
+            <input type="password" id="adv_svn_pass" placeholder="输入 SVN 登录密码，加密存储" style="width:100%">
 
           </div>
 
@@ -1390,7 +1485,7 @@ function openAdvSettings() {
 
             <label>排除目录（逗号分隔）</label>
 
-            <input type="text" id="adv_exclude_dirs" placeholder="BinData, GenerateData, Language" autocomplete="off" style="width:100%">
+            <input type="text" id="adv_exclude_dirs" placeholder="输入需要排除的文件夹名字，不需要完整路径，逗号分隔" autocomplete="off" style="width:100%">
 
           </div>
 
@@ -1402,7 +1497,7 @@ function openAdvSettings() {
 
             <div style="display:flex;gap:6px;align-items:center">
 
-              <input type="text" id="adv_cmp_file" placeholder="选择或输入文件名" autocomplete="off" style="flex:1;min-width:0">
+              <input type="text" id="adv_cmp_file" placeholder="输入文件名加载对应的预设配置" autocomplete="off" style="flex:1;min-width:0">
 
               <button class="btn btn-normal btn-sm" data-action="adv-save-preset" style="font-size:13px;padding:0 10px">保存</button>
 
@@ -1418,7 +1513,7 @@ function openAdvSettings() {
 
               <label>标题行数</label>
 
-              <input type="number" id="adv_cmp_title_rows" placeholder="1" min="1" step="1" style="width:100%">
+              <input type="number" id="adv_cmp_title_rows" placeholder="Excel 表头占几行，正整数，默认 1" min="1" step="1" style="width:100%">
 
             </div>
 
@@ -1426,7 +1521,7 @@ function openAdvSettings() {
 
               <label>对比ID列</label>
 
-              <input type="number" id="adv_cmp_id_col" placeholder="1" min="1" step="1" style="width:100%">
+              <input type="number" id="adv_cmp_id_col" placeholder="ID 列是第几列，从 1 开始计数，默认 1" min="1" step="1" style="width:100%">
 
             </div>
 
@@ -1436,7 +1531,7 @@ function openAdvSettings() {
 
             <label>输出列表头（逗号分隔）</label>
 
-            <input type="text" id="adv_cmp_output_cols" placeholder="留空=全部列" autocomplete="off" style="width:100%">
+            <input type="text" id="adv_cmp_output_cols" placeholder="输入需要保留的列名，逗号分隔，留空导出全部列" autocomplete="off" style="width:100%">
 
           </div>
 
@@ -1518,7 +1613,53 @@ function advLoadPresetValues() {
 
 }
 
+function _validateAdvNumbers() {
+
+  const fields = [
+
+    ["adv_cmp_title_rows", "标题行数"],
+
+    ["adv_cmp_id_col", "对比 ID 列"]
+
+  ];
+
+  for (const [id, label] of fields) {
+
+    const input = document.getElementById(id);
+
+    const value = Number(input.value);
+
+    if (!Number.isInteger(value) || value < 1) {
+
+      _showToast(label + "必须是大于等于 1 的整数");
+
+      input.focus();
+
+      return false;
+
+    }
+
+  }
+
+  const outputCols = document.getElementById("adv_cmp_output_cols");
+
+  if (outputCols.value.trim() && !outputCols.value.split(",").some(value => value.trim())) {
+
+    _showToast("请填写有效的输出列表头");
+
+    outputCols.focus();
+
+    return false;
+
+  }
+
+  return true;
+
+}
+
 function saveAdvFilePreset() {
+
+  if (!_validateAdvNumbers()) return;
 
   const name = document.getElementById("adv_cmp_file").value.trim();
 
@@ -1629,6 +1770,8 @@ function closeAdvSettings() {
 }
 
 function saveAdvSettings() {
+
+  if (!_validateAdvNumbers()) return;
 
   const svn_user = document.getElementById("adv_svn_user").value.trim();
 
@@ -2224,6 +2367,8 @@ document.addEventListener("click", e => {
 
   if (e.target.closest("input[type='checkbox']")) return;
 
+  if (window.getSelection && window.getSelection().toString()) return;
+
   const rev = Number(item.dataset.rev);
 
   const was = _mergeData.checkedRevs[rev];
@@ -2283,6 +2428,8 @@ document.addEventListener("click", e => {
   if (!item) return;
 
   if (e.target.matches("input")) return;
+
+  if (window.getSelection && window.getSelection().toString()) return;
 
   if (e.shiftKey && _mergeData.lastFileIdx !== undefined) {
 
@@ -2345,6 +2492,28 @@ function isSvnUrl(val) {
   const s = (val || "").trim().toLowerCase();
 
   return s.startsWith("svn://") || ((s.startsWith("http://") || s.startsWith("https://")) && s.includes("/svn/"));
+
+}
+
+function _dateRangeError(start, end) {
+
+  function isValid(value) {
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+
+    const parts = value.split("-").map(Number);
+
+    const date = new Date(parts[0], parts[1] - 1, parts[2]);
+
+    return date.getFullYear() === parts[0] && date.getMonth() === parts[1] - 1 && date.getDate() === parts[2];
+
+  }
+
+  if (!isValid(start) || !isValid(end)) return "请输入有效日期，格式如 2026-01-01";
+
+  if (start > end) return "开始日期不能晚于结束日期";
+
+  return "";
 
 }
 
@@ -2736,17 +2905,25 @@ function onSvnUrlPicked() {
 
 }
 
+let _activeToast = null;
+
 function _showToast(msg) {
+
+  if (_activeToast) return;
 
   const t = document.createElement("div");
 
+  _activeToast = t;
+
   Object.assign(t.style, {
 
-    position:"fixed",bottom:"48px",left:"50%",transform:"translateX(-50%)",
+    position:"fixed",top:"20%",left:"50%",transform:"translateX(-50%)",
 
-    background:"rgba(0,0,0,.85)",color:"#fff",padding:"10px 24px",
+    maxWidth:"calc(100vw - 48px)",background:"rgba(0,0,0,.85)",color:"#fff",
 
-    borderRadius:"8px",fontSize:"13px",zIndex:"9999",transition:"opacity .3s"
+    padding:"10px 24px",borderRadius:"8px",fontSize:"13px",zIndex:"9999",
+
+    textAlign:"center",overflowWrap:"anywhere",pointerEvents:"none",transition:"opacity .3s"
 
   });
 
@@ -2754,7 +2931,19 @@ function _showToast(msg) {
 
   document.body.appendChild(t);
 
-  setTimeout(()=>{t.style.opacity="0";setTimeout(()=>t.remove(),300);},2000);
+  setTimeout(()=>{
+
+    t.style.opacity = "0";
+
+    setTimeout(()=>{
+
+      t.remove();
+
+      if (_activeToast === t) _activeToast = null;
+
+    },300);
+
+  },2000);
 
 }
 
@@ -3042,6 +3231,46 @@ function scrollLogToBottom() {
   if (e && e.scrollHeight > e.clientHeight) e.scrollTop = e.scrollHeight;
 }
 
+function _afterPaint() {
+
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+}
+
+function _waitForPywebviewApi(timeoutMs) {
+
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.app_ready) {
+
+    return Promise.resolve(true);
+
+  }
+
+  return new Promise(resolve => {
+
+    let done = false;
+
+    const finish = ok => {
+
+      if (done) return;
+
+      done = true;
+
+      window.removeEventListener("pywebviewready", onReady);
+
+      resolve(ok);
+
+    };
+
+    const onReady = () => finish(!!(window.pywebview && window.pywebview.api && window.pywebview.api.app_ready));
+
+    window.addEventListener("pywebviewready", onReady, {once:true});
+
+    setTimeout(() => finish(!!(window.pywebview && window.pywebview.api && window.pywebview.api.app_ready)), timeoutMs);
+
+  });
+
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
 
   await loadConfig();
@@ -3052,11 +3281,13 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   setTimeout(checkUpdate, 2000);
 
+  await _afterPaint();
+
   try {
 
-    if (window.pywebview && window.pywebview.api && window.pywebview.api.app_ready) {
+    if (await _waitForPywebviewApi(500)) {
 
-      await window.pywebview.api.app_ready();
+      window.pywebview.api.app_ready().catch(e => console.warn("[Splash] app_ready failed", e));
 
     }
 
@@ -3070,7 +3301,21 @@ window.addEventListener("DOMContentLoaded", async () => {
 
 document.getElementById("close_btn")?.addEventListener("click", ()=>{
 
-  fetch("/api/close", {method:"POST"});
+  const closeViaHttp = () => fetch("/api/close", {method:"POST"});
+
+  if (window.pywebview?.api?.hide_window) {
+
+    window.pywebview.api.hide_window().then(ok => {
+
+      if (!ok) closeViaHttp();
+
+    }).catch(closeViaHttp);
+
+  } else {
+
+    closeViaHttp();
+
+  }
 
 });
 

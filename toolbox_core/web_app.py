@@ -1065,6 +1065,19 @@ def api_prefab_atlas_plan_groups():
         return _atlas_error(exc)
 
 
+@app.route("/api/prefab/atlas/add-manual-group", methods=["POST"])
+def api_prefab_atlas_add_manual_group():
+    try:
+        data = _atlas_json()
+        draft = _atlas_migration.add_manual_group(
+            data.get("draft_id", ""), data.get("prefab_id", ""),
+            data.get("group_id", ""),
+        )
+        return jsonify({"draft": draft})
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
 @app.route("/api/prefab/atlas/rename", methods=["POST"])
 def api_prefab_atlas_rename():
     try:

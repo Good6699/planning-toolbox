@@ -78,6 +78,19 @@ function buildPrefabTab(panel) {
           </div>
         </div>
       </div>
+      <div class="wf-modal-overlay" id="atlas_add_group_overlay">
+        <div class="wf-modal" style="width:480px">
+          <div class="wf-modal-header"><h3>添加目标图集组</h3><button class="wf-modal-close" data-action="close-add-group-picker" title="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+          <div class="wf-modal-body">
+            <input class="atlas-manual-search" id="atlas_add_group_filter" data-action="filter-add-group" placeholder="输入图集组名关键字进行筛选" autocomplete="off">
+            <div class="atlas-manual-atlas-list" id="atlas_add_group_list" style="max-height:360px;overflow:auto"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+            <span id="atlas_add_group_selected" style="flex:1;font-size:12px;color:var(--success)"></span>
+            <button class="btn btn-primary" id="atlas_add_group_confirm" data-action="confirm-add-group" disabled>确认添加</button>
+          </div>
+        </div>
+      </div>
       <div class="log-wrap prefab-log-wrap">
         <div class="card-header compact"><span>执行日志</span></div>
         <div class="log" id="prefab_log"><div class="log-anchor"></div></div>
@@ -289,8 +302,17 @@ function buildPrefabTab(panel) {
     }).filter(Boolean).sort(function(a, b) {
       return a.relative_path.localeCompare(b.relative_path);
     });
+    var manualIds = prefab.manual_group_ids || [];
+    var existingIds = {};
+    groups.forEach(function(g) { existingIds[g.id] = true; });
+    manualIds.forEach(function(gid) {
+      if (!existingIds[gid] && draft.groups[gid]) {
+        groups.push(draft.groups[gid]);
+      }
+    });
+    var addBtn = '<button class="atlas-group-add-btn" data-action="add-manual-group" title="添加图集组作为目标">+</button>';
     if (!groups.length) {
-      container.innerHTML = '<div class="atlas-empty">当前预制没有可迁移的图集引用</div>';
+      container.innerHTML = '<div class="atlas-empty">当前预制没有可迁移的图集引用</div>' + addBtn;
       return;
     }
 
@@ -344,7 +366,7 @@ function buildPrefabTab(panel) {
       return '<details class="atlas-group-card is-source" data-target-group-id="' + html(group.id) + '">' +
         '<summary class="atlas-group-summary"><span class="atlas-group-name" title="' + html(group.relative_path) + '">' + html(group.relative_path) + '</span>' + doneTag + sourceTools + '</summary>' +
         '<div class="atlas-group-images">' + imageHtml + '</div></details>';
-    }).join("");
+    }).join("") + addBtn;
   }
 
   function prefabById(prefabId) {
@@ -884,6 +906,17 @@ function buildPrefabTab(panel) {
       confirmManualPicker();
     } else if (action === "refresh-atlas-catalog") {
       refreshAtlasCatalog();
+    } else if (action === "add-manual-group") {
+      openAddGroupPicker();
+    } else if (action === "close-add-group-picker") {
+      closeAddGroupPicker();
+    } else if (action === "pick-add-group") {
+      var agp = state.addGroupPicker;
+      if (!agp) return;
+      agp.selectedGroupId = target.dataset.groupId;
+      renderAddGroupPicker();
+    } else if (action === "confirm-add-group") {
+      confirmAddGroup();
     }
   });
 
@@ -894,6 +927,13 @@ function buildPrefabTab(panel) {
 
   panel.addEventListener("input", function(event) {
     var target = event.target;
+    if (target.id === "atlas_add_group_filter") {
+      if (state.addGroupPicker) {
+        state.addGroupPicker.filter = target.value;
+        renderAddGroupPicker();
+      }
+      return;
+    }
     var picker = state.manualPicker;
     if (!picker) return;
     if (target.id === "atlas_manual_atlas_filter") {
@@ -1003,6 +1043,77 @@ function buildPrefabTab(panel) {
     state.manualPicker = null;
     var overlay = panel.querySelector("#atlas_manual_overlay");
     if (overlay) overlay.classList.remove("show");
+  }
+
+  function openAddGroupPicker() {
+    state.addGroupPicker = { filter: "", selectedGroupId: "" };
+    renderAddGroupPicker();
+  }
+
+  function closeAddGroupPicker() {
+    state.addGroupPicker = null;
+    var overlay = panel.querySelector("#atlas_add_group_overlay");
+    if (overlay) overlay.classList.remove("show");
+  }
+
+  function renderAddGroupPicker() {
+    var overlay = panel.querySelector("#atlas_add_group_overlay");
+    if (!overlay || !state.addGroupPicker) return;
+    overlay.classList.add("show");
+    var draft = state.draft;
+    if (!draft) return;
+    var prefab = selectedPrefab();
+    var sourceGroupIds = {};
+    if (prefab) {
+      prefab.references.forEach(function(ref) {
+        if (ref.source_group_id) sourceGroupIds[ref.source_group_id] = true;
+      });
+      (prefab.manual_group_ids || []).forEach(function(gid) {
+        sourceGroupIds[gid] = true;
+      });
+    }
+    var filter = (state.addGroupPicker.filter || "").trim().toLowerCase();
+    var allGroups = values(draft.groups);
+    var filtered = allGroups.filter(function(group) {
+      if (sourceGroupIds[group.id]) return false;
+      if (!filter) return true;
+      return group.name.toLowerCase().indexOf(filter) !== -1
+        || group.relative_path.toLowerCase().indexOf(filter) !== -1;
+    }).sort(function(a, b) {
+      return a.relative_path.localeCompare(b.relative_path);
+    });
+    var listEl = overlay.querySelector("#atlas_add_group_list");
+    var selectedId = state.addGroupPicker.selectedGroupId;
+    listEl.innerHTML = filtered.map(function(group) {
+      var selected = group.id === selectedId ? " selected" : "";
+      return '<button class="atlas-manual-atlas-item' + selected + '" data-action="pick-add-group" data-group-id="' + html(group.id) + '">' +
+        '<span class="atlas-manual-atlas-name">' + html(group.name) + '</span>' +
+        '<span class="atlas-manual-atlas-path">' + html(group.relative_path) + '</span>' +
+        '</button>';
+    }).join("") || '<div class="atlas-manual-empty">没有可添加的图集组</div>';
+    var confirmBtn = overlay.querySelector("#atlas_add_group_confirm");
+    var selectedLabel = overlay.querySelector("#atlas_add_group_selected");
+    if (confirmBtn) confirmBtn.disabled = !selectedId;
+    if (selectedLabel) {
+      var selGroup = selectedId ? draft.groups[selectedId] : null;
+      selectedLabel.textContent = selGroup ? "已选: " + selGroup.relative_path : "";
+    }
+    var filterInput = overlay.querySelector("#atlas_add_group_filter");
+    if (filterInput && filterInput.value !== (state.addGroupPicker.filter || "")) {
+      filterInput.value = state.addGroupPicker.filter || "";
+    }
+  }
+
+  function confirmAddGroup() {
+    var picker = state.addGroupPicker;
+    if (!picker || !picker.selectedGroupId || !state.draft || state.busy) return;
+    mutateDraft("/api/prefab/atlas/add-manual-group", {
+      draft_id: state.draft.id,
+      prefab_id: state.selectedPrefabId,
+      group_id: picker.selectedGroupId
+    }, "添加图集组失败").then(function() {
+      closeAddGroupPicker();
+    });
   }
 
   function renderManualPicker() {

@@ -1888,8 +1888,14 @@ input::placeholder,textarea::placeholder{
 .atlas-group-card[open]>.atlas-group-summary::before{
   transform:rotate(90deg);
 }
-.atlas-group-name{
+.atlas-group-name-wrap{
   flex:1;
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.atlas-group-name{
   min-width:0;
   overflow:hidden;
   text-overflow:ellipsis;

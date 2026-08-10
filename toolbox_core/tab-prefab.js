@@ -365,7 +365,7 @@ function buildPrefabTab(panel) {
       }).join("");
       var refCountTag = '<span class="atlas-group-ref-count" title="引用资源数">' + groupRefs.length + '</span>';
       return '<details class="atlas-group-card is-source" data-target-group-id="' + html(group.id) + '">' +
-        '<summary class="atlas-group-summary"><span class="atlas-group-name" title="' + html(group.relative_path) + '">' + html(group.relative_path) + '</span>' + refCountTag + doneTag + sourceTools + '</summary>' +
+        '<summary class="atlas-group-summary"><span class="atlas-group-name-wrap"><span class="atlas-group-name" title="' + html(group.relative_path) + '">' + html(group.relative_path) + '</span>' + refCountTag + '</span>' + doneTag + sourceTools + '</summary>' +
         '<div class="atlas-group-images">' + imageHtml + '</div></details>';
     }).join("") + addBtn;
   }

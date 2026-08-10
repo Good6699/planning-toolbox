@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>策划工具箱交互说明书</title>
+<style>
+:root{
+  --bg:#0f1115;--bg2:#151821;--panel:#171b24;--panel2:#1d2330;
+  --line:#2a3142;--text:#f2f5ff;--sub:#aeb8cc;--dim:#7f8aa3;
+  --accent:#5ea2ff;--success:#52d273;--danger:#ff637d;--warn:#f0c040;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI","Microsoft YaHei UI","PingFang SC",sans-serif;font-size:15px;line-height:1.75}
+body{background:radial-gradient(circle at top,#1c2540 0%,#0f1115 42%);padding:32px}
+.wrap{max-width:1000px;margin:0 auto}
+h1{margin:0 0 8px;font-size:26px}
+.lead{margin:0 0 24px;color:var(--dim);font-size:13px}
+main{display:flex;flex-direction:column;gap:16px}
+section{padding:20px;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:rgba(23,27,36,.82)}
+h2{margin:0 0 12px;font-size:18px;line-height:28px;border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:8px}
+p{margin:6px 0;color:var(--sub);font-size:13px}
+.flow{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.step{padding:6px 10px;border:1px solid rgba(94,162,255,.22);border-radius:8px;background:rgba(94,162,255,.08);color:#dbeaff;font-size:12px}
+.step::after{content:"→";margin-left:8px;color:var(--dim)}
+.step:last-child::after{content:none}
+table{width:100%;border-collapse:collapse;margin:8px 0;font-size:13px}
+th,td{border-bottom:1px solid rgba(255,255,255,.06);padding:6px 10px;text-align:left;vertical-align:top;color:var(--sub)}
+th{color:var(--text);background:rgba(255,255,255,.03);font-weight:600;font-size:12px}
+.warn{border-left:3px solid var(--warn);padding:8px 12px;background:rgba(240,192,64,.06);border-radius:6px;color:#e8dca7;font-size:13px;margin:8px 0}
+.bad{border-left:3px solid var(--danger);padding:8px 12px;background:rgba(255,99,125,.06);border-radius:6px;color:#ffc3ce;font-size:13px;margin:8px 0}
+code{padding:1px 5px;border-radius:4px;background:#0b0d12;color:#d8e7ff;font-family:"Cascadia Code",Consolas,monospace;font-size:12px}
+.small{color:var(--dim);font-size:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>策划工具箱交互说明书</h1>
+  <p class="lead">只写 placeholder 里看不到的：隐藏行为、操作边界、按钮结果。输入框约束请直接看 placeholder。</p>
+
+  <main>
+
+    <!-- 功能总览 -->
+    <section>
+      <h2>功能总览</h2>
+      <table>
+        <thead><tr><th>功能</th><th>一句话</th></tr></thead>
+        <tbody>
+          <tr><td>SVN 记录</td><td>查询 SVN 提交记录，导出修改摘要或 Excel 对比</td></tr>
+          <tr><td>语义合并</td><td>从源分支筛选版本，分析后合并到目标工作副本</td></tr>
+          <tr><td>复制合并</td><td>从源目录选文件复制到 SVN 目标目录</td></tr>
+          <tr><td>翻译</td><td>调 AI API 批量翻译 Excel 多语言列</td></tr>
+          <tr><td>文字检测</td><td>检查 Texts.xlsm 的空值、漏翻、占位符、重复 ID</td></tr>
+          <tr><td>修改预制</td><td>清理 .prefab 文字 / 图集引用迁移</td></tr>
+          <tr><td>辅助功能</td><td>用 .meta 模板批量生成 meta 文件</td></tr>
+          <tr><td>工作流</td><td>把多个步骤编排成可复用流程</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 全局规则 -->
+    <section>
+      <h2>全局规则</h2>
+      <table>
+        <thead><tr><th>规则</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>停止 ≠ 回滚</td><td>点停止只取消后续操作，已写入的文件和 SVN 状态不会回滚</td></tr>
+          <tr><td>看 [DONE] 判断完成</td><td>日志出现 <code>[DONE]</code> 才算任务完整结束；连接中断 ≠ 失败</td></tr>
+          <tr><td>关闭 = 托盘</td><td>点 ✕ 不退出程序，缩到托盘；托盘图标右键可退出</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- SVN 记录 -->
+    <section>
+      <h2>SVN 记录</h2>
+      <div class="flow">
+        <span class="step">填 SVN 地址</span>
+        <span class="step">选模式</span>
+        <span class="step">设日期/过滤</span>
+        <span class="step">执行</span>
+      </div>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>拖入本地工作副本</td><td>自动反查 SVN URL 填入地址栏</td></tr>
+          <tr><td>地址栏点"打开文件夹"</td><td>URL → 打开对应本地副本；本地路径 → 直接打开</td></tr>
+          <tr><td>选"导出文件"模式</td><td>输出目录会在执行前被清空</td></tr>
+          <tr><td>高级设置改文件级配置</td><td>影响后续所有导出/对比，切换文件名可加载不同预设</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 语义合并 -->
+    <section>
+      <h2>语义合并</h2>
+      <div class="flow">
+        <span class="step">填源 SVN 地址</span>
+        <span class="step">填目标工作副本</span>
+        <span class="step">筛选查询</span>
+        <span class="step">选版本</span>
+        <span class="step">语义分析</span>
+        <span class="step">开始合并</span>
+      </div>
+      <table>
+        <thead><tr><th>输入</th><th>约束</th></tr></thead>
+        <tbody>
+          <tr><td>源 SVN 地址</td><td>用来读版本和变更文件，不要和目标路径混用</td></tr>
+          <tr><td>目标路径</td><td>必须是本地 SVN 工作副本</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>拖入本地副本到源地址</td><td>自动检测并填入 SVN URL</td></tr>
+          <tr><td>变更文件最终动作</td><td>最新是删除→删除；曾新增→新增；否则→修改</td></tr>
+          <tr><td>开始合并</td><td>直接改目标工作副本；可能弹出 TortoiseSVN 提交窗口（需手动确认）</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 复制合并 -->
+    <section>
+      <h2>复制合并</h2>
+      <div class="flow">
+        <span class="step">选源目录</span>
+        <span class="step">勾选文件</span>
+        <span class="step">填目标 SVN 目录</span>
+        <span class="step">执行</span>
+      </div>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>源目录变化</td><td>延迟刷新文件列表；点刷新按钮可立即刷新</td></tr>
+          <tr><td>点文件行</td><td>切换勾选（不必点复选框）</td></tr>
+          <tr><td>清理 changelist</td><td>清理目标 SVN 目录的遗留 changelist</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 翻译 -->
+    <section>
+      <h2>翻译</h2>
+      <div class="flow">
+        <span class="step">选源 Excel</span>
+        <span class="step">设源/目标语言</span>
+        <span class="step">配 API</span>
+        <span class="step">调 Prompt</span>
+        <span class="step">执行翻译</span>
+      </div>
+      <table>
+        <thead><tr><th>输入</th><th>约束</th></tr></thead>
+        <tbody>
+          <tr><td>源语言列名</td><td>必须匹配 Excel 表头（如 <code>zh</code>、<code>SC</code>、<code>::SC::</code>）</td></tr>
+          <tr><td>Prompt</td><td>支持 <code>{src_lang}</code> 和 <code>{tgt_lang}</code> 变量</td></tr>
+          <tr><td>批处理量</td><td>越大单次请求越重；出错先降批处理量</td></tr>
+        </tbody>
+      </table>
+      <div class="warn">Prompt 里的格式保护规则（占位符、颜色标签、换行转义）必须保留，被模型改掉会直接影响游戏文本。</div>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>语言ID高级设置</td><td>改完影响翻译和文字检测的语言列表</td></tr>
+          <tr><td>API Key 输入</td><td>加密保存到配置；给别人打包前注意清除</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 文字检测 -->
+    <section>
+      <h2>文字检测</h2>
+      <table>
+        <thead><tr><th>检测项</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>空值</td><td>目标语言列为空</td></tr>
+          <tr><td>漏翻</td><td>源有值但目标无值</td></tr>
+          <tr><td>占位符不一致</td><td>翻译前后占位符（如 <code>{0}</code>）丢失或改变</td></tr>
+          <tr><td>标签丢失</td><td>颜色/代码标签翻译后被破坏</td></tr>
+          <tr><td>重复 ID</td><td>全局范围检测</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>检测完成</td><td>如果日志捕获到输出路径，自动打开输出文件所在目录</td></tr>
+          <tr><td>排除ID配置</td><td>一行一个 ID，<code>#</code> 开头为注释</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 修改预制 -->
+    <section>
+      <h2>修改预制</h2>
+      <table>
+        <thead><tr><th>模式</th><th>功能</th></tr></thead>
+        <tbody>
+          <tr><td>一键清理文字</td><td>批量清理 .prefab 文件中的文字引用</td></tr>
+          <tr><td>图集引用清理</td><td>扫描 .prefab 的图集引用，规划迁移到目标图集组</td></tr>
+        </tbody>
+      </table>
+      <h3 style="margin:12px 0 6px;font-size:14px">图集引用清理</h3>
+      <div class="flow">
+        <span class="step">拖入 .prefab 文件/目录</span>
+        <span class="step">选预制</span>
+        <span class="step">拖源组到目标组</span>
+        <span class="step">执行计划</span>
+      </div>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>拖源图集组到目标图集组</td><td>创建迁移计划（该组下所有引用）</td></tr>
+          <tr><td>点资源行的指针图标</td><td>手动指定单个资源的目标 Sprite</td></tr>
+          <tr><td>点"+"按钮</td><td>添加当前未引用的图集组作为拖放目标（仅影响当前预制）</td></tr>
+          <tr><td>图集组旁的数字</td><td>该组包含的引用资源数</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 辅助功能 -->
+    <section>
+      <h2>辅助功能</h2>
+      <div class="flow">
+        <span class="step">拖入 .meta 模板</span>
+        <span class="step">拖入目标文件夹</span>
+        <span class="step">自动开始生成</span>
+      </div>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>拖入 .meta 文件</td><td>识别为模板</td></tr>
+          <tr><td>拖入其他路径</td><td>识别为目标文件夹</td></tr>
+          <tr><td>两者都就绪</td><td>自动开始，不需要点"开始"按钮</td></tr>
+          <tr><td>任务完成</td><td>自动清空模板和目标，方便下一轮</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 工作流 -->
+    <section>
+      <h2>工作流</h2>
+      <h3 style="margin:0 0 6px;font-size:14px">树形列表</h3>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>点击工作流标题</td><td>展开/收起（同时只展开一个）</td></tr>
+          <tr><td>长按/拖动</td><td>调整工作流和步骤顺序，松手即保存</td></tr>
+          <tr><td>点步骤 ▶</td><td>执行该步骤（运行中变为 ■）</td></tr>
+          <tr><td>点步骤 ⚙</td><td>打开步骤设置弹窗</td></tr>
+          <tr><td>名称旁小圆点</td><td>绿色=空闲，黄色=有步骤在运行</td></tr>
+        </tbody>
+      </table>
+      <h3 style="margin:12px 0 6px;font-size:14px">编辑</h3>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>点父名称</td><td>直接改名，Enter 保存，Esc 放弃</td></tr>
+          <tr><td>双击步骤名</td><td>改步骤名；手动改过不再被自动命名覆盖</td></tr>
+          <tr><td>复制工作流</td><td>如果步骤含工程路径前缀（如 <code>H:\D3_EA</code>），弹窗让你一次性替换</td></tr>
+        </tbody>
+      </table>
+      <h3 style="margin:12px 0 6px;font-size:14px">步骤类型速查</h3>
+      <table>
+        <thead><tr><th>类型</th><th>做什么</th><th>注意</th></tr></thead>
+        <tbody>
+          <tr><td>导出文字表</td><td>从主文件导出，可上传到多个 SVN 目录</td><td>上传目录逗号分隔</td></tr>
+          <tr><td>合并文字表</td><td>合并多个 Excel 的指定列</td><td>标题行数和 ID 列从 1 开始</td></tr>
+          <tr><td>合并翻译</td><td>把翻译文件合入目标文件</td><td>—</td></tr>
+          <tr><td>SVN 锁定/解锁</td><td>锁定/解锁指定文件</td><td>已锁定会跳过</td></tr>
+          <tr><td>SVN 回退</td><td>回退指定路径的修改</td><td>默认排除 test.lua、LocalVersion.xml、InstallClient.bat</td></tr>
+          <tr><td>打开表格</td><td>逐个打开 Excel 文件</td><td>执行=更新+锁定+打开；打开（绿色）=更新+打开，不锁定</td></tr>
+          <tr><td>整合文字表</td><td>从源目录选文件复制到目标目录</td><td>源目录变化时文件选择状态重置</td></tr>
+          <tr><td>整合错误码</td><td>从源提取错误码合入目标</td><td>语言代码留空自动识别</td></tr>
+          <tr><td>上传SVN</td><td>把本地目录上传到 SVN</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 更新 -->
+    <section>
+      <h2>更新</h2>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>顶部出现更新条</td><td>有新版本可用</td></tr>
+          <tr><td>点"一键更新"</td><td>下载并替换，可能需要重启</td></tr>
+          <tr><td>强制更新时</td><td>关闭按钮隐藏，必须更新后才能关闭</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+  <p class="small" style="margin-top:16px;text-align:center">说明书版本：2026-08-10</p>
+</div>
+</body>
+</html>

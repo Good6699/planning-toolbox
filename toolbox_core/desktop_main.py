@@ -509,23 +509,8 @@ class EdgeDocker:
             self._slide_in(hwnd, snap)
 
     def _tick(self):
-        now = time.perf_counter()
-        if now < self._busy_until:
-            if self.docked is None and self._last_docked_edge and self._slide_out_had_focus:
-                hwnd = self._resolve_hwnd()
-                if hwnd:
-                    try:
-                        fg = win32gui.GetForegroundWindow()
-                        if fg != hwnd:
-                            self._busy_until = 0.0
-                            self._slide_in(hwnd, self._last_docked_edge)
-                            self._last_docked_edge = None
-                            self._slide_out_had_focus = False
-                            return
-                    except Exception:
-                        pass
-            if now < self._busy_until:
-                return
+        if time.perf_counter() < self._busy_until:
+            return
         hwnd = self._resolve_hwnd()
         if not hwnd or not win32gui.IsWindow(hwnd):
             return
@@ -546,6 +531,16 @@ class EdgeDocker:
                 return
 
         if not self.docked:
+            if self._last_docked_edge and self._slide_out_had_focus:
+                try:
+                    fg = win32gui.GetForegroundWindow()
+                    if fg != hwnd:
+                        self._slide_in(hwnd, self._last_docked_edge)
+                        self._last_docked_edge = None
+                        self._slide_out_had_focus = False
+                        return
+                except Exception:
+                    pass
             self._tick_snap_check(hwnd, x, y, r, b, w, h, cx, cy, in_window)
 
     def _animate(self, hwnd, start_x, start_y, target_x, target_y, ease_in=True):

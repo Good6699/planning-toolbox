@@ -1305,8 +1305,10 @@ def api_prefab_font_modify():
                     m = _META_GUID_RE.search(head)
                     if m:
                         asset_path = meta_path[:-5]
+                        rel = os.path.relpath(asset_path, assets_dir).replace("\\", "/")
                         asset_name = os.path.basename(asset_path)
                         name_to_guid[asset_name.lower()] = m.group(1)
+                        name_to_guid[rel.lower()] = m.group(1)
                 except Exception:
                     continue
         change_map = {}

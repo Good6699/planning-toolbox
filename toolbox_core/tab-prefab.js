@@ -711,10 +711,10 @@ function buildPrefabTab(panel) {
         '<span class="font-item-count">' + font.ref_count + '次引用</span>' +
         '<span class="font-item-arrow">→</span>' +
         '<span class="font-item-right">' +
-        '<input type="text" class="font-item-target" placeholder="目标字体名（留空不改）" data-idx="' + i + '">' +
+        '<input type="text" class="font-item-target" placeholder="目标字体名或路径（留空不改）" data-idx="' + i + '">' +
         '<span class="font-item-spacing-wrap">行距<input type="text" class="font-item-spacing" placeholder="不改" data-idx="' + i + '"></span>' +
         '</span></div>' +
-        '<div class="font-item-path" title="' + html(pathText) + '">' + html(pathText) + '</div>' +
+        '<input type="text" class="font-item-path" value="' + html(pathText) + '" readonly title="点击复制路径">' +
         '</div>';
     }).join("");
     if (previewBtn) previewBtn.disabled = false;

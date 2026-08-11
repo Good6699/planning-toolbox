@@ -2255,7 +2255,7 @@ input::placeholder,textarea::placeholder{
   flex-shrink:0;
 }
 .font-item-spacing{
-  width:50px;
+  width:100px;
   height:30px;
   border:1px solid var(--line);
   border-radius:6px;
@@ -2267,13 +2267,20 @@ input::placeholder,textarea::placeholder{
   text-align:center;
 }
 .font-item-path{
+  display:block;
+  width:100%;
   margin-top:4px;
   font-size:11px;
   color:var(--dim);
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  padding-left:20px;
+  background:transparent;
+  border:none;
+  outline:none;
+  padding:0 0 0 20px;
+  cursor:text;
+  font-family:inherit;
+}
+.font-item-path:focus{
+  color:var(--sub);
 }
 @media (max-width:1100px){
   .atlas-main-grid{

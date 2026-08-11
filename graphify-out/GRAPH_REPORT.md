@@ -1,11 +1,11 @@
 # 策划工具箱知识图谱报告
-生成时间：2026-08-11 10:02
+生成时间：2026-08-11 11:28
 
 ## 概况
 - 项目文件：1613 个
-- 图谱节点：23485 个（代码 16944，文档 1576）
-- 关系边数：47070 条
-- 社区数：2022 个
+- 图谱节点：23510 个（代码 16950，文档 1576）
+- 关系边数：47101 条
+- 社区数：2013 个
 
 ## 核心模块（高连接度节点）
 1. **Serialisable** — 493 条连接
@@ -1080,7 +1080,7 @@
 - **toolbox_merge.py** — 25 节点
 - **tools/calamine_verify.py** — 5 节点
 - **update_version.py** — 1 节点
-- **web_app.py** — 111 节点
+- **web_app.py** — 117 节点
 - **web_launcher.py** — 2 节点
 - **xlsm_zipper.py** — 4 节点
 - **安装Python313.ps1** — 1 节点
@@ -1224,7 +1224,7 @@
 - **预制对比工具/PrefabContrastToolNew/artifacts/real-check/obj/Debug/net8.0/RealCheck.GlobalUsings.g.cs** — 1 节点
 - **预制对比工具/PrefabContrastToolNew/artifacts/verify-obj/PrefabContrastTool/Debug/PrefabContrastTool.GlobalUsings.g.cs** — 1 节点
 
-## 社区分组（Top 25 / 2022 个）
+## 社区分组（Top 25 / 2013 个）
 ### Community 725
 - 凝聚度：1.0
 - 节点：_build_dist.py, build(), copytree()
@@ -1235,57 +1235,57 @@
 - 节点：_do_push.py, git(), log()
 - 文件：_do_push.py
 
-### Community 744
+### Community 740
 - 凝聚度：1.0
 - 节点：_push_via_api.py, api(), log()
 - 文件：_push_via_api.py
 
-### Community 777
+### Community 769
 - 凝聚度：1.0
 - 节点：tab-prefab.js, buildPrefabTab(), startPrefabClear()
 - 文件：toolbox_core/tab-prefab.js
 
-### Community 778
+### Community 770
 - 凝聚度：1.0
 - 节点：tab-prefab.min.js, buildPrefabTab(), startPrefabClear()
 - 文件：toolbox_core/tab-prefab.min.js
 
-### Community 683
+### Community 685
 - 凝聚度：0.8333333333333334
 - 节点：eventLogDemo.py, ReadLog(), test(), usage()
 - 文件：toolbox_core/py_modules/win32/Demos/eventLogDemo.py
 
-### Community 690
+### Community 692
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：_export_error_code_erl.py
 
-### Community 691
+### Community 693
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：_internal/_export_error_code_erl.py
 
-### Community 692
+### Community 694
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：_internal/_export_error_code_erl.py
-
-### Community 695
-- 凝聚度：0.8333333333333334
-- 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
-- 文件：toolbox_core/py_modules_backup/_export_error_code_erl.py
 
 ### Community 696
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
+- 文件：toolbox_core/py_modules_backup/_export_error_code_erl.py
+
+### Community 697
+- 凝聚度：0.8333333333333334
+- 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：toolbox_core/py_modules/_export_error_code_erl.py
 
-### Community 700
+### Community 701
 - 凝聚度：0.8333333333333334
 - 节点：h2py.py, main(), process(), pytify()
 - 文件：toolbox_core/py_modules/win32/scripts/h2py.py
 
-### Community 701
+### Community 702
 - 凝聚度：0.8333333333333334
 - 节点：localized_names.py, LookupAliasFromRid(), LookupUserGroupFromRid(), main()
 - 文件：toolbox_core/py_modules/win32/Demos/security/localized_names.py
@@ -1300,32 +1300,32 @@
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：策划工具箱_v1.1.4/策划工具箱/_internal/_export_error_code_erl.py
 
-### Community 652
+### Community 653
 - 凝聚度：0.8
 - 节点：setup_d.py, _docopy(), _domodule(), _doregister(), usage_and_die()
 - 文件：toolbox_core/py_modules/win32/scripts/setup_d.py
 
-### Community 659
+### Community 660
 - 凝聚度：0.8
 - 节点：_export_error_code_erl.py, main(), _export_error_code_erl.py, _read_xlsm_data(), _write_erl()
 - 文件：toolbox_core/_export_error_code_erl.py
 
-### Community 622
+### Community 619
 - 凝聚度：0.7333333333333333
 - 节点：testMSOfficeEvents.py, _CheckSeenEvents(), test(), TestExcel(), TestWord()...
 - 文件：toolbox_core/py_modules/win32com/test/testMSOfficeEvents.py
 
-### Community 654
+### Community 655
 - 凝聚度：0.7
 - 节点：GenTestScripts.py, CleanAll(), GenerateAll(), GenerateFromRegistered(), GetGenPath()
 - 文件：toolbox_core/py_modules/win32com/test/GenTestScripts.py
 
-### Community 621
+### Community 618
 - 凝聚度：0.6666666666666666
 - 节点：testAccess.py, CreateTestAccessDatabase(), DoDumpAccessInfo(), DumpAccessInfo(), GenerateSupport()...
 - 文件：toolbox_core/py_modules/win32com/test/testAccess.py
 
-### Community 703
+### Community 704
 - 凝聚度：0.6666666666666666
 - 节点：localserver.py, main(), # NOTE: When NOT running in any sort of debugging mode,, serve()
 - 文件：toolbox_core/py_modules/win32com/server/localserver.py
@@ -1351,11 +1351,11 @@
 - 文件：toolbox_core/py_modules/win32/Demos/NetValidatePasswordPolicy.py
 
 ## 跨模块连接（你可能不知道的关联）
-- `_showToast()` → `saveTrLangAdvSettings()` [INFERRED]
 - `main()` → `_cmp_task_proc()` [INFERRED]
 - `main()` → `_cmp_task_proc()` [INFERRED]
 - `_run_svn()` → `_get_subprocess_kwargs()` [INFERRED]
 - `_run_svn()` → `_get_subprocess_kwargs()` [INFERRED]
+- `_detect_changed_blocks()` → `_log()` [INFERRED]
 
 ## 孤立节点（4106 个代码节点仅 0-1 条连接）
 - LPVOID ()

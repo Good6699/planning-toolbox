@@ -367,7 +367,6 @@ class EdgeDocker:
         self._op_seq = 0
         self._animating_seq = 0
         self._last_docked_edge = None
-        self._slide_out_had_focus = False
         self._stop = threading.Event()
         self._thread = None
         self._prev_fg = 0
@@ -531,13 +530,12 @@ class EdgeDocker:
                 return
 
         if not self.docked:
-            if self._last_docked_edge and self._slide_out_had_focus:
+            if self._last_docked_edge:
                 try:
                     fg = win32gui.GetForegroundWindow()
                     if fg != hwnd:
                         self._slide_in(hwnd, self._last_docked_edge)
                         self._last_docked_edge = None
-                        self._slide_out_had_focus = False
                         return
                 except Exception:
                     pass
@@ -626,10 +624,6 @@ class EdgeDocker:
             self._busy_until = 0.0
 
     def _slide_out(self, hwnd):
-        try:
-            self._slide_out_had_focus = (win32gui.GetForegroundWindow() == hwnd)
-        except Exception:
-            self._slide_out_had_focus = False
         ctypes.windll.user32.ShowWindow(hwnd, 9)
         _hide_from_taskbar(hwnd)
         self._op_seq += 1

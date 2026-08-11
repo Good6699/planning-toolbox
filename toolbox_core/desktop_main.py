@@ -367,6 +367,7 @@ class EdgeDocker:
         self._op_seq = 0
         self._animating_seq = 0
         self._last_docked_edge = None
+        self._had_focus_while_expanded = False
         self._stop = threading.Event()
         self._thread = None
         self._prev_fg = 0
@@ -533,9 +534,12 @@ class EdgeDocker:
             if self._last_docked_edge:
                 try:
                     fg = win32gui.GetForegroundWindow()
-                    if fg != hwnd:
+                    if fg == hwnd:
+                        self._had_focus_while_expanded = True
+                    elif self._had_focus_while_expanded:
                         self._slide_in(hwnd, self._last_docked_edge)
                         self._last_docked_edge = None
+                        self._had_focus_while_expanded = False
                         return
                 except Exception:
                     pass
@@ -642,6 +646,7 @@ class EdgeDocker:
             self._animate(hwnd, rect[0], rect[1], target_x, target_y, ease_in=False)
             if seq == self._op_seq:
                 self._last_docked_edge = self.docked
+                self._had_focus_while_expanded = False
                 self.docked = None
                 try:
                     ex = ctypes.windll.user32.GetWindowLongW(hwnd, -20)

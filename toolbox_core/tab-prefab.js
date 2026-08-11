@@ -703,15 +703,19 @@ function buildPrefabTab(panel) {
       return;
     }
     listEl.innerHTML = fonts.map(function(font, i) {
+      var pathText = font.asset_path ? font.asset_path : "GUID: " + font.guid;
       return '<div class="font-item" data-guid="' + html(font.guid) + '">' +
+        '<div class="font-item-row1">' +
         '<label class="font-item-left"><input type="checkbox" class="font-item-check" checked>' +
-        '<span class="font-item-name" title="' + html(font.asset_path || font.guid) + '">' + html(font.name) + '</span>' +
-        '<span class="font-item-count">' + font.ref_count + '次引用</span></label>' +
+        '<span class="font-item-name">' + html(font.name) + '</span></label>' +
+        '<span class="font-item-count">' + font.ref_count + '次引用</span>' +
         '<span class="font-item-arrow">→</span>' +
         '<span class="font-item-right">' +
         '<input type="text" class="font-item-target" placeholder="目标字体名（留空不改）" data-idx="' + i + '">' +
-        '<input type="text" class="font-item-spacing" placeholder="行距" data-idx="' + i + '" style="width:60px">' +
-        '</span></div>';
+        '<span class="font-item-spacing-wrap">行距<input type="text" class="font-item-spacing" placeholder="不改" data-idx="' + i + '"></span>' +
+        '</span></div>' +
+        '<div class="font-item-path" title="' + html(pathText) + '">' + html(pathText) + '</div>' +
+        '</div>';
     }).join("");
     if (previewBtn) previewBtn.disabled = false;
   }

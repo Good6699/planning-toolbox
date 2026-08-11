@@ -1192,10 +1192,12 @@ def _extract_font_guids(filepath):
     return list(set(_FONT_GUID_RE.findall(content)))
 
 
-def _build_meta_guid_map(search_dir):
+def _resolve_font_guids(search_dir, target_guids):
+    """按需查找：只扫描 .meta 文件直到找到所有 target_guids"""
     guid_map = {}
-    if not os.path.isdir(search_dir):
+    if not search_dir or not os.path.isdir(search_dir) or not target_guids:
         return guid_map
+    remaining = set(target_guids)
     skip_dirs = {"Library", "Temp", "obj", "Obj", "Plugin", "Plugins"}
     for root, dirs, files in os.walk(search_dir):
         dirs[:] = [d for d in dirs if d not in skip_dirs]
@@ -1207,11 +1209,14 @@ def _build_meta_guid_map(search_dir):
                 with open(meta_path, "rb") as mf:
                     head = mf.read(200).decode("utf-8", errors="ignore")
                 m = _META_GUID_RE.search(head)
-                if m:
+                if m and m.group(1) in remaining:
                     guid = m.group(1)
                     asset_path = meta_path[:-5]
                     rel = os.path.relpath(asset_path, search_dir).replace("\\", "/")
                     guid_map[guid] = rel
+                    remaining.discard(guid)
+                    if not remaining:
+                        return guid_map
             except Exception:
                 continue
     return guid_map
@@ -1244,7 +1249,6 @@ def api_prefab_font_scan():
         if not project_root:
             return jsonify({"error": "无法确定项目根目录（需包含 Assets 目录）"}), 400
         assets_dir = os.path.join(project_root, "Assets")
-        guid_map = _build_meta_guid_map(assets_dir)
         font_data = {}
         for pf in prefabs:
             guids = _extract_font_guids(pf)
@@ -1253,6 +1257,7 @@ def api_prefab_font_scan():
                     font_data[guid] = {"prefab_files": [], "ref_count": 0}
                 font_data[guid]["prefab_files"].append(os.path.basename(pf))
                 font_data[guid]["ref_count"] += 1
+        guid_map = _resolve_font_guids(assets_dir, set(font_data.keys()))
         fonts = []
         for guid, info in sorted(font_data.items(), key=lambda x: x[0]):
             asset_path = guid_map.get(guid, "")

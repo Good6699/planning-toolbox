@@ -2188,6 +2188,77 @@ input::placeholder,textarea::placeholder{
   color:var(--accent);
   background:rgba(94,162,255,.06);
 }
+.font-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:8px;
+  background:rgba(255,255,255,.02);
+  margin-bottom:6px;
+  font-size:13px;
+}
+.font-item-left{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-width:0;
+  flex:0 0 auto;
+}
+.font-item-left input[type="checkbox"]{
+  width:14px;height:14px;accent-color:var(--accent);flex-shrink:0;
+}
+.font-item-name{
+  font-weight:600;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  max-width:180px;
+}
+.font-item-count{
+  color:var(--dim);
+  font-size:11px;
+  flex-shrink:0;
+}
+.font-item-arrow{
+  color:var(--dim);
+  flex-shrink:0;
+  font-size:14px;
+}
+.font-item-right{
+  display:flex;
+  gap:6px;
+  align-items:center;
+  flex:1;
+  min-width:0;
+}
+.font-item-target{
+  flex:1;
+  min-width:0;
+  height:30px;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:var(--bg);
+  color:var(--text);
+  padding:0 8px;
+  font-size:12px;
+  outline:none;
+}
+.font-item-target:focus,.font-item-spacing:focus{
+  border-color:var(--accent);
+}
+.font-item-spacing{
+  height:30px;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:var(--bg);
+  color:var(--text);
+  padding:0 8px;
+  font-size:12px;
+  outline:none;
+  text-align:center;
+}
 @media (max-width:1100px){
   .atlas-main-grid{
     grid-template-columns:1fr;

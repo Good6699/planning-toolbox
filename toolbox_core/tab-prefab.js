@@ -17,6 +17,7 @@ function buildPrefabTab(panel) {
         <div class="toggle-group" id="prefab_mode_group">
           <button class="toggle-btn active" data-action="set-prefab-mode" data-mode="clear-text">一键清理文字</button>
           <button class="toggle-btn" data-action="set-prefab-mode" data-mode="atlas">图集引用清理</button>
+          <button class="toggle-btn" data-action="set-prefab-mode" data-mode="font-check">字体检测</button>
         </div>
       </div>
       <div class="flex-row prefab-path-actions">
@@ -94,6 +95,18 @@ function buildPrefabTab(panel) {
       <div class="log-wrap prefab-log-wrap">
         <div class="card-header compact"><span>执行日志</span></div>
         <div class="log" id="prefab_log"><div class="log-anchor"></div></div>
+      </div>
+      <div id="font_check_workspace" hidden>
+        <div class="card">
+          <div class="card-header compact">
+            <span>检测到的字体</span>
+            <span class="atlas-pane-count" id="font_scan_summary"></span>
+          </div>
+          <div id="font_list"></div>
+        </div>
+        <div class="action-center">
+          <button class="btn btn-primary" data-action="font-preview" disabled>预览变更</button>
+        </div>
       </div>
     </div>`;
 
@@ -507,20 +520,30 @@ function buildPrefabTab(panel) {
   }
 
   function setMode(mode) {
-    if (mode !== "clear-text" && mode !== "atlas") return;
+    if (mode !== "clear-text" && mode !== "atlas" && mode !== "font-check") return;
     state.mode = mode;
     panel.querySelectorAll("[data-action='set-prefab-mode']").forEach(function(button) {
       button.classList.toggle("active", button.dataset.mode === mode);
     });
     var fileButton = panel.querySelector("[data-action='browse-prefab-files']");
-    var workspace = panel.querySelector("#atlas_workspace");
+    var atlasWorkspace = panel.querySelector("#atlas_workspace");
+    var fontWorkspace = panel.querySelector("#font_check_workspace");
     var title = panel.querySelector("#prefab_drop_title");
     var help = panel.querySelector("#prefab_drop_help");
-    fileButton.hidden = mode === "atlas";
-    fileButton.disabled = mode === "atlas" || state.busy;
-    workspace.hidden = mode !== "atlas";
-    title.textContent = mode === "atlas" ? "将 Prefabs 目录拖拽到此处" : "将文件或文件夹拖拽到此处";
-    help.textContent = mode === "atlas" ? "图集引用清理仅接受 Prefabs 或其子目录" : "或使用上方按钮选择";
+    fileButton.hidden = mode !== "clear-text";
+    fileButton.disabled = mode !== "clear-text" || state.busy;
+    atlasWorkspace.hidden = mode !== "atlas";
+    if (fontWorkspace) fontWorkspace.hidden = mode !== "font-check";
+    if (mode === "atlas") {
+      title.textContent = "将 Prefabs 目录拖拽到此处";
+      help.textContent = "图集引用清理仅接受 Prefabs 或其子目录";
+    } else if (mode === "font-check") {
+      title.textContent = "将预制文件或目录拖拽到此处";
+      help.textContent = "自动遍历 3 层识别预制文件，检测字体引用";
+    } else {
+      title.textContent = "将文件或文件夹拖拽到此处";
+      help.textContent = "或使用上方按钮选择";
+    }
     setSummary("");
     if (mode === "atlas") checkAtlasDrafts();
   }
@@ -611,6 +634,8 @@ function buildPrefabTab(panel) {
     if (!paths.length) return;
     if (state.mode === "atlas") {
       scanAtlas(paths);
+    } else if (state.mode === "font-check") {
+      scanFonts(paths);
     } else {
       startPrefabClear(paths);
     }
@@ -636,6 +661,109 @@ function buildPrefabTab(panel) {
       if (requestGeneration !== state.requestGeneration) return;
       state.busy = false;
       renderAtlas();
+    });
+  }
+
+  // ── 字体检测 ──
+  var fontScanData = null;
+  var fontScanPaths = [];
+
+  function scanFonts(paths) {
+    if (state.busy) return;
+    var requestGeneration = ++state.requestGeneration;
+    state.busy = true;
+    fontScanPaths = paths;
+    setSummary("正在扫描字体引用...");
+    apiPost("/api/prefab/font-scan", {paths:paths}).then(function(data) {
+      if (requestGeneration !== state.requestGeneration) return;
+      fontScanData = data;
+      renderFontList();
+      setSummary("扫描完成，共 " + data.total_prefabs + " 个预制，发现 " + data.fonts.length + " 种字体");
+    }).catch(function(error) {
+      if (requestGeneration !== state.requestGeneration) return;
+      fontScanData = null;
+      setSummary("");
+      _showToast("字体扫描失败：" + error.message);
+    }).finally(function() {
+      if (requestGeneration !== state.requestGeneration) return;
+      state.busy = false;
+    });
+  }
+
+  function renderFontList() {
+    var listEl = panel.querySelector("#font_list");
+    var summaryEl = panel.querySelector("#font_scan_summary");
+    var previewBtn = panel.querySelector("[data-action='font-preview']");
+    if (!listEl || !fontScanData) return;
+    var fonts = fontScanData.fonts;
+    if (summaryEl) summaryEl.textContent = fonts.length + " 种字体";
+    if (!fonts.length) {
+      listEl.innerHTML = '<div class="atlas-empty">未检测到字体引用</div>';
+      if (previewBtn) previewBtn.disabled = true;
+      return;
+    }
+    listEl.innerHTML = fonts.map(function(font, i) {
+      return '<div class="font-item" data-guid="' + html(font.guid) + '">' +
+        '<label class="font-item-left"><input type="checkbox" class="font-item-check" checked>' +
+        '<span class="font-item-name" title="' + html(font.asset_path || font.guid) + '">' + html(font.name) + '</span>' +
+        '<span class="font-item-count">' + font.ref_count + '次引用</span></label>' +
+        '<span class="font-item-arrow">→</span>' +
+        '<span class="font-item-right">' +
+        '<input type="text" class="font-item-target" placeholder="目标字体名（留空不改）" data-idx="' + i + '">' +
+        '<input type="text" class="font-item-spacing" placeholder="行距" data-idx="' + i + '" style="width:60px">' +
+        '</span></div>';
+    }).join("");
+    if (previewBtn) previewBtn.disabled = false;
+  }
+
+  function fontPreview() {
+    if (!fontScanData || !fontScanPaths.length) return;
+    var items = panel.querySelectorAll(".font-item");
+    var changes = [];
+    items.forEach(function(item) {
+      var checkbox = item.querySelector(".font-item-check");
+      if (!checkbox || !checkbox.checked) return;
+      var guid = item.dataset.guid;
+      var target = item.querySelector(".font-item-target").value.trim();
+      var spacing = item.querySelector(".font-item-spacing").value.trim();
+      if (!target && !spacing) return;
+      var font = fontScanData.fonts.filter(function(f) { return f.guid === guid; })[0];
+      changes.push({
+        old_guid: guid,
+        old_name: font ? font.name : guid,
+        new_font_name: target,
+        line_spacing: spacing,
+        prefab_files: font ? font.prefab_files : [],
+      });
+    });
+    if (!changes.length) { _showToast("请至少填写一个目标字体或行距"); return; }
+    var msg = "即将修改 " + fontScanData.total_prefabs + " 个预制文件：\n\n";
+    changes.forEach(function(c) {
+      msg += "  " + c.old_name + " → " + (c.new_font_name || "不改字体");
+      if (c.line_spacing) msg += "（行距: " + c.line_spacing + "）";
+      msg += "\n    影响: " + c.prefab_files.join(", ") + "\n";
+    });
+    msg += "\n确认执行？";
+    showConfirm({title:"预览变更", message:msg}).then(function(ok) {
+      if (ok) fontExecute(changes);
+    });
+  }
+
+  function fontExecute(changes) {
+    if (state.busy) return;
+    var requestGeneration = ++state.requestGeneration;
+    state.busy = true;
+    setSummary("正在修改字体引用...");
+    apiPost("/api/prefab/font-modify", {paths:fontScanPaths, changes:changes}).then(function(data) {
+      if (requestGeneration !== state.requestGeneration) return;
+      _showToast("修改完成，共修改 " + data.total + " 个文件");
+      setSummary("修改完成：" + data.modified_files.join(", "));
+    }).catch(function(error) {
+      if (requestGeneration !== state.requestGeneration) return;
+      _showToast("字体修改失败：" + error.message);
+    }).finally(function() {
+      if (requestGeneration !== state.requestGeneration) return;
+      state.busy = false;
     });
   }
 
@@ -918,6 +1046,8 @@ function buildPrefabTab(panel) {
       renderAddGroupPicker();
     } else if (action === "confirm-add-group") {
       confirmAddGroup();
+    } else if (action === "font-preview") {
+      fontPreview();
     }
   });
 

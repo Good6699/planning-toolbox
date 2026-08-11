@@ -1155,6 +1155,198 @@ def api_prefab_atlas_rewrite():
         return _atlas_error(exc)
 
 
+# ── 字体检测 ──
+
+_FONT_GUID_RE = re.compile(
+    r"(?m)^\s*(?:m_Font|m_FontAsset):\s*\{[^}]*guid:\s*([0-9a-fA-F]+)"
+)
+_META_GUID_RE = re.compile(r"(?m)^guid:\s*([0-9a-fA-F]+)")
+_LINE_SPACING_RE = re.compile(
+    r"(?m)^(\s*m_LineSpacing:\s*)([-\d.]+)"
+)
+
+
+def _collect_prefabs(paths, max_depth=3):
+    prefabs = []
+    for p in paths:
+        if os.path.isfile(p) and p.lower().endswith(".prefab"):
+            prefabs.append(p)
+        elif os.path.isdir(p):
+            for root, dirs, files in os.walk(p):
+                depth = root.replace(p, "").count(os.sep)
+                if depth >= max_depth:
+                    dirs.clear()
+                    continue
+                for f in files:
+                    if f.lower().endswith(".prefab"):
+                        prefabs.append(os.path.join(root, f))
+    return list(dict.fromkeys(prefabs))
+
+
+def _extract_font_guids(filepath):
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+    except Exception:
+        return []
+    return list(set(_FONT_GUID_RE.findall(content)))
+
+
+def _build_meta_guid_map(search_dir):
+    guid_map = {}
+    if not os.path.isdir(search_dir):
+        return guid_map
+    skip_dirs = {"Library", "Temp", "obj", "Obj", "Plugin", "Plugins"}
+    for root, dirs, files in os.walk(search_dir):
+        dirs[:] = [d for d in dirs if d not in skip_dirs]
+        for f in files:
+            if not f.endswith(".meta"):
+                continue
+            meta_path = os.path.join(root, f)
+            try:
+                with open(meta_path, "rb") as mf:
+                    head = mf.read(200).decode("utf-8", errors="ignore")
+                m = _META_GUID_RE.search(head)
+                if m:
+                    guid = m.group(1)
+                    asset_path = meta_path[:-5]
+                    rel = os.path.relpath(asset_path, search_dir).replace("\\", "/")
+                    guid_map[guid] = rel
+            except Exception:
+                continue
+    return guid_map
+
+
+def _find_project_root(paths):
+    for p in paths:
+        d = os.path.dirname(p) if os.path.isfile(p) else p
+        for _ in range(10):
+            if os.path.isdir(os.path.join(d, "Assets")):
+                return d
+            parent = os.path.dirname(d)
+            if parent == d:
+                break
+            d = parent
+    return None
+
+
+@app.route("/api/prefab/font-scan", methods=["POST"])
+def api_prefab_font_scan():
+    try:
+        data = request.get_json(force=True)
+        paths = data.get("paths", [])
+        if not paths:
+            return jsonify({"error": "请选择预制文件或目录"}), 400
+        prefabs = _collect_prefabs(paths)
+        if not prefabs:
+            return jsonify({"error": "未找到 .prefab 文件"}), 400
+        project_root = _find_project_root(paths)
+        if not project_root:
+            return jsonify({"error": "无法确定项目根目录（需包含 Assets 目录）"}), 400
+        assets_dir = os.path.join(project_root, "Assets")
+        guid_map = _build_meta_guid_map(assets_dir)
+        font_data = {}
+        for pf in prefabs:
+            guids = _extract_font_guids(pf)
+            for guid in guids:
+                if guid not in font_data:
+                    font_data[guid] = {"prefab_files": [], "ref_count": 0}
+                font_data[guid]["prefab_files"].append(os.path.basename(pf))
+                font_data[guid]["ref_count"] += 1
+        fonts = []
+        for guid, info in sorted(font_data.items(), key=lambda x: x[0]):
+            asset_path = guid_map.get(guid, "")
+            name = os.path.basename(asset_path) if asset_path else guid
+            fonts.append({
+                "guid": guid,
+                "name": name,
+                "asset_path": asset_path,
+                "ref_count": info["ref_count"],
+                "prefab_files": sorted(set(info["prefab_files"])),
+            })
+        return jsonify({
+            "fonts": fonts,
+            "total_prefabs": len(prefabs),
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/api/prefab/font-modify", methods=["POST"])
+def api_prefab_font_modify():
+    try:
+        data = request.get_json(force=True)
+        paths = data.get("paths", [])
+        changes = data.get("changes", [])
+        if not changes:
+            return jsonify({"error": "没有需要修改的字体"}), 400
+        prefabs = _collect_prefabs(paths)
+        if not prefabs:
+            return jsonify({"error": "未找到 .prefab 文件"}), 400
+        project_root = _find_project_root(paths)
+        if not project_root:
+            return jsonify({"error": "无法确定项目根目录"}), 400
+        assets_dir = os.path.join(project_root, "Assets")
+        name_to_guid = {}
+        for root, dirs, files in os.walk(assets_dir):
+            dirs[:] = [d for d in dirs if d not in {"Library", "Temp", "obj", "Obj", "Plugin", "Plugins"}]
+            for f in files:
+                if not f.endswith(".meta"):
+                    continue
+                meta_path = os.path.join(root, f)
+                try:
+                    with open(meta_path, "rb") as mf:
+                        head = mf.read(200).decode("utf-8", errors="ignore")
+                    m = _META_GUID_RE.search(head)
+                    if m:
+                        asset_path = meta_path[:-5]
+                        asset_name = os.path.basename(asset_path)
+                        name_to_guid[asset_name.lower()] = m.group(1)
+                except Exception:
+                    continue
+        change_map = {}
+        for c in changes:
+            old_guid = c.get("old_guid", "")
+            new_font_name = c.get("new_font_name", "").strip()
+            line_spacing = c.get("line_spacing", "")
+            if not old_guid or (not new_font_name and not line_spacing):
+                continue
+            new_guid = name_to_guid.get(new_font_name.lower(), "") if new_font_name else ""
+            change_map[old_guid] = {
+                "new_guid": new_guid,
+                "new_font_name": new_font_name,
+                "line_spacing": str(line_spacing).strip(),
+            }
+        modified_files = []
+        for pf in prefabs:
+            try:
+                with open(pf, "r", encoding="utf-8") as f:
+                    content = f.read()
+            except Exception:
+                continue
+            original = content
+            for old_guid, chg in change_map.items():
+                if chg["new_guid"]:
+                    content = content.replace(old_guid, chg["new_guid"])
+                if chg["line_spacing"]:
+                    content = _LINE_SPACING_RE.sub(
+                        lambda m, ls=chg["line_spacing"]: m.group(1) + ls, content
+                    )
+            if content != original:
+                try:
+                    with open(pf, "w", encoding="utf-8") as f:
+                        f.write(content)
+                    modified_files.append(os.path.basename(pf))
+                except Exception:
+                    continue
+        return jsonify({
+            "modified_files": modified_files,
+            "total": len(modified_files),
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
 @app.route("/api/workflow/list", methods=["GET"])
 def api_workflow_list():
     cfg = load_config()

@@ -4690,9 +4690,9 @@
     "semantic_hash": "c2eb2be5710f086b2b1776ea933dc56e"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\desktop_main.py": {
-    "mtime": 1786173064.553926,
-    "ast_hash": "bd98fe004d8512e92ed5c74939c6385d",
-    "semantic_hash": "bd98fe004d8512e92ed5c74939c6385d"
+    "mtime": 1786413407.971182,
+    "ast_hash": "2bc2f071bbc6b5c20d938878a4133026",
+    "semantic_hash": "2bc2f071bbc6b5c20d938878a4133026"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\dist_update.py": {
     "mtime": 1780195561.3211899,
@@ -13780,9 +13780,9 @@
     "semantic_hash": "1d74b3eaa6865829bc43fb8a40cbd33c"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\tab-prefab.js": {
-    "mtime": 1786351835.2609425,
-    "ast_hash": "0c4d68952cb11d4bc034c7645b9f5fdc",
-    "semantic_hash": "0c4d68952cb11d4bc034c7645b9f5fdc"
+    "mtime": 1786352616.5080626,
+    "ast_hash": "a9fffddec1191b88f63688ab90cc9f69",
+    "semantic_hash": "a9fffddec1191b88f63688ab90cc9f69"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\tab-prefab.min.js": {
     "mtime": 1782458434.3263159,
@@ -14450,9 +14450,9 @@
     "semantic_hash": "cb935f7439ea663567cf96a5a7d4d7ea"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\templates\\index.html": {
-    "mtime": 1786351883.0679967,
-    "ast_hash": "a071ad2fc9dcc98be766817608410e3a",
-    "semantic_hash": "a071ad2fc9dcc98be766817608410e3a"
+    "mtime": 1786352630.342588,
+    "ast_hash": "e268487db99b133549663bc80ca310fe",
+    "semantic_hash": "e268487db99b133549663bc80ca310fe"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\\u8f93\u51fa\\\u5bf9\u51b3_\u51fa\u6218\\\u4fee\u6539\u603b\u7ed3.txt": {
     "mtime": 1784180432.953984,
@@ -14475,9 +14475,9 @@
     "semantic_hash": "a22180c67794c6251ef4e90e86d2e4b6"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\\u7b56\u5212\u5de5\u5177\u7bb1_\u4ea4\u4e92\u8bf4\u660e\u4e66.html": {
-    "mtime": 1784549428.6453817,
-    "ast_hash": "fc1c505c71bf10a8e85379a8b84ee3da",
-    "semantic_hash": "fc1c505c71bf10a8e85379a8b84ee3da"
+    "mtime": 1786364168.3732755,
+    "ast_hash": "aaf80cd6d00fb33c9b8cbfd9fe973774",
+    "semantic_hash": "aaf80cd6d00fb33c9b8cbfd9fe973774"
   },
   "G:\\DGameAI\\workspace\\_foreground_sampler.py": {
     "mtime": 1785325825.9762344,

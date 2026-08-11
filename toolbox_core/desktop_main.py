@@ -504,8 +504,19 @@ class EdgeDocker:
             self._slide_in(hwnd, snap)
 
     def _tick(self):
-        if time.perf_counter() < self._busy_until:
-            return
+        now = time.perf_counter()
+        if now < self._busy_until:
+            if self.docked is None:
+                hwnd = self._resolve_hwnd()
+                if hwnd:
+                    try:
+                        fg = win32gui.GetForegroundWindow()
+                        if fg != hwnd:
+                            self._busy_until = 0.0
+                    except Exception:
+                        pass
+            if now < self._busy_until:
+                return
         hwnd = self._resolve_hwnd()
         if not hwnd or not win32gui.IsWindow(hwnd):
             return
@@ -616,7 +627,7 @@ class EdgeDocker:
         self._op_seq += 1
         seq = self._op_seq
         self._animating_seq = seq
-        self._busy_until = time.perf_counter() + 0.6
+        self._busy_until = time.perf_counter() + 0.25
         try:
             rect = win32gui.GetWindowRect(hwnd)
             w, h = rect[2] - rect[0], rect[3] - rect[1]
@@ -1189,7 +1200,9 @@ def _undock_and_center(hwnd):
     _show_taskbar_icon(hwnd)
     if _docker:
         _docker.docked = None
-        _docker._busy_until = time.perf_counter() + 1.0
+        _now = time.perf_counter()
+        if _now >= _docker._busy_until:
+            _docker._busy_until = _now + 0.3
     try:
         _center_on_cursor_screen(hwnd)
         win32gui.SetForegroundWindow(hwnd)

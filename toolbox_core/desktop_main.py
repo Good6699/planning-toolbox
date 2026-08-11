@@ -366,6 +366,7 @@ class EdgeDocker:
         self._busy_until = 0.0
         self._op_seq = 0
         self._animating_seq = 0
+        self._last_docked_edge = None
         self._stop = threading.Event()
         self._thread = None
         self._prev_fg = 0
@@ -406,6 +407,7 @@ class EdgeDocker:
         hwnd = self._resolve_hwnd()
         if not hwnd:
             self.docked = None
+            self._last_docked_edge = None
             return
         try:
             ctypes.windll.user32.ShowWindow(hwnd, 9)
@@ -429,6 +431,7 @@ class EdgeDocker:
             pass
         finally:
             self.docked = None
+            self._last_docked_edge = None
             self._busy_until = time.perf_counter() + 0.6
 
     def _loop(self):
@@ -482,6 +485,7 @@ class EdgeDocker:
             return
         if self._tick_check_released(x, r, b, y):
             self.docked = None
+            self._last_docked_edge = None
         else:
             self._tick_try_slide_out(hwnd, x, y, r, b, h, cx, cy)
 
@@ -506,13 +510,16 @@ class EdgeDocker:
     def _tick(self):
         now = time.perf_counter()
         if now < self._busy_until:
-            if self.docked is None:
+            if self.docked is None and self._last_docked_edge:
                 hwnd = self._resolve_hwnd()
                 if hwnd:
                     try:
                         fg = win32gui.GetForegroundWindow()
                         if fg != hwnd:
                             self._busy_until = 0.0
+                            self._slide_in(hwnd, self._last_docked_edge)
+                            self._last_docked_edge = None
+                            return
                     except Exception:
                         pass
             if now < self._busy_until:
@@ -639,6 +646,7 @@ class EdgeDocker:
                 target_y = self._docked_mt if self.docked == "top" else self._docked_mb - h
             self._animate(hwnd, rect[0], rect[1], target_x, target_y, ease_in=False)
             if seq == self._op_seq:
+                self._last_docked_edge = self.docked
                 self.docked = None
                 try:
                     ex = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
@@ -1200,6 +1208,7 @@ def _undock_and_center(hwnd):
     _show_taskbar_icon(hwnd)
     if _docker:
         _docker.docked = None
+        _docker._last_docked_edge = None
         _now = time.perf_counter()
         if _now >= _docker._busy_until:
             _docker._busy_until = _now + 0.3

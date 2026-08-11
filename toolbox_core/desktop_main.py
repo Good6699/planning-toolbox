@@ -652,8 +652,11 @@ class EdgeDocker:
                 try:
                     ex = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
                     ctypes.windll.user32.SetWindowLongW(hwnd, -20, ex & ~0x8)
+                    win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0,
+                                          win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
                     win32gui.SetWindowPos(hwnd, win32con.HWND_NOTOPMOST, 0, 0, 0, 0,
                                           win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE | win32con.SWP_FRAMECHANGED)
+                    win32gui.BringWindowToTop(hwnd)
                 except Exception:
                     pass
         except Exception:

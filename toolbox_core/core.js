@@ -8,7 +8,6 @@ const _WF_ICONS = {
 
   settings: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="7" cy="7" r="2.8"/><path d="M7 1v2M7 11v2M13 7h-2M3 7H1M11.3 2.7l-1.4 1.4M4.1 9.9l-1.4 1.4M11.3 11.3l-1.4-1.4M4.1 4.1 2.7 2.7"/></svg>',
   open: '<svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M1.5 3.5h3.5l1.5-1.5h5a1 1 0 011 1v8a1 1 0 01-1 1h-10a1 1 0 01-1-1v-6.5a1 1 0 011-1z" opacity=".5"/></svg>'
-
 };
 
 const S = {};

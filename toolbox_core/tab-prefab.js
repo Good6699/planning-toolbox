@@ -98,7 +98,7 @@ function buildPrefabTab(panel) {
             <span>检测到的字体</span>
             <span class="atlas-pane-count" id="font_scan_summary"></span>
           </div>
-          <div id="font_list"></div>
+          <div id="font_list"><div class="atlas-empty">尚未检测到字体，请拖入预制文件或目录开始扫描</div></div>
         </div>
         <div class="action-center">
           <button class="btn btn-primary" data-action="font-preview" disabled>预览变更</button>

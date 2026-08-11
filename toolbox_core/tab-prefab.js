@@ -92,10 +92,6 @@ function buildPrefabTab(panel) {
           </div>
         </div>
       </div>
-      <div class="log-wrap prefab-log-wrap">
-        <div class="card-header compact"><span>执行日志</span></div>
-        <div class="log" id="prefab_log"><div class="log-anchor"></div></div>
-      </div>
       <div id="font_check_workspace" hidden>
         <div class="card">
           <div class="card-header compact">
@@ -107,6 +103,10 @@ function buildPrefabTab(panel) {
         <div class="action-center">
           <button class="btn btn-primary" data-action="font-preview" disabled>预览变更</button>
         </div>
+      </div>
+      <div class="log-wrap prefab-log-wrap">
+        <div class="card-header compact"><span>执行日志</span></div>
+        <div class="log" id="prefab_log"><div class="log-anchor"></div></div>
       </div>
     </div>`;
 

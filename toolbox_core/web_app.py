@@ -1229,14 +1229,12 @@ def _resolve_font_guids(search_dir, target_guids):
                     continue
         return False
 
-    # 优先搜索 Fonts 目录（字体通常集中在这里）
-    fonts_dir = os.path.join(search_dir, "Resources", "UI", "Fonts")
-    if os.path.isdir(fonts_dir):
-        if _scan_dir(fonts_dir):
-            return guid_map
-
-    # Fonts 目录没找全，搜索整个 Assets
-    _scan_dir(search_dir)
+    # 只搜索字体相关的两个目录
+    for subdir in ("Resources/UI/Fonts", "Resources/Language"):
+        fonts_dir = os.path.join(search_dir, subdir)
+        if os.path.isdir(fonts_dir):
+            if _scan_dir(fonts_dir):
+                return guid_map
     return guid_map
 
 

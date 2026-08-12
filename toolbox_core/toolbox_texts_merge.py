@@ -115,7 +115,7 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
             by_sheet.setdefault(sheet_name, []).append(row_data)
 
         for sheet_name, sheet_rows in by_sheet.items():
-            ws_tgt = wb_tgt.get(sheet_name)
+            ws_tgt = wb_tgt[sheet_name] if sheet_name in wb_tgt.sheetnames else None
             if not ws_tgt:
                 continue
 

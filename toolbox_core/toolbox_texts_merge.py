@@ -21,21 +21,22 @@ def svn_cat_rev(svn_exe, url, rev, auth_args):
     return None
 
 
-def svn_get_prev_rev(svn_exe, url, rev, auth_args):
+def svn_get_prev_rev(file_url, rev, svn_user, svn_pass):
     """获取指定文件在 rev 之前的最近一个修改版本号。
-    使用 peg revision 确保 SVN 在正确的版本解析文件路径。"""
-    cmd = [svn_exe, "log", "--limit", "1", f"-r{rev}:1",
-           "--non-interactive", "--trust-server-cert"] + auth_args + [f"{url}@{rev}"]
+    复用 toolbox_merge.svn_log 查文件历史。"""
+    from toolbox_merge import svn_log
+    # 用极早的起始日期和 rev 的前一天作为日期范围查询
+    from datetime import datetime, timedelta
+    # SVN 日期范围不够精确，改用 svn_log_changed_files 逐版本回溯
+    # 直接用 svn log --xml -r REV:1 查询
     try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, _ = proc.communicate(timeout=30)
-        if proc.returncode == 0:
-            for line in stdout.splitlines():
-                m = re.match(rb"r(\d+)\s", line.strip())
-                if m:
-                    found_rev = int(m.group(1))
-                    if found_rev < rev:
-                        return found_rev
+        versions = svn_log(file_url, "2000-01-01", "2099-12-31",
+                           svn_user=svn_user, svn_pass=svn_pass)
+        # 按版本号降序排列，找到第一个 < rev 的版本
+        for v in versions:
+            r = v.get("rev")
+            if isinstance(r, int) and r < rev:
+                return r
     except Exception:
         pass
     return rev - 1
@@ -135,7 +136,7 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
     total_updated = 0
 
     for rev in sorted_revs:
-        prev_rev = svn_get_prev_rev(svn, file_url, rev, auth_args)
+        prev_rev = svn_get_prev_rev(file_url, rev, svn_user, svn_pass)
         put(f"版本 {rev} (基准: {prev_rev}): 下载中...\n")
 
         cur_bytes = svn_cat_rev(svn, file_url, rev, auth_args)

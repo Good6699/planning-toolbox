@@ -21,7 +21,6 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
 
     # SVN 锁定
     if lock_fn:
-        put(f"SVN 锁定: {local_file}\n")
         if not lock_fn(local_file):
             put("锁定失败，跳过 Texts.xlsm 合并\n")
             return 0, 1

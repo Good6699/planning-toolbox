@@ -3469,7 +3469,7 @@ document.addEventListener('mousemove', function(e) {
 
 document.addEventListener('mousedown', function(e) {
 
-  if (e.target.closest('.drag-bar')) {
+  if (e.target.closest('.topbar') && !e.target.closest('button') && !e.target.closest('.topbar-right')) {
 
     const edge = getEdge(e.clientX, e.clientY);
 

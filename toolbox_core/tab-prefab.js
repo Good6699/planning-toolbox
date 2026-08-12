@@ -786,6 +786,8 @@ function buildPrefabTab(panel) {
     if (state.busy) return;
     var requestGeneration = ++state.requestGeneration;
     state.busy = true;
+    var logEl = panel.querySelector("#font_log");
+    if (logEl) setTimeout(function() { logEl.scrollIntoView({behavior:"smooth", block:"nearest"}); }, 100);
     _fontLog("开始修改字体引用...");
     apiPost("/api/prefab/font-modify", {paths:fontScanPaths, changes:changes}).then(function(data) {
       if (requestGeneration !== state.requestGeneration) return;

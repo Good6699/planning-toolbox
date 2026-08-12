@@ -89,8 +89,9 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
     # ── Step 2: 下载并比较差异 ──
     put("  对比中...\n")
     try:
+        # 传目录 URL（非文件 URL）使 svn_diff_filter 生效
         results, header_data, sheet_order = step3_download_and_compare(
-            file_url, file_pairs=filtered_pairs,
+            source_url, file_pairs=filtered_pairs,
             svn_user=svn_user or "", svn_pass=svn_pass or "")
     except Exception as e:
         _cmp_mod._log = _orig_log

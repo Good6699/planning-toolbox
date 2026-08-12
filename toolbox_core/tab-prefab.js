@@ -104,9 +104,17 @@ function buildPrefabTab(panel) {
           <button class="btn btn-primary" data-action="font-preview" disabled>预览变更</button>
         </div>
       </div>
-      <div class="log-wrap prefab-log-wrap">
-        <div class="card-header compact"><span>执行日志</span></div>
+      <div class="log-wrap prefab-log-wrap" id="log_clear_text">
+        <div class="card-header compact"><span>清理文字日志</span></div>
         <div class="log" id="prefab_log"><div class="log-anchor"></div></div>
+      </div>
+      <div class="log-wrap prefab-log-wrap" id="log_atlas" hidden>
+        <div class="card-header compact"><span>图集引用日志</span></div>
+        <div class="log" id="atlas_log"><div class="log-anchor"></div></div>
+      </div>
+      <div class="log-wrap prefab-log-wrap" id="log_font" hidden>
+        <div class="card-header compact"><span>字体检测日志</span></div>
+        <div class="log" id="font_log"><div class="log-anchor"></div></div>
       </div>
     </div>`;
 
@@ -534,6 +542,9 @@ function buildPrefabTab(panel) {
     fileButton.disabled = mode !== "clear-text" || state.busy;
     atlasWorkspace.hidden = mode !== "atlas";
     if (fontWorkspace) fontWorkspace.hidden = mode !== "font-check";
+    panel.querySelector("#log_clear_text").hidden = mode !== "clear-text";
+    panel.querySelector("#log_atlas").hidden = mode !== "atlas";
+    panel.querySelector("#log_font").hidden = mode !== "font-check";
     if (mode === "atlas") {
       title.textContent = "将 Prefabs 目录拖拽到此处";
       help.textContent = "图集引用清理仅接受 Prefabs 或其子目录";
@@ -668,21 +679,31 @@ function buildPrefabTab(panel) {
   var fontScanData = null;
   var fontScanPaths = [];
 
+  function _fontLog(msg) {
+    var el = panel.querySelector("#font_log");
+    if (!el) return;
+    var anchor = el.querySelector(".log-anchor");
+    var line = document.createElement("div");
+    line.textContent = msg;
+    el.insertBefore(line, anchor);
+    el.scrollTop = el.scrollHeight;
+  }
+
   function scanFonts(paths) {
     if (state.busy) return;
     var requestGeneration = ++state.requestGeneration;
     state.busy = true;
     fontScanPaths = paths;
-    setSummary("正在扫描字体引用...");
+    _fontLog("开始扫描字体引用...");
     apiPost("/api/prefab/font-scan", {paths:paths}).then(function(data) {
       if (requestGeneration !== state.requestGeneration) return;
       fontScanData = data;
       renderFontList();
-      setSummary("扫描完成，共 " + data.total_prefabs + " 个预制，发现 " + data.fonts.length + " 种字体");
+      _fontLog("扫描完成，共 " + data.total_prefabs + " 个预制，发现 " + data.fonts.length + " 种字体");
     }).catch(function(error) {
       if (requestGeneration !== state.requestGeneration) return;
       fontScanData = null;
-      setSummary("");
+      _fontLog("扫描失败：" + error.message);
       _showToast("字体扫描失败：" + error.message);
     }).finally(function() {
       if (requestGeneration !== state.requestGeneration) return;
@@ -757,13 +778,14 @@ function buildPrefabTab(panel) {
     if (state.busy) return;
     var requestGeneration = ++state.requestGeneration;
     state.busy = true;
-    setSummary("正在修改字体引用...");
+    _fontLog("开始修改字体引用...");
     apiPost("/api/prefab/font-modify", {paths:fontScanPaths, changes:changes}).then(function(data) {
       if (requestGeneration !== state.requestGeneration) return;
+      _fontLog("修改完成，共修改 " + data.total + " 个文件");
       _showToast("修改完成，共修改 " + data.total + " 个文件");
-      setSummary("修改完成：" + data.modified_files.join(", "));
     }).catch(function(error) {
       if (requestGeneration !== state.requestGeneration) return;
+      _fontLog("修改失败：" + error.message);
       _showToast("字体修改失败：" + error.message);
     }).finally(function() {
       if (requestGeneration !== state.requestGeneration) return;
@@ -974,7 +996,7 @@ function buildPrefabTab(panel) {
       state.busy = true;
       renderAtlas();
       var labels = {copy:"图集资源复制", resolve:"图集最终引用解析", rewrite:"图集预制引用修改"};
-      runTask("/api/prefab/atlas/" + operation, {draft_id:draft.id}, null, "prefab_log", labels[operation], function(outputPath, taskId) {
+      runTask("/api/prefab/atlas/" + operation, {draft_id:draft.id}, null, "atlas_log", labels[operation], function(outputPath, taskId) {
         if (requestGeneration !== state.requestGeneration) return;
         if (!taskId) {
           state.busy = false;

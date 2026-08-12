@@ -13,12 +13,18 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
     """对 Texts.xlsm 做单元格级逐版本合并。
     1. 用 step1_query_file_pairs 查版本对
     2. 用 step3_download_and_compare 下载并比较差异
-    3. 直接用 _merge_sheet_rows 把差异行合并到目标（跳过 write_excel）
-    锁定由调用方通过 lock_fn 或 _exec_merge_table 处理。"""
+    3. 直接用 _merge_sheet_rows 把差异行合并到目标（跳过 write_excel）"""
     local_file = os.path.join(target_path, file_path.replace("/", os.sep))
     if not os.path.isfile(local_file):
         put(f"目标文件不存在，跳过: {local_file}\n")
         return 0, 0
+
+    # SVN 锁定
+    if lock_fn:
+        put(f"SVN 锁定: {local_file}\n")
+        if not lock_fn(local_file):
+            put("锁定失败，跳过 Texts.xlsm 合并\n")
+            return 0, 1
 
     file_url = source_url.rstrip("/") + "/" + file_path
     put(f"[Texts.xlsm] 对比版本: {sorted(file_revs)}\n")
@@ -108,10 +114,8 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
                 continue
             by_sheet.setdefault(sheet_name, []).append(row_data)
 
-        put(f"  sheets: {list(by_sheet.keys())}, 目标sheets: {wb_tgt.sheetnames}\n")
-        put(f"  header_data keys: {list(header_data.keys()) if header_data else 'None'}\n")
-        if rows:
-            put(f"  第一行数据 keys: {list(rows[0].keys())}\n")
+        # header_data 结构: {文件名: {sheet名: {行号: {列字母: 表头值}}}}
+        file_hd = header_data.get(fname, {}) if header_data else {}
 
         for sheet_name, sheet_rows in by_sheet.items():
             ws_tgt = wb_tgt[sheet_name] if sheet_name in wb_tgt.sheetnames else None
@@ -119,53 +123,42 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
                 put(f"  目标 sheet '{sheet_name}' 不存在，跳过\n")
                 continue
 
-            # 构建一个临时 worksheet 包含差异行数据，用于 _merge_sheet_rows
-            # _merge_sheet_rows 需要 ws_in (源worksheet), inp_rows (行号列表)
-            # 我们构造一个内存中的 worksheet 来模拟
+            # 构建临时 worksheet
             wb_tmp = openpyxl.Workbook()
             ws_tmp = wb_tmp.active
             ws_tmp.title = sheet_name
 
-            # 写入表头（从 header_data 获取）
-            if header_data and sheet_name in header_data:
-                hd_sheet = header_data[sheet_name]
-                for row_num, cols in hd_sheet.items():
-                    for letter, val in cols.items():
-                        col_num = openpyxl.utils.column_index_from_string(letter)
-                        ws_tmp.cell(row=row_num, column=col_num, value=val)
+            # 写入表头
+            sheet_hd = file_hd.get(sheet_name, {})
+            for row_num, cols in sheet_hd.items():
+                for letter, val in cols.items():
+                    col_num = openpyxl.utils.column_index_from_string(letter)
+                    ws_tmp.cell(row=row_num, column=col_num, value=val)
+
+            # 构建列名 → 列号映射
+            col_name_map = {}
+            if title_rows in sheet_hd:
+                for letter, hdr_val in sheet_hd[title_rows].items():
+                    col_num = openpyxl.utils.column_index_from_string(letter)
+                    col_name_map[hdr_val] = col_num
+
+            put(f"  {sheet_name}: 表头映射 {col_name_map}, 差异 {len(sheet_rows)} 行\n")
 
             # 写入差异行数据
-            # 差异行 dict 的 key 是列名（如 "ID", "SC", "EN" 等）
-            # 需要映射到列号
-            col_name_map = {}
-            if header_data and sheet_name in header_data:
-                hd_sheet = header_data[sheet_name]
-                if title_rows in hd_sheet:
-                    for letter, hdr_val in hd_sheet[title_rows].items():
-                        col_num = openpyxl.utils.column_index_from_string(letter)
-                        col_name_map[hdr_val] = col_num
-
+            skip_keys = {"操作", "当前版本", "上一版本", "前一版本", "sheet",
+                         "_id_changed", "前一版本_ID", "前一版本_SC", "前一版本_sub"}
             inp_rows = []
             for i, row_data in enumerate(sheet_rows):
                 r = title_rows + 1 + i
                 inp_rows.append(r)
                 for col_name, val in row_data.items():
-                    if col_name in ("操作", "当前版本", "上一版本", "前一版本", "sheet",
-                                    "_id_changed", "前一版本_ID", "前一版本_SC", "前一版本_sub"):
+                    if col_name in skip_keys:
                         continue
                     col_num = col_name_map.get(col_name)
                     if col_num:
                         ws_tmp.cell(row=r, column=col_num, value=val)
 
             if inp_rows:
-                put(f"  合并 {sheet_name}: {len(inp_rows)} 行差异, title_rows={title_rows}, id_col={id_col}\n")
-                # 调试：打印临时 worksheet 的表头和第一行数据
-                hdr_vals = [ws_tmp.cell(row=title_rows, column=c).value for c in range(1, min(ws_tmp.max_column+1, 10))]
-                put(f"  临时表头: {hdr_vals}\n")
-                if inp_rows:
-                    first_r = inp_rows[0]
-                    first_vals = [ws_tmp.cell(row=first_r, column=c).value for c in range(1, min(ws_tmp.max_column+1, 10))]
-                    put(f"  第一行数据 (row {first_r}): {first_vals}\n")
                 a, u, _ = merge_sheet_rows_fn(ws_tmp, ws_tgt, inp_rows, title_rows, id_col, set(), put)
                 total_added += a
                 total_updated += u

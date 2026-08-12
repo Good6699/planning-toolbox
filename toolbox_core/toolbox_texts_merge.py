@@ -1,7 +1,6 @@
 """Texts.xlsm 单元格级逐版本合并模块"""
 import io
 import os
-import re
 import subprocess
 
 import openpyxl
@@ -21,24 +20,8 @@ def svn_cat_rev(svn_exe, url, rev, auth_args):
     return None
 
 
-def svn_get_prev_rev(file_url, rev, svn_user, svn_pass):
-    """获取指定文件在 rev 之前的最近一个修改版本号。
-    复用 toolbox_merge.svn_log 查文件历史。"""
-    from toolbox_merge import svn_log
-    # 用极早的起始日期和 rev 的前一天作为日期范围查询
-    from datetime import datetime, timedelta
-    # SVN 日期范围不够精确，改用 svn_log_changed_files 逐版本回溯
-    # 直接用 svn log --xml -r REV:1 查询
-    try:
-        versions = svn_log(file_url, "2000-01-01", "2099-12-31",
-                           svn_user=svn_user, svn_pass=svn_pass)
-        # 按版本号降序排列，找到第一个 < rev 的版本
-        for v in versions:
-            r = v.get("rev")
-            if isinstance(r, int) and r < rev:
-                return r
-    except Exception:
-        pass
+def svn_get_prev_rev(rev):
+    """获取版本 REV 的前一版本。与 svn merge -c REV 行为一致。"""
     return rev - 1
 
 
@@ -136,7 +119,7 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
     total_updated = 0
 
     for rev in sorted_revs:
-        prev_rev = svn_get_prev_rev(file_url, rev, svn_user, svn_pass)
+        prev_rev = svn_get_prev_rev(rev)
         put(f"版本 {rev} (基准: {prev_rev}): 下载中...\n")
 
         cur_bytes = svn_cat_rev(svn, file_url, rev, auth_args)

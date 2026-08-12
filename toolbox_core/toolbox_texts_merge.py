@@ -105,6 +105,10 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
         if not rows:
             continue
 
+        # 调试：打印差异行详情
+        for r in rows:
+            put(f"  diff: 操作={r.get('操作')}, sheet={r.get('sheet')}, ID={r.get('ID')}\n")
+
         # 按 sheet 分组
         by_sheet = {}
         for row_data in rows:

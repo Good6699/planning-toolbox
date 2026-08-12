@@ -762,14 +762,19 @@ function buildPrefabTab(panel) {
       });
     });
     if (!changes.length) { _showToast("请至少填写一个目标字体或行距"); return; }
-    var msg = "即将修改 " + fontScanData.total_prefabs + " 个预制文件：\n\n";
+    var h = '<div style="max-height:400px;overflow:auto">';
+    h += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+    h += '<tr style="border-bottom:1px solid rgba(255,255,255,.1)"><th style="text-align:left;padding:6px 8px;color:var(--dim)">原字体</th><th style="text-align:left;padding:6px 8px;color:var(--dim)">目标</th><th style="text-align:left;padding:6px 8px;color:var(--dim)">行距</th><th style="text-align:left;padding:6px 8px;color:var(--dim)">影响文件</th></tr>';
     changes.forEach(function(c) {
-      msg += "  " + c.old_name + " → " + (c.new_font_name || "不改字体");
-      if (c.line_spacing) msg += "（行距: " + c.line_spacing + "）";
-      msg += "\n    影响: " + c.prefab_files.join(", ") + "\n";
+      h += '<tr style="border-bottom:1px solid rgba(255,255,255,.05)">';
+      h += '<td style="padding:6px 8px;font-weight:600">' + html(c.old_name) + '</td>';
+      h += '<td style="padding:6px 8px;color:var(--accent)">' + html(c.new_font_name || '不改') + '</td>';
+      h += '<td style="padding:6px 8px;color:var(--accent)">' + (c.line_spacing ? html(c.line_spacing) : '不改') + '</td>';
+      h += '<td style="padding:6px 8px;color:var(--dim);font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + html(c.prefab_files.join(", ")) + '">' + c.prefab_files.length + ' 个文件</td>';
+      h += '</tr>';
     });
-    msg += "\n确认执行？";
-    showConfirm({title:"预览变更", message:msg}).then(function(ok) {
+    h += '</table></div>';
+    showConfirm({title:"确认修改 " + changes.length + " 种字体", message:h, html:true}).then(function(ok) {
       if (ok) fontExecute(changes);
     });
   }

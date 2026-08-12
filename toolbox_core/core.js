@@ -2946,7 +2946,7 @@ function _showToast(msg) {
 
 }
 
-function showConfirm({title="确认", message="", confirmText="确定", cancelText="取消", danger=false}={}){
+function showConfirm({title="确认", message="", confirmText="确定", cancelText="取消", danger=false, html=false}={}){
 
   return new Promise(resolve => {
 
@@ -2962,7 +2962,7 @@ function showConfirm({title="确认", message="", confirmText="确定", cancelTe
 
     titleEl.textContent = title;
 
-    msgEl.textContent = message;
+    if (html) msgEl.innerHTML = message; else msgEl.textContent = message;
 
     okBtn.textContent = confirmText;
 

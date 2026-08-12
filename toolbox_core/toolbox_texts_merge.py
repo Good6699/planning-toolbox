@@ -22,17 +22,20 @@ def svn_cat_rev(svn_exe, url, rev, auth_args):
 
 
 def svn_get_prev_rev(svn_exe, url, rev, auth_args):
-    """获取指定文件在 rev 之前的最近一个修改版本号"""
-    cmd = [svn_exe, "log", "-l", "1", "-r", f"1:{rev - 1}",
-           "--non-interactive", "--trust-server-cert",
-           "--quiet"] + auth_args + [url]
+    """获取指定文件在 rev 之前的最近一个修改版本号。
+    使用 peg revision 确保 SVN 在正确的版本解析文件路径。"""
+    cmd = [svn_exe, "log", "--limit", "1", f"-r{rev}:1",
+           "--non-interactive", "--trust-server-cert"] + auth_args + [f"{url}@{rev}"]
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         stdout, _ = proc.communicate(timeout=30)
         if proc.returncode == 0:
-            m = re.search(rb"^r(\d+)", stdout)
-            if m:
-                return int(m.group(1))
+            for line in stdout.splitlines():
+                m = re.match(rb"r(\d+)\s", line.strip())
+                if m:
+                    found_rev = int(m.group(1))
+                    if found_rev < rev:
+                        return found_rev
     except Exception:
         pass
     return rev - 1

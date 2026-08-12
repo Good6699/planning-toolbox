@@ -1519,17 +1519,18 @@ def _cells_equal(cells1: dict, cells2: dict) -> bool:
 
 def _row_hash(info: dict, cols: Optional[List[str]], id_col: str) -> int:
     """计算行的内容哈希。当 cols 指定时只按指定列哈希，否则按全部 cells。
-    自动检测退化情况（列名不匹配导致全空）并回退到全部 cells"""
+    自动检测退化情况（列名不匹配导致全空）并回退到全部 cells。
+    值经 _normalize_value 规范化后哈希，避免浮点精度差异导致误判。"""
     cells = info.get("cells", {})
     if cols:
-        items = tuple((k, cells.get(k, '')) for k in cols)
-        # 退化为全空 → 用全部 cells 回退（列名可能不匹配 Excel 真实表头）
-        if all(v == '' for _, v in items):
-            items = tuple((k, v) for k, v in sorted(cells.items())
-                          if k not in (id_col, "::ID::"))
+        raw = [(k, cells.get(k, '')) for k in cols]
+        if all(v == '' for _, v in raw):
+            raw = [(k, v) for k, v in sorted(cells.items())
+                   if k not in (id_col, "::ID::")]
     else:
-        items = tuple((k, v) for k, v in sorted(cells.items())
-                       if k not in (id_col, "::ID::"))
+        raw = [(k, v) for k, v in sorted(cells.items())
+               if k not in (id_col, "::ID::")]
+    items = tuple((k, _normalize_value(str(v)) if v != '' else v) for k, v in raw)
     return hash(items)
 
 

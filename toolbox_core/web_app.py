@@ -1187,42 +1187,57 @@ def _collect_prefabs(paths, max_depth=3):
 
 
 def _extract_font_guids(filepath):
-    """提取文件中所有字体引用的 GUID 列表（不去重，统计实际引用次数）"""
+    """提取文件中所有字体引用的 GUID 列表（不去重，统计实际引用次数）。
+    只读前 512KB，字体引用通常在文件头部。"""
     try:
         with open(filepath, "r", encoding="utf-8") as f:
-            content = f.read()
+            content = f.read(512 * 1024)
     except Exception:
         return []
     return _FONT_GUID_RE.findall(content)
 
 
 def _resolve_font_guids(search_dir, target_guids):
-    """按需查找：只扫描 .meta 文件直到找到所有 target_guids"""
+    """按需查找：只扫描 .meta 文件直到找到所有 target_guids。
+    优先搜索 Fonts 目录，找不到再搜索整个 Assets。"""
     guid_map = {}
     if not search_dir or not os.path.isdir(search_dir) or not target_guids:
         return guid_map
     remaining = set(target_guids)
     skip_dirs = {"Library", "Temp", "obj", "Obj", "Plugin", "Plugins"}
-    for root, dirs, files in os.walk(search_dir):
-        dirs[:] = [d for d in dirs if d not in skip_dirs]
-        for f in files:
-            if not f.endswith(".meta"):
-                continue
-            meta_path = os.path.join(root, f)
-            try:
-                with open(meta_path, "rb") as mf:
-                    head = mf.read(200).decode("utf-8", errors="ignore")
-                m = _META_GUID_RE.search(head)
-                if m and m.group(1) in remaining:
-                    guid = m.group(1)
-                    asset_path = meta_path[:-5]
-                    rel = os.path.relpath(asset_path, search_dir).replace("\\", "/")
-                    guid_map[guid] = rel
-                    remaining.discard(guid)
-                    if not remaining:
-                        return guid_map
-            except Exception:
-                continue
+
+    def _scan_dir(scan_root):
+        nonlocal guid_map, remaining
+        for root, dirs, files in os.walk(scan_root):
+            dirs[:] = [d for d in dirs if d not in skip_dirs]
+            for f in files:
+                if not f.endswith(".meta"):
+                    continue
+                meta_path = os.path.join(root, f)
+                try:
+                    with open(meta_path, "rb") as mf:
+                        head = mf.read(200).decode("utf-8", errors="ignore")
+                    m = _META_GUID_RE.search(head)
+                    if m and m.group(1) in remaining:
+                        guid = m.group(1)
+                        asset_path = meta_path[:-5]
+                        rel = os.path.relpath(asset_path, search_dir).replace("\\", "/")
+                        guid_map[guid] = rel
+                        remaining.discard(guid)
+                        if not remaining:
+                            return True
+                except Exception:
+                    continue
+        return False
+
+    # 优先搜索 Fonts 目录（字体通常集中在这里）
+    fonts_dir = os.path.join(search_dir, "Resources", "UI", "Fonts")
+    if os.path.isdir(fonts_dir):
+        if _scan_dir(fonts_dir):
+            return guid_map
+
+    # Fonts 目录没找全，搜索整个 Assets
+    _scan_dir(search_dir)
     return guid_map
 
 

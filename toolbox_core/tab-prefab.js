@@ -773,7 +773,7 @@ function buildPrefabTab(panel) {
       h += '<td style="' + s + ';font-weight:600">' + html(c.old_name) + '<div style="color:var(--dim);font-size:11px;font-weight:400;white-space:normal;max-width:300px;word-break:break-all">' + html(c.old_path) + '</div></td>';
       h += '<td style="' + s + ';color:var(--accent)">' + html(c.new_font_name || '不改') + '</td>';
       h += '<td style="' + s + ';color:var(--accent)">' + (c.line_spacing ? html(c.line_spacing) : '不改') + '</td>';
-      h += '<td style="' + s + ';color:var(--dim)" title="' + html(c.prefab_files.join(", ")) + '">' + c.prefab_files.length + ' 个</td>';
+      h += '<td style="' + s + ';color:var(--dim)" title="' + html(c.prefab_files.join("\n")) + '">' + c.prefab_files.length + ' 个</td>';
       h += '</tr>';
     });
     h += '</table></div>';

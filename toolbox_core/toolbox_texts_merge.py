@@ -102,7 +102,7 @@ def extract_text_diffs(src_bytes, prev_bytes, title_rows, id_col):
 
 def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
                      svn_user, svn_pass, title_rows, id_col,
-                     merge_sheet_rows_fn, put):
+                     merge_sheet_rows_fn, put, lock_fn=None):
     """对 Texts.xlsm 做单元格级逐版本合并。
     merge_sheet_rows_fn: 外部传入的 _merge_sheet_rows 函数引用"""
     auth_args = []
@@ -119,6 +119,13 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
     if not os.path.isfile(local_file):
         put(f"目标文件不存在，跳过: {local_file}\n")
         return 0, 0
+
+    # SVN 锁定
+    if lock_fn:
+        put(f"SVN 锁定: {local_file}\n")
+        if not lock_fn(local_file):
+            put("锁定失败，跳过 Texts.xlsm 合并\n")
+            return 0, 1
 
     sorted_revs = sorted(file_revs)
     total_added = 0

@@ -1,107 +1,17 @@
-"""Texts.xlsm 单元格级逐版本合并模块"""
-import io
+"""Texts.xlsm 单元格级逐版本合并模块
+完全复用 SVN对比Excel + 合并文字表 两个现有流程"""
 import os
-import subprocess
-
-import openpyxl
-
-
-def svn_cat_rev(svn_exe, url, rev, auth_args):
-    """用 svn cat 下载指定版本的文件内容，返回 bytes 或 None"""
-    cmd = [svn_exe, "cat", "-r", str(rev), "--non-interactive",
-           "--trust-server-cert"] + auth_args + [url]
-    try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, _ = proc.communicate(timeout=180)
-        if proc.returncode == 0 and stdout:
-            return stdout
-    except Exception:
-        pass
-    return None
-
-
-def svn_get_prev_rev(rev):
-    """获取版本 REV 的前一版本。与 svn merge -c REV 行为一致。"""
-    return rev - 1
-
-
-def _cell_equal(a, b):
-    """比较两个单元格值是否相等"""
-    return str(a or "") == str(b or "")
-
-
-def extract_text_diffs(src_bytes, prev_bytes, title_rows, id_col):
-    """比较两个版本的 Excel bytes，返回变更行。
-    返回: list of (sheet_name, row_number)，1-based row indices in src_bytes"""
-    try:
-        wb_src = openpyxl.load_workbook(io.BytesIO(src_bytes), read_only=True, data_only=True)
-        wb_prev = openpyxl.load_workbook(io.BytesIO(prev_bytes), read_only=True, data_only=True)
-    except Exception:
-        return []
-    changed_rows = []
-    for ws_name in wb_src.sheetnames:
-        ws_src = wb_src[ws_name]
-        ws_prev = wb_prev[ws_name] if ws_name in wb_prev.sheetnames else None
-        if ws_prev is None:
-            for r in range(title_rows + 1, ws_src.max_row + 1):
-                val = ws_src.cell(row=r, column=id_col).value
-                if val is not None and str(val).strip():
-                    changed_rows.append((ws_name, r))
-            continue
-        # 构建 prev 版本的 ID → 行数据映射
-        prev_map = {}
-        for r in range(title_rows + 1, ws_prev.max_row + 1):
-            pid = ws_prev.cell(row=r, column=id_col).value
-            if pid is None:
-                continue
-            pid_str = str(pid).strip()
-            if not pid_str or pid_str in ("::ID::", "ID"):
-                continue
-            row_vals = {}
-            for c in range(1, (ws_prev.max_column or 1) + 1):
-                row_vals[c] = ws_prev.cell(row=r, column=c).value
-            prev_map[pid_str] = row_vals
-        # 比较 src 版本的每行
-        for r in range(title_rows + 1, ws_src.max_row + 1):
-            sid = ws_src.cell(row=r, column=id_col).value
-            if sid is None:
-                continue
-            sid_str = str(sid).strip()
-            if not sid_str or sid_str in ("::ID::", "ID"):
-                continue
-            if sid_str not in prev_map:
-                changed_rows.append((ws_name, r))
-                continue
-            prev_row = prev_map[sid_str]
-            for c in range(1, (ws_src.max_column or 1) + 1):
-                sv = ws_src.cell(row=r, column=c).value
-                pv = prev_row.get(c)
-                if not _cell_equal(sv, pv):
-                    changed_rows.append((ws_name, r))
-                    break
-    try:
-        wb_src.close()
-        wb_prev.close()
-    except Exception:
-        pass
-    return changed_rows
+import tempfile
 
 
 def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
                      svn_user, svn_pass, title_rows, id_col,
-                     merge_sheet_rows_fn, put, lock_fn=None):
+                     exec_merge_table_fn, put, lock_fn=None,
+                     start_date=None, end_date=None):
     """对 Texts.xlsm 做单元格级逐版本合并。
-    merge_sheet_rows_fn: 外部传入的 _merge_sheet_rows 函数引用"""
-    auth_args = []
-    if svn_user:
-        auth_args += ["--username", svn_user]
-    if svn_pass:
-        auth_args += ["--password", svn_pass]
-
-    from toolbox_platform import _get_svn_path
-    svn = _get_svn_path()
-
-    file_url = source_url.rstrip("/") + "/" + file_path
+    完全复用 svn_oneclick_compare 对比流程 + _exec_merge_table 合并流程。
+    exec_merge_table_fn: 外部传入的 _exec_merge_table 函数引用
+    start_date/end_date: 筛选日期范围（从合并查询传入）"""
     local_file = os.path.join(target_path, file_path.replace("/", os.sep))
     if not os.path.isfile(local_file):
         put(f"目标文件不存在，跳过: {local_file}\n")
@@ -114,65 +24,90 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
             put("锁定失败，跳过 Texts.xlsm 合并\n")
             return 0, 1
 
-    sorted_revs = sorted(file_revs)
-    total_added = 0
-    total_updated = 0
+    # 构建 file_url（Texts.xlsm 的完整 SVN URL）
+    file_url = source_url.rstrip("/") + "/" + file_path
 
-    for rev in sorted_revs:
-        prev_rev = svn_get_prev_rev(rev)
-        put(f"版本 {rev} (基准: {prev_rev}): 下载中...\n")
+    put(f"[Texts.xlsm] 对比版本: {sorted(file_revs)}\n")
 
-        cur_bytes = svn_cat_rev(svn, file_url, rev, auth_args)
-        prev_bytes = svn_cat_rev(svn, file_url, prev_rev, auth_args)
-        if not cur_bytes:
-            put(f"  无法下载版本 {rev}，跳过\n")
+    # ── Step 1: 用对比 Excel 流程获取差异 ──
+    from svn_oneclick_compare import step1_query_file_pairs, step3_download_and_compare, write_excel
+
+    # 用日期范围查询文件版本对；如果没传日期，用宽范围
+    query_start = start_date or "2000-01-01"
+    query_end = end_date or "2099-12-31"
+
+    try:
+        file_pairs, is_direct = step1_query_file_pairs(
+            file_url, query_start, query_end,
+            svn_user=svn_user or "", svn_pass=svn_pass or "")
+    except Exception as e:
+        put(f"  版本查询失败: {e}\n")
+        return 0, 0
+
+    if not file_pairs:
+        put("  未找到版本对，跳过\n")
+        return 0, 0
+
+    # 只保留选中版本的对比对
+    selected_set = set(file_revs)
+    filtered_pairs = {}
+    for fname, pairs in file_pairs.items():
+        kept = [(c, p) for c, p in pairs if c in selected_set]
+        if kept:
+            filtered_pairs[fname] = kept
+    if not filtered_pairs:
+        put("  选中版本无匹配的对比对，跳过\n")
+        return 0, 0
+
+    put(f"  对比中...\n")
+    try:
+        results, header_data, sheet_order = step3_download_and_compare(
+            file_url, file_pairs=filtered_pairs,
+            svn_user=svn_user or "", svn_pass=svn_pass or "")
+    except Exception as e:
+        put(f"  对比失败: {e}\n")
+        return 0, 0
+
+    if not results:
+        put("  无差异\n")
+        return 0, 0
+
+    # ── Step 2: 把差异写入临时 Excel 文件 ──
+    tmp_dir = tempfile.mkdtemp(prefix="texts_merge_")
+    diff_files = []
+    for fname, rows in results.items():
+        if not rows:
             continue
-        if not prev_bytes:
-            put(f"  无法下载基准版本 {prev_rev}，跳过\n")
-            continue
-
-        diffs = extract_text_diffs(cur_bytes, prev_bytes, title_rows, id_col)
-        if not diffs:
-            put(f"  版本 {rev}: 无差异\n")
-            continue
-
-        by_sheet = {}
-        for sheet_name, row_num in diffs:
-            by_sheet.setdefault(sheet_name, []).append(row_num)
-
+        out_path = os.path.join(tmp_dir, fname)
         try:
-            wb_tgt = openpyxl.load_workbook(local_file)
+            write_excel(rows, out_path, title_rows=title_rows,
+                        header_data=header_data, sheet_order=sheet_order)
+            diff_files.append(out_path)
+            put(f"  差异文件: {fname} ({len(rows)} 行)\n")
         except Exception as e:
-            put(f"  无法打开目标文件: {e}\n")
-            continue
+            put(f"  写入差异文件失败: {fname} → {e}\n")
 
-        wb_src = openpyxl.load_workbook(io.BytesIO(cur_bytes), read_only=True, data_only=True)
-        added = 0
-        updated = 0
-        for sheet_name, rows in by_sheet.items():
-            ws_src = wb_src.get(sheet_name)
-            ws_tgt = wb_tgt.get(sheet_name)
-            if not ws_src or not ws_tgt:
-                continue
-            a, u, _ = merge_sheet_rows_fn(ws_src, ws_tgt, rows, title_rows, id_col, set(), put)
-            added += a
-            updated += u
+    if not diff_files:
+        put("  无有效差异文件\n")
+        return 0, 0
 
-        try:
-            wb_src.close()
-        except Exception:
-            pass
-
-        try:
-            wb_tgt.save(local_file)
-            wb_tgt.close()
-        except Exception as e:
-            put(f"  保存失败: {e}\n")
-            continue
-
-        total_added += added
-        total_updated += updated
-        put(f"  版本 {rev}: {updated} 行修改, {added} 行新增\n")
-
-    put(f"[Texts.xlsm] 合并完成: {total_updated} 行修改, {total_added} 行新增\n")
-    return total_added + total_updated, 0
+    # ── Step 3: 用合并文字表流程把差异合并到目标 ──
+    target_dir = os.path.dirname(local_file)
+    step = {
+        "input_dir": tmp_dir,
+        "target_dir": target_dir,
+        "title_rows": title_rows,
+        "id_col": id_col,
+    }
+    put(f"  合并到目标: {local_file}\n")
+    try:
+        ok = exec_merge_table_fn(step, put)
+        if ok:
+            put("[Texts.xlsm] 合并完成\n")
+            return 1, 0
+        else:
+            put("[Texts.xlsm] 合并失败\n")
+            return 0, 0
+    except Exception as e:
+        put(f"[Texts.xlsm] 合并异常: {e}\n")
+        return 0, 0

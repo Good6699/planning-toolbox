@@ -1301,6 +1301,7 @@ def api_prefab_font_scan():
                 "ref_count": info["ref_count"],
                 "prefab_files": sorted(set(info["prefab_files"])),
             })
+        _notify_task_done("字体检测")
         return jsonify({
             "fonts": fonts,
             "total_prefabs": len(prefabs),
@@ -1376,6 +1377,7 @@ def api_prefab_font_modify():
                     modified_files.append(os.path.basename(pf))
                 except Exception:
                     continue
+        _notify_task_done("字体修改")
         return jsonify({
             "modified_files": modified_files,
             "total": len(modified_files),

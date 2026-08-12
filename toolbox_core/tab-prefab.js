@@ -695,6 +695,7 @@ function buildPrefabTab(panel) {
     state.busy = true;
     fontScanPaths = paths;
     _incRunning();
+    _incTabRunning("prefab");
     _fontLog("开始扫描字体引用...");
     apiPost("/api/prefab/font-scan", {paths:paths}).then(function(data) {
       if (requestGeneration !== state.requestGeneration) return;
@@ -710,6 +711,7 @@ function buildPrefabTab(panel) {
       if (requestGeneration !== state.requestGeneration) return;
       state.busy = false;
       _decRunning();
+      _decTabRunning("prefab");
     });
   }
 
@@ -789,6 +791,7 @@ function buildPrefabTab(panel) {
     var requestGeneration = ++state.requestGeneration;
     state.busy = true;
     _incRunning();
+    _incTabRunning("prefab");
     var logEl = panel.querySelector("#font_log");
     if (logEl) setTimeout(function() { logEl.scrollIntoView({behavior:"smooth", block:"nearest"}); }, 100);
     _fontLog("开始修改字体引用...");
@@ -804,6 +807,7 @@ function buildPrefabTab(panel) {
       if (requestGeneration !== state.requestGeneration) return;
       state.busy = false;
       _decRunning();
+      _decTabRunning("prefab");
     });
   }
 

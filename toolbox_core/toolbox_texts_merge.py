@@ -25,7 +25,7 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
             put("锁定失败，跳过 Texts.xlsm 合并\n")
             return 0, 1
 
-    file_url = source_url.rstrip("/") + "/" + file_path
+    file_url = source_url.rstrip("/")
     put(f"[Texts.xlsm] 对比版本: {sorted(file_revs)}\n")
 
     # ── Step 1: 查版本对 ──

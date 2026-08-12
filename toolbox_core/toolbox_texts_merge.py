@@ -54,7 +54,7 @@ def extract_text_diffs(src_bytes, prev_bytes, title_rows, id_col):
     changed_rows = []
     for ws_name in wb_src.sheetnames:
         ws_src = wb_src[ws_name]
-        ws_prev = wb_prev.get(ws_name)
+        ws_prev = wb_prev[ws_name] if ws_name in wb_prev.sheetnames else None
         if ws_prev is None:
             for r in range(title_rows + 1, ws_src.max_row + 1):
                 val = ws_src.cell(row=r, column=id_col).value

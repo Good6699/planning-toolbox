@@ -1229,13 +1229,16 @@ def _resolve_font_guids(search_dir, target_guids):
                     continue
         return False
 
-    # 优先搜索字体相关的两个目录
-    for subdir in ("Resources/UI/Fonts", "Resources/Language"):
-        fonts_dir = os.path.join(search_dir, subdir)
+    # 优先搜索字体目录（D3Fonts 通常在 UI 和 Language 下）
+    font_roots = [
+        os.path.join(search_dir, "Resources", "UI", "D3Fonts"),
+        os.path.join(search_dir, "Resources", "Language"),
+    ]
+    for fonts_dir in font_roots:
         if os.path.isdir(fonts_dir):
             if _scan_dir(fonts_dir):
                 return guid_map
-    # 两个目录没找全，兜底搜索整个 Assets
+    # 兜底搜索整个 Assets
     if remaining:
         _scan_dir(search_dir)
     return guid_map

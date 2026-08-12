@@ -25,12 +25,13 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
             put("锁定失败，跳过 Texts.xlsm 合并\n")
             return 0, 1
 
-    file_url = source_url.rstrip("/")
+    file_url = source_url.rstrip("/") + "/" + file_path
     put(f"[Texts.xlsm] 对比版本: {sorted(file_revs)}\n")
 
-    # ── Step 1: 查版本对 ──
-    from svn_oneclick_compare import step1_query_file_pairs, step3_download_and_compare, _log as _cmp_log
+    # ── Step 1: 自己构建版本对（跳过 step1_query_file_pairs 避免扫描全目录）──
+    from svn_oneclick_compare import step3_download_and_compare
     import svn_oneclick_compare as _cmp_mod
+    from toolbox_merge import svn_log
 
     # 临时替换对比模块的日志输出，使日志进入执行面板
     _orig_log = _cmp_mod._log
@@ -42,32 +43,48 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
             pass
     _cmp_mod._log = _redirect_log
 
+    # 用 svn_log 查文件在选中版本范围内的历史，构建版本对
+    min_rev = min(file_revs)
+    max_rev = max(file_revs)
     query_start = start_date or "2000-01-01"
     query_end = end_date or "2099-12-31"
-
     try:
-        file_pairs, is_direct = step1_query_file_pairs(
-            file_url, query_start, query_end,
-            svn_user=svn_user or "", svn_pass=svn_pass or "")
+        versions = svn_log(file_url, query_start, query_end,
+                           svn_user=svn_user or "", svn_pass=svn_pass or "")
     except Exception as e:
         _cmp_mod._log = _orig_log
         put(f"  版本查询失败: {e}\n")
         return 0, 0
 
-    if not file_pairs:
-        put("  未找到版本对，跳过\n")
+    # 文件在日期范围内的所有版本号（降序）
+    file_all_revs = sorted([v["rev"] for v in versions if isinstance(v.get("rev"), int)], reverse=True)
+    if not file_all_revs:
+        _cmp_mod._log = _orig_log
+        put("  文件无版本历史，跳过\n")
         return 0, 0
 
-    # 只保留选中版本
+    rev_to_idx = {r: i for i, r in enumerate(file_all_revs)}
     selected_set = set(file_revs)
-    filtered_pairs = {}
-    for fname, pairs in file_pairs.items():
-        kept = [(c, p) for c, p in pairs if c in selected_set]
-        if kept:
-            filtered_pairs[fname] = kept
-    if not filtered_pairs:
-        put("  选中版本无匹配的对比对，跳过\n")
+
+    # 为每个选中版本找到实际前一版本
+    pairs = []
+    for cur_rev in sorted(file_revs, reverse=True):
+        if cur_rev not in rev_to_idx:
+            continue
+        idx = rev_to_idx[cur_rev]
+        if idx + 1 < len(file_all_revs):
+            prev_rev = file_all_revs[idx + 1]
+            pairs.append((cur_rev, prev_rev))
+        # 如果是最早版本，没有前一版本，跳过
+
+    if not pairs:
+        _cmp_mod._log = _orig_log
+        put("  无有效版本对，跳过\n")
         return 0, 0
+
+    fname = os.path.basename(file_path)
+    filtered_pairs = {fname: pairs}
+    put(f"  版本对: {[(c, p) for c, p in pairs]}\n")
 
     # ── Step 2: 下载并比较差异 ──
     put("  对比中...\n")

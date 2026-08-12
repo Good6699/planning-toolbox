@@ -13,18 +13,12 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
     """对 Texts.xlsm 做单元格级逐版本合并。
     1. 用 step1_query_file_pairs 查版本对
     2. 用 step3_download_and_compare 下载并比较差异
-    3. 直接用 _merge_sheet_rows 把差异行合并到目标（跳过 write_excel）"""
+    3. 直接用 _merge_sheet_rows 把差异行合并到目标（跳过 write_excel）
+    锁定由调用方通过 lock_fn 或 _exec_merge_table 处理。"""
     local_file = os.path.join(target_path, file_path.replace("/", os.sep))
     if not os.path.isfile(local_file):
         put(f"目标文件不存在，跳过: {local_file}\n")
         return 0, 0
-
-    # SVN 锁定
-    if lock_fn:
-        put(f"SVN 锁定: {local_file}\n")
-        if not lock_fn(local_file):
-            put("锁定失败，跳过 Texts.xlsm 合并\n")
-            return 0, 1
 
     file_url = source_url.rstrip("/") + "/" + file_path
     put(f"[Texts.xlsm] 对比版本: {sorted(file_revs)}\n")

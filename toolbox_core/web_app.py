@@ -4656,13 +4656,10 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
                         id_col = int(id_col_raw)
                     except (ValueError, TypeError):
                         id_col = 1
-                    def _lock_texts(path, _svn=svn):
-                        step = {"target_path": path, "lock_msg": "语义合并 Texts.xlsm", "update_dirs": []}
-                        return _exec_lock_svn(step, _put, task_id)
                     m, s = merge_texts_xlsm(
                         source_url, target_path, file_path, file_revs,
                         svn_user, svn_pass, title_rows, id_col,
-                        _merge_sheet_rows, _put, lock_fn=_lock_texts)
+                        _merge_sheet_rows, _put)
                     total_merged += m
                     total_skipped += s
                 else:

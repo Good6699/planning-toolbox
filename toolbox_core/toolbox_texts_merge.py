@@ -152,22 +152,16 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
                          "_id_changed", "前一版本_ID", "前一版本_SC", "前一版本_sub"}
             inp_rows = []
             for i, row_data in enumerate(sheet_rows):
-                r = title_rows + 1 + i
+                # 跳过删除行——源版本中被删除的行不应写入目标
+                if row_data.get("操作") == "删除":
+                    continue
+                r = title_rows + 1 + len(inp_rows)
                 inp_rows.append(r)
                 for col_name, val in row_data.items():
                     if col_name in skip_keys:
                         continue
                     col_num = col_name_map.get(col_name)
                     if col_num:
-                        # 尝试保持原始精度：数值字符串转 float 后 round 到 15 位
-                        if isinstance(val, str):
-                            try:
-                                fval = float(val)
-                                if str(fval) != val:
-                                    # 有精度差异，用 round 保持
-                                    val = round(fval, 15)
-                            except (ValueError, TypeError):
-                                pass
                         ws_tmp.cell(row=r, column=col_num, value=val)
 
             if inp_rows:

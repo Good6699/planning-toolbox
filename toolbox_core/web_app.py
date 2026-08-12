@@ -1258,37 +1258,13 @@ def _find_project_root(paths):
 
 
 def _replace_line_spacing_for_font(content, font_guid, new_spacing):
-    """只替换包含指定字体 GUID 的组件块内的 m_LineSpacing"""
-    lines = content.split("\n")
-    result = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        # 检查当前行是否包含目标字体 GUID
-        if font_guid in line and _FONT_BLOCK_RE.search(line):
-            # 找到字体引用行，向下搜索同一缩进级别的 m_LineSpacing
-            indent = len(line) - len(line.lstrip())
-            result.append(line)
-            i += 1
-            # 在同一缩进块内查找 m_LineSpacing
-            while i < len(lines):
-                next_line = lines[i]
-                next_indent = len(next_line) - len(next_line.lstrip()) if next_line.strip() else indent + 1
-                # 如果缩进回退到同级或更少，说明离开了这个块
-                if next_line.strip() and next_indent <= indent:
-                    break
-                # 检查是否是 m_LineSpacing 行
-                m = _LINE_SPACING_RE.match(next_line)
-                if m:
-                    result.append(m.group(1) + new_spacing)
-                    i += 1
-                    continue
-                result.append(next_line)
-                i += 1
-        else:
-            result.append(line)
-            i += 1
-    return "\n".join(result)
+    """只替换包含指定字体 GUID 的 m_FontData 块内的 m_LineSpacing（正则替换）"""
+    # 匹配 m_Font 行含目标 GUID，到其后最近的 m_LineSpacing 行
+    pattern = re.compile(
+        r'(m_Font(?:Asset)?:\s*\{[^}]*guid:\s*' + re.escape(font_guid) + r'[^}]*\}[\s\S]*?m_LineSpacing:\s*)([-\d.]+)',
+        re.MULTILINE
+    )
+    return pattern.sub(lambda m: m.group(1) + new_spacing, content)
 
 
 @app.route("/api/prefab/font-scan", methods=["POST"])

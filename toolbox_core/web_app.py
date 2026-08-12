@@ -1164,6 +1164,9 @@ _META_GUID_RE = re.compile(r"(?m)^guid:\s*([0-9a-fA-F]+)")
 _LINE_SPACING_RE = re.compile(
     r"(?m)^(\s*m_LineSpacing:\s*)([-\d.]+)"
 )
+_FONT_BLOCK_RE = re.compile(
+    r"(m_Font(?:Asset)?:\s*\{[^}]*guid:\s*[0-9a-fA-F]+[^}]*\})"
+)
 
 
 def _collect_prefabs(paths, max_depth=3):
@@ -1234,6 +1237,40 @@ def _find_project_root(paths):
                 break
             d = parent
     return None
+
+
+def _replace_line_spacing_for_font(content, font_guid, new_spacing):
+    """只替换包含指定字体 GUID 的组件块内的 m_LineSpacing"""
+    lines = content.split("\n")
+    result = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # 检查当前行是否包含目标字体 GUID
+        if font_guid in line and _FONT_BLOCK_RE.search(line):
+            # 找到字体引用行，向下搜索同一缩进级别的 m_LineSpacing
+            indent = len(line) - len(line.lstrip())
+            result.append(line)
+            i += 1
+            # 在同一缩进块内查找 m_LineSpacing
+            while i < len(lines):
+                next_line = lines[i]
+                next_indent = len(next_line) - len(next_line.lstrip()) if next_line.strip() else indent + 1
+                # 如果缩进回退到同级或更少，说明离开了这个块
+                if next_line.strip() and next_indent <= indent:
+                    break
+                # 检查是否是 m_LineSpacing 行
+                m = _LINE_SPACING_RE.match(next_line)
+                if m:
+                    result.append(m.group(1) + new_spacing)
+                    i += 1
+                    continue
+                result.append(next_line)
+                i += 1
+        else:
+            result.append(line)
+            i += 1
+    return "\n".join(result)
 
 
 @app.route("/api/prefab/font-scan", methods=["POST"])
@@ -1337,9 +1374,7 @@ def api_prefab_font_modify():
                 if chg["new_guid"]:
                     content = content.replace(old_guid, chg["new_guid"])
                 if chg["line_spacing"]:
-                    content = _LINE_SPACING_RE.sub(
-                        lambda m, ls=chg["line_spacing"]: m.group(1) + ls, content
-                    )
+                    content = _replace_line_spacing_for_font(content, old_guid, chg["line_spacing"])
             if content != original:
                 try:
                     with open(pf, "w", encoding="utf-8") as f:

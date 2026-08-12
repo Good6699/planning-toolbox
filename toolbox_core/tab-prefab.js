@@ -756,21 +756,24 @@ function buildPrefabTab(panel) {
       changes.push({
         old_guid: guid,
         old_name: font ? font.name : guid,
+        old_path: font ? (font.asset_path || font.guid) : guid,
         new_font_name: target,
         line_spacing: spacing,
         prefab_files: font ? font.prefab_files : [],
       });
     });
     if (!changes.length) { _showToast("请至少填写一个目标字体或行距"); return; }
+    var s = 'font-size:12px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap';
+    var sh = 'font-size:11px;padding:6px 10px;color:var(--dim);border-bottom:1px solid rgba(255,255,255,.1);white-space:nowrap;text-align:left';
     var h = '<div style="max-height:400px;overflow:auto">';
-    h += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
-    h += '<tr style="border-bottom:1px solid rgba(255,255,255,.1)"><th style="text-align:left;padding:6px 8px;color:var(--dim)">原字体</th><th style="text-align:left;padding:6px 8px;color:var(--dim)">目标</th><th style="text-align:left;padding:6px 8px;color:var(--dim)">行距</th><th style="text-align:left;padding:6px 8px;color:var(--dim)">影响文件</th></tr>';
+    h += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+    h += '<tr><th style="' + sh + '">原字体</th><th style="' + sh + '">目标</th><th style="' + sh + '">行距</th><th style="' + sh + '">影响文件</th></tr>';
     changes.forEach(function(c) {
-      h += '<tr style="border-bottom:1px solid rgba(255,255,255,.05)">';
-      h += '<td style="padding:6px 8px;font-weight:600">' + html(c.old_name) + '</td>';
-      h += '<td style="padding:6px 8px;color:var(--accent)">' + html(c.new_font_name || '不改') + '</td>';
-      h += '<td style="padding:6px 8px;color:var(--accent)">' + (c.line_spacing ? html(c.line_spacing) : '不改') + '</td>';
-      h += '<td style="padding:6px 8px;color:var(--dim);font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + html(c.prefab_files.join(", ")) + '">' + c.prefab_files.length + ' 个文件</td>';
+      h += '<tr>';
+      h += '<td style="' + s + ';font-weight:600">' + html(c.old_name) + '<div style="color:var(--dim);font-size:11px;font-weight:400;white-space:normal;max-width:300px;word-break:break-all">' + html(c.old_path) + '</div></td>';
+      h += '<td style="' + s + ';color:var(--accent)">' + html(c.new_font_name || '不改') + '</td>';
+      h += '<td style="' + s + ';color:var(--accent)">' + (c.line_spacing ? html(c.line_spacing) : '不改') + '</td>';
+      h += '<td style="' + s + ';color:var(--dim)" title="' + html(c.prefab_files.join(", ")) + '">' + c.prefab_files.length + ' 个</td>';
       h += '</tr>';
     });
     h += '</table></div>';

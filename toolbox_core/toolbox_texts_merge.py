@@ -108,9 +108,15 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
                 continue
             by_sheet.setdefault(sheet_name, []).append(row_data)
 
+        put(f"  sheets: {list(by_sheet.keys())}, 目标sheets: {wb_tgt.sheetnames}\n")
+        put(f"  header_data keys: {list(header_data.keys()) if header_data else 'None'}\n")
+        if rows:
+            put(f"  第一行数据 keys: {list(rows[0].keys())}\n")
+
         for sheet_name, sheet_rows in by_sheet.items():
             ws_tgt = wb_tgt[sheet_name] if sheet_name in wb_tgt.sheetnames else None
             if not ws_tgt:
+                put(f"  目标 sheet '{sheet_name}' 不存在，跳过\n")
                 continue
 
             # 构建一个临时 worksheet 包含差异行数据，用于 _merge_sheet_rows
@@ -152,9 +158,18 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
                         ws_tmp.cell(row=r, column=col_num, value=val)
 
             if inp_rows:
+                put(f"  合并 {sheet_name}: {len(inp_rows)} 行差异, title_rows={title_rows}, id_col={id_col}\n")
+                # 调试：打印临时 worksheet 的表头和第一行数据
+                hdr_vals = [ws_tmp.cell(row=title_rows, column=c).value for c in range(1, min(ws_tmp.max_column+1, 10))]
+                put(f"  临时表头: {hdr_vals}\n")
+                if inp_rows:
+                    first_r = inp_rows[0]
+                    first_vals = [ws_tmp.cell(row=first_r, column=c).value for c in range(1, min(ws_tmp.max_column+1, 10))]
+                    put(f"  第一行数据 (row {first_r}): {first_vals}\n")
                 a, u, _ = merge_sheet_rows_fn(ws_tmp, ws_tgt, inp_rows, title_rows, id_col, set(), put)
                 total_added += a
                 total_updated += u
+                put(f"  {sheet_name}: {u} 修改, {a} 新增\n")
 
             wb_tmp.close()
 

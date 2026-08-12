@@ -1187,11 +1187,10 @@ def _collect_prefabs(paths, max_depth=3):
 
 
 def _extract_font_guids(filepath):
-    """提取文件中所有字体引用的 GUID 列表（不去重，统计实际引用次数）。
-    只读前 512KB，字体引用通常在文件头部。"""
+    """提取文件中所有字体引用的 GUID 列表（不去重，统计实际引用次数）"""
     try:
         with open(filepath, "r", encoding="utf-8") as f:
-            content = f.read(512 * 1024)
+            content = f.read()
     except Exception:
         return []
     return _FONT_GUID_RE.findall(content)

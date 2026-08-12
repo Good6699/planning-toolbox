@@ -39,14 +39,8 @@ def svn_get_prev_rev(svn_exe, url, rev, auth_args):
 
 
 def _cell_equal(a, b):
-    """比较两个单元格值是否相等（处理 None/数值/字符串类型差异）"""
-    if a is None and b is None:
-        return True
-    if a is None or b is None:
-        return False
-    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-        return a == b
-    return str(a).strip() == str(b).strip()
+    """比较两个单元格值是否相等"""
+    return str(a or "") == str(b or "")
 
 
 def extract_text_diffs(src_bytes, prev_bytes, title_rows, id_col):

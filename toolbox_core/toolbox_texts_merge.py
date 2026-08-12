@@ -84,7 +84,7 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
 
     fname = os.path.basename(file_path)
     filtered_pairs = {fname: pairs}
-    put(f"  版本对: {[(c, p) for c, p in pairs]}\n")
+    put(f"  版本对: {len(pairs)} 对\n")
 
     # ── Step 2: 下载并比较差异 ──
     put("  对比中...\n")
@@ -123,10 +123,6 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
         if not rows:
             continue
 
-        # 调试：打印差异行详情
-        for r in rows:
-            put(f"  diff: 操作={r.get('操作')}, sheet={r.get('sheet')}, ID={r.get('ID')}\n")
-
         # 按 sheet 分组
         by_sheet = {}
         for row_data in rows:
@@ -141,7 +137,7 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
         for sheet_name, sheet_rows in by_sheet.items():
             ws_tgt = wb_tgt[sheet_name] if sheet_name in wb_tgt.sheetnames else None
             if not ws_tgt:
-                put(f"  目标 sheet '{sheet_name}' 不存在，跳过\n")
+                pass
                 continue
 
             # 构建临时 worksheet
@@ -163,7 +159,7 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
                     col_num = openpyxl.utils.column_index_from_string(letter)
                     col_name_map[hdr_val] = col_num
 
-            put(f"  {sheet_name}: 表头映射 {col_name_map}, 差异 {len(sheet_rows)} 行\n")
+            put(f"  {sheet_name}: {len(sheet_rows)} 行差异\n")
 
             # 写入差异行数据
             skip_keys = {"操作", "当前版本", "上一版本", "前一版本", "sheet",

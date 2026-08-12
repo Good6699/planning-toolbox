@@ -4662,7 +4662,7 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
                     m, s = merge_texts_xlsm(
                         source_url, target_path, file_path, file_revs,
                         svn_user, svn_pass, title_rows, id_col,
-                        _exec_merge_table, _put, lock_fn=_lock_texts)
+                        _merge_sheet_rows, _put, lock_fn=_lock_texts)
                     total_merged += m
                     total_skipped += s
                 else:

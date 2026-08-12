@@ -156,6 +156,15 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
                         continue
                     col_num = col_name_map.get(col_name)
                     if col_num:
+                        # 尝试保持原始精度：数值字符串转 float 后 round 到 15 位
+                        if isinstance(val, str):
+                            try:
+                                fval = float(val)
+                                if str(fval) != val:
+                                    # 有精度差异，用 round 保持
+                                    val = round(fval, 15)
+                            except (ValueError, TypeError):
+                                pass
                         ws_tmp.cell(row=r, column=col_num, value=val)
 
             if inp_rows:

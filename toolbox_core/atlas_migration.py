@@ -1119,6 +1119,29 @@ class AtlasMigrationService:
             and file_id in same_name
         )
 
+    def refresh_prefabs(self, draft_id):
+        """刷新预制引用，删除已失效的计划"""
+        with self._lock(draft_id):
+            draft = self._load(draft_id)
+            self._require_plannable(draft)
+            self._refresh_prefab_references(draft)
+            # 收集所有预制当前的 reference_ids
+            valid_ref_ids = set()
+            for prefab in draft["prefabs"]:
+                for ref in prefab.get("references", []):
+                    valid_ref_ids.add(ref["id"])
+            # 删除引用已不存在的计划
+            stale_plans = [
+                pid for pid, plan in draft["plans"].items()
+                if any(rid not in valid_ref_ids for rid in plan.get("reference_ids", []))
+            ]
+            for pid in stale_plans:
+                self._unlink_plan(draft, pid)
+            self._refresh_conflicts(draft)
+            self._refresh_stage(draft)
+            self._save(draft)
+            return self._view(draft)
+
     def refresh_atlas_catalog(self, draft_id, log=None):
         with self._lock(draft_id):
             draft = self._load(draft_id)

@@ -42,7 +42,7 @@ function buildPrefabTab(panel) {
       <div class="atlas-workspace" id="atlas_workspace" hidden>
         <div class="atlas-main-grid">
           <section class="card atlas-prefab-pane">
-            <div class="card-header compact"><span>预制列表</span><span class="atlas-pane-count" id="atlas_prefab_count"></span></div>
+            <div class="card-header compact"><span>预制列表</span><span class="atlas-pane-count" id="atlas_prefab_count"></span><button class="btn btn-normal btn-sm" data-action="refresh-prefabs" title="刷新预制引用，删除失效计划" style="margin-left:auto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115.4-5.6L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15.4 5.6L3 16"/></svg></button></div>
             <div class="atlas-prefab-list" id="atlas_prefab_list"></div>
           </section>
           <section class="card atlas-group-pane">
@@ -884,6 +884,11 @@ function buildPrefabTab(panel) {
     mutateDraft("/api/prefab/atlas/remove-plan", {draft_id:state.draft.id, plan_id:planId}, "删除迁移计划失败");
   }
 
+  function refreshPrefabs() {
+    if (!state.draft || state.busy) return;
+    mutateDraft("/api/prefab/atlas/refresh-prefabs", {draft_id:state.draft.id}, "刷新预制失败");
+  }
+
   function refreshAfterTask(operation, previousDraft, outputPath, taskId, requestGeneration) {
     var finished = false;
     var controller = null;
@@ -1092,6 +1097,8 @@ function buildPrefabTab(panel) {
       confirmAddGroup();
     } else if (action === "font-preview") {
       fontPreview();
+    } else if (action === "refresh-prefabs") {
+      refreshPrefabs();
     }
   });
 

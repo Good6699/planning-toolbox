@@ -1100,6 +1100,16 @@ def api_prefab_atlas_remove_plan():
         return _atlas_error(exc)
 
 
+@app.route("/api/prefab/atlas/refresh-prefabs", methods=["POST"])
+def api_prefab_atlas_refresh_prefabs():
+    try:
+        data = _atlas_json()
+        draft = _atlas_migration.refresh_prefabs(data.get("draft_id", ""))
+        return jsonify({"draft": draft})
+    except (AtlasMigrationError, OSError, ValueError) as exc:
+        return _atlas_error(exc)
+
+
 @app.route("/api/prefab/atlas/plan-manual-reference", methods=["POST"])
 def api_prefab_atlas_plan_manual_reference():
     try:

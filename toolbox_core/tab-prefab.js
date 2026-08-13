@@ -684,9 +684,24 @@ function buildPrefabTab(panel) {
     if (!el) return;
     var anchor = el.querySelector(".log-anchor");
     var line = document.createElement("div");
-    line.textContent = msg;
+    var ts = new Date().toLocaleTimeString("zh-CN", {hour12: false});
+    line.innerHTML = '<span class="ts">' + ts + '</span> ' + escapeHtml(msg);
     el.insertBefore(line, anchor);
     el.scrollTop = el.scrollHeight;
+  }
+
+  function _clearFontLog() {
+    var el = panel.querySelector("#font_log");
+    if (!el) return;
+    var anchor = el.querySelector(".log-anchor");
+    while (el.firstChild && el.firstChild !== anchor) el.removeChild(el.firstChild);
+  }
+
+  function _clearAtlasLog() {
+    var el = panel.querySelector("#atlas_log");
+    if (!el) return;
+    var anchor = el.querySelector(".log-anchor");
+    while (el.firstChild && el.firstChild !== anchor) el.removeChild(el.firstChild);
   }
 
   function scanFonts(paths) {
@@ -696,6 +711,7 @@ function buildPrefabTab(panel) {
     fontScanPaths = paths;
     _incRunning();
     _incTabRunning("prefab");
+    _clearFontLog();
     _fontLog("开始扫描字体引用...");
     apiPost("/api/prefab/font-scan", {paths:paths}).then(function(data) {
       if (requestGeneration !== state.requestGeneration) return;
@@ -792,6 +808,7 @@ function buildPrefabTab(panel) {
     state.busy = true;
     _incRunning();
     _incTabRunning("prefab");
+    _clearFontLog();
     var logEl = panel.querySelector("#font_log");
     if (logEl) setTimeout(function() { logEl.scrollIntoView({behavior:"smooth", block:"nearest"}); }, 100);
     _fontLog("开始修改字体引用...");
@@ -1017,6 +1034,7 @@ function buildPrefabTab(panel) {
       if (!confirmed || state.busy || confirmationGeneration !== state.requestGeneration || !state.draft || state.draft.id !== draft.id) return;
       var requestGeneration = ++state.requestGeneration;
       state.busy = true;
+      _clearAtlasLog();
       renderAtlas();
       var labels = {copy:"图集资源复制", resolve:"图集最终引用解析", rewrite:"图集预制引用修改"};
       runTask("/api/prefab/atlas/" + operation, {draft_id:draft.id}, null, "atlas_log", labels[operation], function(outputPath, taskId) {

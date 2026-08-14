@@ -2431,7 +2431,7 @@ def _exec_consolidate(step, put, task_id=None):
 
     # 遍历所有来源，按时间戳过滤（只复制最近3天修改过的文件）
     cutoff = time.time() - 3 * 86400
-    total = skipped = old = copied_count = 0
+    total = old = copied_count = 0
     copied_files = []
     tgt_parts = os.path.normpath(tgt_dir).split(os.sep)
     for src_dir in src_dirs:
@@ -2467,11 +2467,6 @@ def _exec_consolidate(step, put, task_id=None):
                     tgt_file = os.path.join(tgt_dir, extra_prefix, rel)
                 else:
                     tgt_file = os.path.join(tgt_dir, rel)
-                # 时间戳比较：目标存在且更新则跳过
-                if os.path.isfile(tgt_file):
-                    if os.path.getmtime(src_file) <= os.path.getmtime(tgt_file):
-                        skipped += 1
-                        continue
                 try:
                     os.makedirs(os.path.dirname(tgt_file), exist_ok=True)
                     _copy2_force(src_file, tgt_file)
@@ -2480,7 +2475,7 @@ def _exec_consolidate(step, put, task_id=None):
                 except Exception as e:
                     put(f"  ✗ {rel}: {e}\n")
 
-    put(f"扫描 {total} 个文件，复制 {copied_count} 个，跳过 {skipped} 个（{old} 个超过3天）\n")
+    put(f"扫描 {total} 个文件，复制 {copied_count} 个，跳过 {old} 个（超过3天未修改）\n")
 
     if not copied_files:
         put("没有需要整合的文件\n")

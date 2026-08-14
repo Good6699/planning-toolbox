@@ -457,7 +457,7 @@ function buildWorkflowTab(panel) {
         ${_fb("目标路径","tgt_path","wf_m_mec_tgt","dir",false,"输入要合入到的目标目录")}
         <div class="form-group"><label>语言代码（留空自动识别）</label><input type="text" class="wf-modal-input" id="wf_m_mec_lang" data-key="lang_codes" value="${v("lang_codes")}" placeholder="输入语言代码，多个用逗号分隔，留空自动识别"></div>`,
       consolidate: `
-        ${_fb("来源路径","src_dir","wf_m_co_src","dir",false,"输入文件来源目录")}
+        ${_fb("来源路径（逗号分隔）","src_dir","wf_m_co_src","dir",true,"输入文件来源目录，多个用逗号分隔")}
         ${_fb("目标路径","tgt_dir","wf_m_co_tgt","dir",false,"输入 SVN 工作副本目标目录")}
         ${_fb("提交路径","commit_dir","wf_m_co_commit","dir",false,"输入 TortoiseSVN 提交的根路径")}`,
     };

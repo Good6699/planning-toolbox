@@ -2376,11 +2376,18 @@ def _exec_merge_error_code(step, put, task_id=None):
 
 def _exec_consolidate(step, put, task_id=None):
     """快速整合：按时间戳复制来源目录文件到目标 SVN 工作副本，弹 TortoiseSVN 提交"""
-    src_dir = step.get("src_dir", "").strip()
+    raw_src = step.get("src_dir", "")
+    if isinstance(raw_src, list):
+        src_dirs = [s.strip() for s in raw_src if s.strip()]
+    else:
+        src_dirs = [s.strip() for s in str(raw_src).split(",") if s.strip()]
     tgt_dir = step.get("tgt_dir", "").strip()
     commit_dir = step.get("commit_dir", "").strip()
-    if not src_dir or not os.path.isdir(src_dir):
-        put(f"来源路径无效: {src_dir}\n"); return False
+    if not src_dirs:
+        put("未指定来源路径\n"); return False
+    for sd in src_dirs:
+        if not os.path.isdir(sd):
+            put(f"来源路径无效: {sd}\n"); return False
     if not tgt_dir:
         put("未指定目标路径\n"); return False
     if not commit_dir:
@@ -2388,7 +2395,7 @@ def _exec_consolidate(step, put, task_id=None):
 
     put(f"{'='*50}\n")
     put("快速整合\n")
-    put(f"来源: {src_dir}\n")
+    put(f"来源: {', '.join(src_dirs)}\n")
     put(f"目标: {tgt_dir}\n")
     put(f"提交: {commit_dir}\n\n")
 
@@ -2412,28 +2419,29 @@ def _exec_consolidate(step, put, task_id=None):
     else:
         put("⚠️ 目标目录没有 SVN 链接，跳过更新\n")
 
-    # 遍历来源，按时间戳过滤
-    put("\n扫描来源文件...\n")
+    # 遍历所有来源，按时间戳过滤
     total = skipped = copied_count = 0
     copied_files = []
-    for root, dirs, files in os.walk(src_dir):
-        for fn in files:
-            total += 1
-            src_file = os.path.join(root, fn)
-            rel = os.path.relpath(src_file, src_dir)
-            tgt_file = os.path.join(tgt_dir, rel)
-            # 时间戳比较：目标存在且更新则跳过
-            if os.path.isfile(tgt_file):
-                if os.path.getmtime(src_file) <= os.path.getmtime(tgt_file):
-                    skipped += 1
-                    continue
-            try:
-                os.makedirs(os.path.dirname(tgt_file), exist_ok=True)
-                _copy2_force(src_file, tgt_file)
-                copied_files.append(tgt_file)
-                copied_count += 1
-            except Exception as e:
-                put(f"  ✗ {rel}: {e}\n")
+    for src_dir in src_dirs:
+        put(f"\n扫描来源: {src_dir}\n")
+        for root, dirs, files in os.walk(src_dir):
+            for fn in files:
+                total += 1
+                src_file = os.path.join(root, fn)
+                rel = os.path.relpath(src_file, src_dir)
+                tgt_file = os.path.join(tgt_dir, rel)
+                # 时间戳比较：目标存在且更新则跳过
+                if os.path.isfile(tgt_file):
+                    if os.path.getmtime(src_file) <= os.path.getmtime(tgt_file):
+                        skipped += 1
+                        continue
+                try:
+                    os.makedirs(os.path.dirname(tgt_file), exist_ok=True)
+                    _copy2_force(src_file, tgt_file)
+                    copied_files.append(tgt_file)
+                    copied_count += 1
+                except Exception as e:
+                    put(f"  ✗ {rel}: {e}\n")
 
     put(f"扫描 {total} 个文件，复制 {copied_count} 个，跳过 {skipped} 个\n")
 

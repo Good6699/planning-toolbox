@@ -1398,12 +1398,12 @@ def api_prefab_font_modify():
 
 @app.route("/api/open-help", methods=["POST"])
 def api_open_help():
-    # 从 web_app.py 向上找 toolbox_core 目录
-    toolbox_dir = os.path.dirname(os.path.abspath(__file__))
-    help_file = os.path.join(toolbox_dir, "策划工具箱_交互说明书.html")
+    cwd = os.getcwd()
+    # 优先找 toolbox_core 目录下
+    help_file = os.path.join(cwd, "toolbox_core", "策划工具箱_交互说明书.html")
     if not os.path.isfile(help_file):
-        # 兜底：从工作目录找
-        help_file = os.path.join(os.getcwd(), "toolbox_core", "策划工具箱_交互说明书.html")
+        # 兜底：当前目录下
+        help_file = os.path.join(cwd, "策划工具箱_交互说明书.html")
     if not os.path.isfile(help_file):
         return jsonify({"error": f"说明文件不存在: {help_file}"})
     try:

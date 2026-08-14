@@ -24,7 +24,10 @@ p{margin:6px 0;color:var(--sub);font-size:13px}
 .step{padding:6px 10px;border:1px solid rgba(94,162,255,.22);border-radius:8px;background:rgba(94,162,255,.08);color:#dbeaff;font-size:12px}
 .step::after{content:"→";margin-left:8px;color:var(--dim)}
 .step:last-child::after{content:none}
-table{width:100%;border-collapse:collapse;margin:8px 0;font-size:13px}
+table{width:100%;border-collapse:collapse;margin:8px 0;font-size:13px;table-layout:fixed}
+table th:first-child,table td:first-child{width:140px;white-space:nowrap}
+table.cols-3 th:first-child,table.cols-3 td:first-child{width:100px}
+table.cols-3 th:nth-child(2),table.cols-3 td:nth-child(2){width:120px}
 th,td{border-bottom:1px solid rgba(255,255,255,.06);padding:6px 10px;text-align:left;vertical-align:top;color:var(--sub)}
 th{color:var(--text);background:rgba(255,255,255,.03);font-weight:600;font-size:12px}
 .warn{border-left:3px solid var(--warn);padding:8px 12px;background:rgba(240,192,64,.06);border-radius:6px;color:#e8dca7;font-size:13px;margin:8px 0}
@@ -43,7 +46,8 @@ code{padding:1px 5px;border-radius:4px;background:#0b0d12;color:#d8e7ff;font-fam
     <!-- 功能总览 -->
     <section>
       <h2>功能总览</h2>
-      <table>
+      <table class="cols-3" style="table-layout:fixed">
+        <colgroup><col style="width:100px"><col style="width:120px"><col></colgroup>
         <thead><tr><th style="white-space:nowrap">功能</th><th>子功能</th><th>一句话</th></tr></thead>
         <tbody>
           <tr><td style="white-space:nowrap" rowspan="3">SVN 记录</td><td>修改摘要</td><td>统计指定日期范围内各版本的修改文件和提交信息</td></tr>

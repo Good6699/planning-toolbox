@@ -2419,16 +2419,31 @@ def _exec_consolidate(step, put, task_id=None):
     else:
         put("⚠️ 目标目录没有 SVN 链接，跳过更新\n")
 
+    # 计算公共祖先，用于确定相对路径
+    tgt_norm = os.path.normcase(os.path.normpath(tgt_dir))
+    src_norms = [os.path.normcase(os.path.normpath(s)) for s in src_dirs]
+    try:
+        common_ancestor = os.path.commonpath(src_norms + [tgt_norm])
+        put(f"公共祖先: {common_ancestor}\n")
+    except ValueError:
+        common_ancestor = None
+        put("来源和目标不在同一驱动器，按来源目录结构复制\n")
+
     # 遍历所有来源，按时间戳过滤
     total = skipped = copied_count = 0
     copied_files = []
     for src_dir in src_dirs:
         put(f"\n扫描来源: {src_dir}\n")
+        # 计算此来源的相对路径基准
+        if common_ancestor:
+            src_base = common_ancestor
+        else:
+            src_base = src_dir
         for root, dirs, files in os.walk(src_dir):
             for fn in files:
                 total += 1
                 src_file = os.path.join(root, fn)
-                rel = os.path.relpath(src_file, src_dir)
+                rel = os.path.relpath(src_file, src_base)
                 tgt_file = os.path.join(tgt_dir, rel)
                 # 时间戳比较：目标存在且更新则跳过
                 if os.path.isfile(tgt_file):

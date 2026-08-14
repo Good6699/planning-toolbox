@@ -2481,11 +2481,35 @@ def _exec_consolidate(step, put, task_id=None):
         put("没有需要整合的文件\n")
         return True
 
-    # SVN add + changelist + commit（put 是函数，包装成队列接口）
-    class _Q:
-        def __init__(self, fn): self._fn = fn
-        def put(self, msg): self._fn(msg)
-    _run_svn_after_upload(_Q(put), tgt_dir, copied_files, commit_path=commit_dirs)
+    # SVN add 新文件
+    svn_exe = _get_svn_path()
+    targets = os.path.join(tempfile.mkdtemp(), "svn_targets.txt")
+    try:
+        with open(targets, "w", encoding="utf-8") as f:
+            for fp in copied_files:
+                f.write(os.path.abspath(fp) + "\n")
+        subprocess.run(
+            [svn_exe, "add", "--parents", "--force", "--quiet", "--targets", targets],
+            capture_output=True, timeout=60, **_get_subprocess_kwargs()
+        )
+        put(f"✓ SVN add {len(copied_files)} 个文件\n")
+    except Exception as e:
+        put(f"⚠ SVN add 失败: {e}\n")
+    finally:
+        try:
+            os.unlink(targets)
+            os.rmdir(os.path.dirname(targets))
+        except Exception:
+            pass
+
+    # 直接弹出 TortoiseSVN 提交对话框
+    tortoise = _get_tortoise_proc_path()
+    if tortoise:
+        for cp in commit_dirs:
+            subprocess.Popen([tortoise, "/command:commit", f"/path:{cp}"])
+        put(f"✓ TortoiseSVN 提交对话框已打开 ({len(commit_dirs)} 个路径)\n")
+    else:
+        put("⚠ 未找到 TortoiseSVN\n")
     _notify_task_done("快速整合")
     return True
 

@@ -44,32 +44,23 @@ code{padding:1px 5px;border-radius:4px;background:#0b0d12;color:#d8e7ff;font-fam
     <section>
       <h2>功能总览</h2>
       <table>
-        <thead><tr><th>功能</th><th>一句话</th></tr></thead>
+        <thead><tr><th style="white-space:nowrap">功能</th><th>子功能</th><th>一句话</th></tr></thead>
         <tbody>
-          <tr><td>SVN 记录</td><td>查询 SVN 提交记录，导出修改摘要或 Excel 对比</td></tr>
-          <tr><td>语义合并</td><td>从源分支筛选版本，分析后合并到目标工作副本（Texts.xlsm 支持单元格级合并）</td></tr>
-          <tr><td>复制合并</td><td>从源目录选文件复制到 SVN 目标目录</td></tr>
-          <tr><td>翻译</td><td>调 AI API 批量翻译 Excel 多语言列</td></tr>
-          <tr><td>文字检测</td><td>检查 Texts.xlsm 的空值、漏翻、占位符、重复 ID</td></tr>
-          <tr><td>修改预制</td><td>一键清理文字 / 图集引用迁移 / 字体检测与修改</td></tr>
-          <tr><td>辅助功能</td><td>用 .meta 模板批量生成 meta 文件</td></tr>
-          <tr><td>工作流</td><td>把多个步骤编排成可复用流程（见下方步骤速查）</td></tr>
-        </tbody>
-      </table>
-      <h3 style="margin:12px 0 6px;font-size:14px">工作流步骤速查</h3>
-      <table>
-        <thead><tr><th style="white-space:nowrap">步骤类型</th><th>做什么</th><th>关键输入</th><th>注意</th></tr></thead>
-        <tbody>
-          <tr><td style="white-space:nowrap">导出文字表</td><td>从主 Excel 文件导出文字表，可上传到多个 SVN 目录</td><td>主文件路径、上传SVN目录</td><td style="white-space:nowrap">上传目录逗号分隔</td></tr>
-          <tr><td style="white-space:nowrap">合并文字表</td><td>把多个 Excel 的指定列按 ID 合并到目标文件</td><td>输入文件、输出文件、标题行数、ID列号</td><td>标题行数和 ID 列从 1 开始</td></tr>
-          <tr><td style="white-space:nowrap">合并翻译</td><td>把翻译完成的 Excel 合入目标文件</td><td>翻译文件、目标文件</td><td>—</td></tr>
-          <tr><td style="white-space:nowrap">SVN 锁定</td><td>锁定指定文件防止他人修改</td><td>目标文件路径、锁定消息</td><td>已由本人锁定会跳过</td></tr>
-          <tr><td style="white-space:nowrap">SVN 解锁</td><td>解除文件锁定</td><td>目标文件路径</td><td>—</td></tr>
-          <tr><td style="white-space:nowrap">SVN 回退</td><td>回退指定路径的 SVN 修改</td><td>回退路径、排除路径</td><td>默认排除 test.lua 等；可勾选永久删除未版本文件</td></tr>
-          <tr><td style="white-space:nowrap">打开表格</td><td>逐个打开 Excel 文件</td><td>文件路径（逗号分隔）</td><td>蓝色 ▶ = 更新+锁定+打开；绿色图标 = 更新+打开不锁定</td></tr>
-          <tr><td style="white-space:nowrap">整合文字表</td><td>从源目录选文件复制到目标目录</td><td>源目录、目标目录</td><td>源目录变化时文件选择状态重置</td></tr>
-          <tr><td style="white-space:nowrap">整合错误码</td><td>从源提取错误码合入目标</td><td>源路径、目标路径、语言代码</td><td>语言代码留空自动识别</td></tr>
-          <tr><td style="white-space:nowrap">上传SVN</td><td>把本地目录复制到 SVN 工作副本</td><td>源目录（逗号分隔）、SVN 目标目录</td><td>—</td></tr>
+          <tr><td style="white-space:nowrap" rowspan="3">SVN 记录</td><td>修改摘要</td><td>统计指定日期范围内各版本的修改文件和提交信息</td></tr>
+          <tr><td>对比 Excel</td><td>逐版本对比 Excel 文件差异，输出变更行报告</td></tr>
+          <tr><td>导出文件</td><td>导出指定日期范围内修改过的文件到本地目录</td></tr>
+          <tr><td style="white-space:nowrap" rowspan="2">语义合并</td><td>版本合并</td><td>从源分支筛选版本和变更文件，合并到目标工作副本</td></tr>
+          <tr><td>Texts.xlsm 合并</td><td>对 Texts.xlsm 做单元格级逐版本合并，不整文件替换</td></tr>
+          <tr><td style="white-space:nowrap">复制合并</td><td>文件复制</td><td>从源目录选文件复制到 SVN 目标目录并辅助提交</td></tr>
+          <tr><td style="white-space:nowrap">翻译</td><td>AI 翻译</td><td>调用 AI API 批量翻译 Excel 多语言列，支持参考文件和自定义 Prompt</td></tr>
+          <tr><td style="white-space:nowrap">文字检测</td><td>质量检查</td><td>检查 Texts.xlsm 的空值、漏翻、占位符不一致、标签丢失、重复 ID</td></tr>
+          <tr><td style="white-space:nowrap" rowspan="3">修改预制</td><td>一键清理文字</td><td>批量清理 .prefab 文件中的文字引用</td></tr>
+          <tr><td>图集引用清理</td><td>扫描预制的图集引用，拖拽规划迁移到目标图集组</td></tr>
+          <tr><td>字体检测</td><td>检测预制中的字体引用，批量替换字体名和行间距</td></tr>
+          <tr><td style="white-space:nowrap">辅助功能</td><td>meta 生成</td><td>用一个 .meta 模板给目标文件夹批量生成 meta 文件</td></tr>
+          <tr><td style="white-space:nowrap" rowspan="3">工作流</td><td>步骤编排</td><td>把导出、合并、锁定、回退等步骤编排成可复用流程</td></tr>
+          <tr><td>打开表格</td><td>逐个打开 Excel 文件，支持锁定或不锁定两种模式</td></tr>
+          <tr><td>SVN 操作</td><td>锁定、解锁、回退、上传等 SVN 批量操作</td></tr>
         </tbody>
       </table>
     </section>

@@ -1,11 +1,11 @@
 # 策划工具箱知识图谱报告
-生成时间：2026-08-12 15:15
+生成时间：2026-08-14 13:37
 
 ## 概况
 - 项目文件：1614 个
-- 图谱节点：23667 个（代码 17020，文档 1576）
-- 关系边数：47364 条
-- 社区数：1994 个
+- 图谱节点：23693 个（代码 17024，文档 1577）
+- 关系边数：47404 条
+- 社区数：2034 个
 
 ## 核心模块（高连接度节点）
 1. **Serialisable** — 493 条连接
@@ -77,7 +77,7 @@
 - **_verify_raw_bytes.py** — 1 节点
 - **_verify_self.py** — 1 节点
 - **_verify_ss_fp.py** — 2 节点
-- **atlas_migration.py** — 68 节点
+- **atlas_migration.py** — 69 节点
 - **auto_study.py** — 13 节点
 - **browser_control.py** — 1 节点
 - **build.py** — 15 节点
@@ -1082,7 +1082,7 @@
 - **toolbox_texts_merge.py** — 6 节点
 - **tools/calamine_verify.py** — 5 节点
 - **update_version.py** — 1 节点
-- **web_app.py** — 122 节点
+- **web_app.py** — 125 节点
 - **web_launcher.py** — 2 节点
 - **xlsm_zipper.py** — 4 节点
 - **安装Python313.ps1** — 1 节点
@@ -1226,131 +1226,131 @@
 - **预制对比工具/PrefabContrastToolNew/artifacts/real-check/obj/Debug/net8.0/RealCheck.GlobalUsings.g.cs** — 1 节点
 - **预制对比工具/PrefabContrastToolNew/artifacts/verify-obj/PrefabContrastTool/Debug/PrefabContrastTool.GlobalUsings.g.cs** — 1 节点
 
-## 社区分组（Top 25 / 1994 个）
-### Community 708
+## 社区分组（Top 25 / 2034 个）
+### Community 744
 - 凝聚度：1.0
 - 节点：_build_dist.py, build(), copytree()
 - 文件：_build_dist.py
 
-### Community 714
+### Community 750
 - 凝聚度：1.0
 - 节点：_do_push.py, git(), log()
 - 文件：_do_push.py
 
-### Community 724
+### Community 759
 - 凝聚度：1.0
 - 节点：_push_via_api.py, api(), log()
 - 文件：_push_via_api.py
 
-### Community 750
+### Community 788
 - 凝聚度：1.0
 - 节点：tab-prefab.js, buildPrefabTab(), startPrefabClear()
 - 文件：toolbox_core/tab-prefab.js
 
-### Community 751
+### Community 789
 - 凝聚度：1.0
 - 节点：tab-prefab.min.js, buildPrefabTab(), startPrefabClear()
 - 文件：toolbox_core/tab-prefab.min.js
 
-### Community 668
+### Community 701
 - 凝聚度：0.8333333333333334
 - 节点：eventLogDemo.py, ReadLog(), test(), usage()
 - 文件：toolbox_core/py_modules/win32/Demos/eventLogDemo.py
 
-### Community 675
+### Community 708
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：_export_error_code_erl.py
 
-### Community 676
+### Community 709
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：_internal/_export_error_code_erl.py
 
-### Community 677
+### Community 710
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：_internal/_export_error_code_erl.py
 
-### Community 679
+### Community 713
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：toolbox_core/py_modules_backup/_export_error_code_erl.py
 
-### Community 684
+### Community 714
 - 凝聚度：0.8333333333333334
-- 节点：h2py.py, main(), process(), pytify()
-- 文件：toolbox_core/py_modules/win32/scripts/h2py.py
+- 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
+- 文件：toolbox_core/py_modules/_export_error_code_erl.py
 
-### Community 685
+### Community 720
 - 凝聚度：0.8333333333333334
 - 节点：localized_names.py, LookupAliasFromRid(), LookupUserGroupFromRid(), main()
 - 文件：toolbox_core/py_modules/win32/Demos/security/localized_names.py
 
-### Community 698
+### Community 735
 - 凝聚度：0.8333333333333334
 - 节点：_safe_cfg.py, copy(), read(), write()
 - 文件：toolbox_core/_safe_cfg.py
 
-### Community 705
+### Community 740
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：策划工具箱_v1.1.4/策划工具箱/_internal/_export_error_code_erl.py
 
-### Community 638
+### Community 666
 - 凝聚度：0.8
 - 节点：setup_d.py, _docopy(), _domodule(), _doregister(), usage_and_die()
 - 文件：toolbox_core/py_modules/win32/scripts/setup_d.py
 
-### Community 645
+### Community 674
 - 凝聚度：0.8
 - 节点：_export_error_code_erl.py, main(), _export_error_code_erl.py, _read_xlsm_data(), _write_erl()
 - 文件：toolbox_core/_export_error_code_erl.py
 
-### Community 606
+### Community 629
 - 凝聚度：0.7333333333333333
 - 节点：testMSOfficeEvents.py, _CheckSeenEvents(), test(), TestExcel(), TestWord()...
 - 文件：toolbox_core/py_modules/win32com/test/testMSOfficeEvents.py
 
-### Community 640
+### Community 669
 - 凝聚度：0.7
 - 节点：GenTestScripts.py, CleanAll(), GenerateAll(), GenerateFromRegistered(), GetGenPath()
 - 文件：toolbox_core/py_modules/win32com/test/GenTestScripts.py
 
-### Community 605
+### Community 628
 - 凝聚度：0.6666666666666666
 - 节点：testAccess.py, CreateTestAccessDatabase(), DoDumpAccessInfo(), DumpAccessInfo(), GenerateSupport()...
 - 文件：toolbox_core/py_modules/win32com/test/testAccess.py
 
-### Community 687
+### Community 722
 - 凝聚度：0.6666666666666666
 - 节点：localserver.py, main(), # NOTE: When NOT running in any sort of debugging mode,, serve()
 - 文件：toolbox_core/py_modules/win32com/server/localserver.py
 
-### Community 703
+### Community 739
 - 凝聚度：0.6666666666666666
 - 节点：olectl.py, MAKE_SCODE(), Constants used by COM Controls  Hand created version of olectl.h constants., STD_CTL_SCODE()
 - 文件：toolbox_core/py_modules/win32com/olectl.py
 
-### Community 709
+### Community 743
+- 凝聚度：0.6666666666666666
+- 节点：BaseResponse, .redirect(), Create a redirect response object.          This is called by :func:`flask.redir
+- 文件：toolbox_core/py_modules/flask/app.py
+
+### Community 745
 - 凝聚度：0.6666666666666666
 - 节点：daily_worklog_schedule.ps1, Get-TodayEnd(), New-TaskXml()
 - 文件：daily_worklog_schedule.ps1
 
-### Community 710
+### Community 746
 - 凝聚度：0.6666666666666666
 - 节点：NetValidatePasswordPolicy.py, main(), A demo of using win32net.NetValidatePasswordPolicy.  Example usage:  % NetVa
 - 文件：toolbox_core/py_modules/win32/Demos/NetValidatePasswordPolicy.py
 
-### Community 711
+### Community 747
 - 凝聚度：0.6666666666666666
 - 节点：OpenEncryptedFileRaw.py, ReadCallback(), WriteCallback()
 - 文件：toolbox_core/py_modules/win32/Demos/OpenEncryptedFileRaw.py
-
-### Community 712
-- 凝聚度：0.6666666666666666
-- 节点：win32gui_devicenotify.py, OnDeviceChange(), TestDeviceNotifications()
-- 文件：toolbox_core/py_modules/win32/Demos/win32gui_devicenotify.py
 
 ## 跨模块连接（你可能不知道的关联）
 - `main()` → `_cmp_task_proc()` [INFERRED]
@@ -1359,7 +1359,7 @@
 - `_detect_changed_blocks()` → `_log()` [INFERRED]
 - `_compare_prefab_texts_fast()` → `_log()` [INFERRED]
 
-## 孤立节点（4108 个代码节点仅 0-1 条连接）
+## 孤立节点（4109 个代码节点仅 0-1 条连接）
 - LPVOID ()
 - _cffi_call_python_fnptr ()
 - CmdType ()
@@ -1380,4 +1380,4 @@
 - _ImportInclude ()
 - _MacroCall ()
 - Formatter ()
-- ... 还有 4088 个
+- ... 还有 4089 个

@@ -1396,7 +1396,7 @@ def api_prefab_font_modify():
         return jsonify({"error": str(exc)}), 400
 
 
-@app.route("/api/open-help", methods=["POST"])
+@app.route("/api/open-help", methods=["GET", "POST"])
 def api_open_help():
     cwd = os.getcwd()
     # 优先找 toolbox_core 目录下

@@ -209,15 +209,7 @@ code{padding:1px 5px;border-radius:4px;background:#0b0d12;color:#d8e7ff;font-fam
     <!-- 修改预制 -->
     <section>
       <h2>修改预制</h2>
-      <table>
-        <thead><tr><th>模式</th><th>功能</th></tr></thead>
-        <tbody>
-          <tr><td>一键清理文字</td><td>批量清理 .prefab 文件中的文字引用</td></tr>
-          <tr><td>图集引用清理</td><td>扫描 .prefab 的图集引用，规划迁移到目标图集组</td></tr>
-          <tr><td>字体检测</td><td>检测预制文件中的字体引用，支持批量替换字体和行间距</td></tr>
-        </tbody>
-      </table>
-      <h3 style="margin:12px 0 6px;font-size:14px">图集引用清理</h3>
+      <h3 style="margin:0 0 6px;font-size:14px">图集引用清理</h3>
       <div class="flow">
         <span class="step">拖入 .prefab 文件/目录</span>
         <span class="step">选预制</span>
@@ -293,21 +285,6 @@ code{padding:1px 5px;border-radius:4px;background:#0b0d12;color:#d8e7ff;font-fam
           <tr><td>点父名称</td><td>直接改名，Enter 保存，Esc 放弃</td></tr>
           <tr><td>双击步骤名</td><td>改步骤名；手动改过不再被自动命名覆盖</td></tr>
           <tr><td>复制工作流</td><td>如果步骤含工程路径前缀（如 <code>H:\D3_EA</code>），弹窗让你一次性替换</td></tr>
-        </tbody>
-      </table>
-      <h3 style="margin:12px 0 6px;font-size:14px">步骤类型速查</h3>
-      <table>
-        <thead><tr><th>类型</th><th>做什么</th><th>注意</th></tr></thead>
-        <tbody>
-          <tr><td>导出文字表</td><td>从主文件导出，可上传到多个 SVN 目录</td><td>上传目录逗号分隔</td></tr>
-          <tr><td>合并文字表</td><td>合并多个 Excel 的指定列</td><td>标题行数和 ID 列从 1 开始</td></tr>
-          <tr><td>合并翻译</td><td>把翻译文件合入目标文件</td><td>—</td></tr>
-          <tr><td>SVN 锁定/解锁</td><td>锁定/解锁指定文件</td><td>已锁定会跳过</td></tr>
-          <tr><td>SVN 回退</td><td>回退指定路径的修改</td><td>默认排除 test.lua、LocalVersion.xml、InstallClient.bat</td></tr>
-          <tr><td>打开表格</td><td>逐个打开 Excel 文件</td><td>执行=更新+锁定+打开；打开（绿色）=更新+打开，不锁定</td></tr>
-          <tr><td>整合文字表</td><td>从源目录选文件复制到目标目录</td><td>源目录变化时文件选择状态重置</td></tr>
-          <tr><td>整合错误码</td><td>从源提取错误码合入目标</td><td>语言代码留空自动识别</td></tr>
-          <tr><td>上传SVN</td><td>把本地目录上传到 SVN</td><td>—</td></tr>
         </tbody>
       </table>
     </section>

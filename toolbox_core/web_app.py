@@ -551,7 +551,7 @@ def _svn_update_first(q, target_dir):
             q.put(f"  → {msg}\n")
 
 
-def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
+def _run_svn_after_upload(q, target_dir, copied_files, commit_path=None):  # noqa: C901
     q.put(f"\n{'─'*40}\n")
     q.put("开始SVN上传\n")
 
@@ -662,8 +662,9 @@ def _run_svn_after_upload(q, target_dir, copied_files):  # noqa: C901
     else:
         tortoise = _get_tortoise_proc_path()
         if tortoise:
+            commit_root = commit_path if commit_path else wc_root
             q.put(f"🖥️ 正在打开 TortoiseSVN 提交对话框 ({len(changed_files)} 个文件)...\n")
-            subprocess.Popen([tortoise, "/command:commit", f"/path:{wc_root}"])
+            subprocess.Popen([tortoise, "/command:commit", f"/path:{commit_root}"])
             q.put("✅ TortoiseSVN 提交对话框已打开\n")
         else:
             q.put("⚠️ 未找到 TortoiseSVN\n")
@@ -1560,6 +1561,8 @@ def _run_wf_task(q, wf, steps, task_id, skip_lock=False):
                 ok = _exec_copy_files(step, _put, task_id)
             elif stype == "merge_error_code":
                 ok = _exec_merge_error_code(step, _put, task_id)
+            elif stype == "consolidate":
+                ok = _exec_consolidate(step, _put, task_id)
             else:
                 _line(f"未知步骤类型: {stype}", "error")
                 ok = False
@@ -2369,6 +2372,79 @@ def _exec_merge_error_code(step, put, task_id=None):
     }, put, task_id)
 
     return export_ok
+
+
+def _exec_consolidate(step, put, task_id=None):
+    """快速整合：按时间戳复制来源目录文件到目标 SVN 工作副本，弹 TortoiseSVN 提交"""
+    src_dir = step.get("src_dir", "").strip()
+    tgt_dir = step.get("tgt_dir", "").strip()
+    commit_dir = step.get("commit_dir", "").strip()
+    if not src_dir or not os.path.isdir(src_dir):
+        put(f"来源路径无效: {src_dir}\n"); return False
+    if not tgt_dir:
+        put("未指定目标路径\n"); return False
+    if not commit_dir:
+        put("未指定提交路径\n"); return False
+
+    put(f"{'='*50}\n")
+    put("快速整合\n")
+    put(f"来源: {src_dir}\n")
+    put(f"目标: {tgt_dir}\n")
+    put(f"提交: {commit_dir}\n\n")
+
+    os.makedirs(tgt_dir, exist_ok=True)
+
+    # SVN update 目标
+    svn_exe = _get_svn_path()
+    result = subprocess.run(
+        [svn_exe, "info", tgt_dir],
+        capture_output=True, timeout=15, **_get_subprocess_kwargs()
+    )
+    if result.returncode == 0:
+        wc_r = subprocess.run(
+            [svn_exe, "info", "--show-item", "wc-root", tgt_dir],
+            capture_output=True, timeout=15, **_get_subprocess_kwargs()
+        )
+        wc_root = _decode_svn_output(wc_r.stdout).strip()
+        if wc_root:
+            put(f"正在更新 SVN 工作副本: {wc_root}\n")
+            _svn_update_with_cleanup(svn_exe, wc_root, put, task_id)
+    else:
+        put("⚠️ 目标目录没有 SVN 链接，跳过更新\n")
+
+    # 遍历来源，按时间戳过滤
+    put("\n扫描来源文件...\n")
+    total = skipped = copied_count = 0
+    copied_files = []
+    for root, dirs, files in os.walk(src_dir):
+        for fn in files:
+            total += 1
+            src_file = os.path.join(root, fn)
+            rel = os.path.relpath(src_file, src_dir)
+            tgt_file = os.path.join(tgt_dir, rel)
+            # 时间戳比较：目标存在且更新则跳过
+            if os.path.isfile(tgt_file):
+                if os.path.getmtime(src_file) <= os.path.getmtime(tgt_file):
+                    skipped += 1
+                    continue
+            try:
+                os.makedirs(os.path.dirname(tgt_file), exist_ok=True)
+                _copy2_force(src_file, tgt_file)
+                copied_files.append(tgt_file)
+                copied_count += 1
+            except Exception as e:
+                put(f"  ✗ {rel}: {e}\n")
+
+    put(f"扫描 {total} 个文件，复制 {copied_count} 个，跳过 {skipped} 个\n")
+
+    if not copied_files:
+        put("没有需要整合的文件\n")
+        return True
+
+    # SVN add + changelist + commit
+    _run_svn_after_upload(put, tgt_dir, copied_files, commit_path=commit_dir)
+    _notify_task_done("快速整合")
+    return True
 
 
 def _exec_lock_svn(step, put, task_id=None):

@@ -1396,6 +1396,18 @@ def api_prefab_font_modify():
         return jsonify({"error": str(exc)}), 400
 
 
+@app.route("/api/open-help", methods=["POST"])
+def api_open_help():
+    help_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "策划工具箱_交互说明书.html")
+    if not os.path.isfile(help_file):
+        return jsonify({"error": "说明文件不存在"})
+    try:
+        os.startfile(help_file)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
 @app.route("/api/workflow/list", methods=["GET"])
 def api_workflow_list():
     cfg = load_config()

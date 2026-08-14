@@ -3318,6 +3318,12 @@ document.getElementById("close_btn")?.addEventListener("click", ()=>{
 
 });
 
+document.getElementById("help_btn")?.addEventListener("click", ()=>{
+  fetch("/api/open-help").then(r=>r.json()).then(d=>{
+    if (d.error) _showToast(d.error);
+  }).catch(()=>_showToast("打开说明失败"));
+});
+
 
 
 

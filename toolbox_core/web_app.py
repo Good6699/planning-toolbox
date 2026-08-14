@@ -2429,8 +2429,9 @@ def _exec_consolidate(step, put, task_id=None):
     else:
         put("⚠️ 目标目录没有 SVN 链接，跳过更新\n")
 
-    # 遍历所有来源，按时间戳过滤
-    total = skipped = copied_count = 0
+    # 遍历所有来源，按时间戳过滤（只复制最近3天修改过的文件）
+    cutoff = time.time() - 3 * 86400
+    total = skipped = old = copied_count = 0
     copied_files = []
     tgt_parts = os.path.normpath(tgt_dir).split(os.sep)
     for src_dir in src_dirs:
@@ -2457,6 +2458,10 @@ def _exec_consolidate(step, put, task_id=None):
             for fn in files:
                 total += 1
                 src_file = os.path.join(root, fn)
+                # 跳过最近3天未修改的文件
+                if os.path.getmtime(src_file) < cutoff:
+                    old += 1
+                    continue
                 rel = os.path.relpath(src_file, src_dir)
                 if extra_prefix:
                     tgt_file = os.path.join(tgt_dir, extra_prefix, rel)
@@ -2475,7 +2480,7 @@ def _exec_consolidate(step, put, task_id=None):
                 except Exception as e:
                     put(f"  ✗ {rel}: {e}\n")
 
-    put(f"扫描 {total} 个文件，复制 {copied_count} 个，跳过 {skipped} 个\n")
+    put(f"扫描 {total} 个文件，复制 {copied_count} 个，跳过 {skipped} 个（{old} 个超过3天）\n")
 
     if not copied_files:
         put("没有需要整合的文件\n")

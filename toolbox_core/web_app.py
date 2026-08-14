@@ -662,10 +662,16 @@ def _run_svn_after_upload(q, target_dir, copied_files, commit_path=None):  # noq
     else:
         tortoise = _get_tortoise_proc_path()
         if tortoise:
-            commit_root = commit_path if commit_path else wc_root
+            if isinstance(commit_path, list):
+                paths = [p for p in commit_path if p]
+            elif commit_path:
+                paths = [commit_path]
+            else:
+                paths = [wc_root]
             q.put(f"🖥️ 正在打开 TortoiseSVN 提交对话框 ({len(changed_files)} 个文件)...\n")
-            subprocess.Popen([tortoise, "/command:commit", f"/path:{commit_root}"])
-            q.put("✅ TortoiseSVN 提交对话框已打开\n")
+            for cp in paths:
+                subprocess.Popen([tortoise, "/command:commit", f"/path:{cp}"])
+            q.put(f"✅ TortoiseSVN 提交对话框已打开 ({len(paths)} 个路径)\n")
         else:
             q.put("⚠️ 未找到 TortoiseSVN\n")
 
@@ -2382,7 +2388,11 @@ def _exec_consolidate(step, put, task_id=None):
     else:
         src_dirs = [s.strip() for s in str(raw_src).split(",") if s.strip()]
     tgt_dir = step.get("tgt_dir", "").strip()
-    commit_dir = step.get("commit_dir", "").strip()
+    raw_commit = step.get("commit_dir", "")
+    if isinstance(raw_commit, list):
+        commit_dirs = [s.strip() for s in raw_commit if s.strip()]
+    else:
+        commit_dirs = [s.strip() for s in str(raw_commit).split(",") if s.strip()]
     if not src_dirs:
         put("未指定来源路径\n"); return False
     for sd in src_dirs:
@@ -2390,14 +2400,14 @@ def _exec_consolidate(step, put, task_id=None):
             put(f"来源路径无效: {sd}\n"); return False
     if not tgt_dir:
         put("未指定目标路径\n"); return False
-    if not commit_dir:
+    if not commit_dirs:
         put("未指定提交路径\n"); return False
 
     put(f"{'='*50}\n")
     put("快速整合\n")
     put(f"来源: {', '.join(src_dirs)}\n")
     put(f"目标: {tgt_dir}\n")
-    put(f"提交: {commit_dir}\n\n")
+    put(f"提交: {', '.join(commit_dirs)}\n\n")
 
     os.makedirs(tgt_dir, exist_ok=True)
 
@@ -2472,7 +2482,7 @@ def _exec_consolidate(step, put, task_id=None):
         return True
 
     # SVN add + changelist + commit
-    _run_svn_after_upload(put, tgt_dir, copied_files, commit_path=commit_dir)
+    _run_svn_after_upload(put, tgt_dir, copied_files, commit_path=commit_dirs)
     _notify_task_done("快速整合")
     return True
 

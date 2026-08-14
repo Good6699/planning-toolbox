@@ -345,7 +345,7 @@ function buildWorkflowTab(panel) {
     modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
       const key = inp.dataset.key;
       if (!key) return;
-      const arrKeys = ["tools","dirs","file_paths","update_dirs","exclude_paths","upload_svn_dir","revert_paths"];
+      const arrKeys = ["tools","dirs","file_paths","update_dirs","exclude_paths","upload_svn_dir","revert_paths","commit_dir"];
       if (arrKeys.includes(key)) {
         nextStep[key] = inp.value.split(",").map(s => s.trim()).filter(Boolean);
       } else {
@@ -385,7 +385,7 @@ function buildWorkflowTab(panel) {
     modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
       const key = inp.dataset.key;
       if (!key) return;
-      const arrKeys = ["tools","dirs","file_paths","update_dirs","exclude_paths","upload_svn_dir","revert_paths"];
+      const arrKeys = ["tools","dirs","file_paths","update_dirs","exclude_paths","upload_svn_dir","revert_paths","commit_dir"];
       if (arrKeys.includes(key)) {
         step[key] = inp.value.split(",").map(s => s.trim()).filter(Boolean);
       } else {
@@ -459,7 +459,7 @@ function buildWorkflowTab(panel) {
       consolidate: `
         ${_fb("来源路径（逗号分隔）","src_dir","wf_m_co_src","dir",true,"输入文件来源目录，多个用逗号分隔")}
         ${_fb("目标路径","tgt_dir","wf_m_co_tgt","dir",false,"输入 SVN 工作副本目标目录")}
-        ${_fb("提交路径","commit_dir","wf_m_co_commit","dir",false,"输入 TortoiseSVN 提交的根路径")}`,
+        ${_fb("提交路径（逗号分隔）","commit_dir","wf_m_co_commit","dir",true,"输入 TortoiseSVN 提交的根路径，多个用逗号分隔")}`,
     };
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
   }

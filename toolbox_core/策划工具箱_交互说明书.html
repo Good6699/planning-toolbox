@@ -32,7 +32,7 @@ table.cols-3 th:nth-child(2),table.cols-3 td:nth-child(2){width:130px}
 th,td{border-bottom:1px solid rgba(255,255,255,.06);padding:10px 12px;text-align:left;vertical-align:top;color:var(--dim);line-height:1.6}
 th{color:var(--accent);background:rgba(94,162,255,.06);font-weight:600;font-size:12px;letter-spacing:.3px;text-transform:none}
 tbody tr:hover{background:rgba(255,255,255,.02)}
-.cols-3 tbody tr:has(+ tr td:first-child:not([rowspan])) td{border-bottom-style:dashed;border-bottom-color:rgba(255,255,255,.1)}
+.dashed td{border-bottom-style:dashed!important;border-bottom-color:rgba(255,255,255,.12)!important}
 .warn{border-left:3px solid var(--warn);padding:10px 14px;background:rgba(240,192,64,.06);border-radius:6px;color:#e8dca7;font-size:13px;margin:12px 0}
 .bad{border-left:3px solid var(--danger);padding:10px 14px;background:rgba(255,99,125,.06);border-radius:6px;color:#ffc3ce;font-size:13px;margin:12px 0}
 code{padding:2px 6px;border-radius:4px;background:#0b0d12;color:#d8e7ff;font-family:"Cascadia Code",Consolas,monospace;font-size:12px}
@@ -53,27 +53,27 @@ code{padding:2px 6px;border-radius:4px;background:#0b0d12;color:#d8e7ff;font-fam
         <colgroup><col style="width:100px"><col style="width:120px"><col></colgroup>
         <thead><tr><th style="white-space:nowrap">功能</th><th>子功能</th><th>一句话</th></tr></thead>
         <tbody>
-          <tr><td style="white-space:nowrap" rowspan="3">SVN 记录</td><td>修改摘要</td><td>统计指定日期范围内各版本的修改文件和提交信息</td></tr>
-          <tr><td>对比 Excel</td><td>逐版本对比 Excel 文件差异，输出变更行报告</td></tr>
+          <tr class="dashed"><td style="white-space:nowrap" rowspan="3">SVN 记录</td><td>修改摘要</td><td>统计指定日期范围内各版本的修改文件和提交信息</td></tr>
+          <tr class="dashed"><td>对比 Excel</td><td>逐版本对比 Excel 文件差异，输出变更行报告</td></tr>
           <tr><td>导出文件</td><td>导出指定日期范围内修改过的文件到本地目录</td></tr>
-          <tr><td style="white-space:nowrap" rowspan="2">语义合并</td><td>版本合并</td><td>从源分支筛选版本和变更文件，合并到目标工作副本</td></tr>
+          <tr class="dashed"><td style="white-space:nowrap" rowspan="2">语义合并</td><td>版本合并</td><td>从源分支筛选版本和变更文件，合并到目标工作副本</td></tr>
           <tr><td>Texts.xlsm 合并</td><td>对 Texts.xlsm 做单元格级逐版本合并，不整文件替换</td></tr>
           <tr><td style="white-space:nowrap">复制合并</td><td>文件复制</td><td>从源目录选文件复制到 SVN 目标目录并辅助提交</td></tr>
           <tr><td style="white-space:nowrap">翻译</td><td>AI 翻译</td><td>调用 AI API 批量翻译 Excel 多语言列，支持参考文件和自定义 Prompt</td></tr>
           <tr><td style="white-space:nowrap">文字检测</td><td>质量检查</td><td>检查 Texts.xlsm 的空值、漏翻、占位符不一致、标签丢失、重复 ID</td></tr>
-          <tr><td style="white-space:nowrap" rowspan="3">修改预制</td><td>一键清理文字</td><td>批量清理 .prefab 文件中的文字引用</td></tr>
-          <tr><td>图集引用清理</td><td>扫描预制的图集引用，拖拽规划迁移到目标图集组</td></tr>
+          <tr class="dashed"><td style="white-space:nowrap" rowspan="3">修改预制</td><td>一键清理文字</td><td>批量清理 .prefab 文件中的文字引用</td></tr>
+          <tr class="dashed"><td>图集引用清理</td><td>扫描预制的图集引用，拖拽规划迁移到目标图集组</td></tr>
           <tr><td>字体检测</td><td>检测预制中的字体引用，批量替换字体名和行间距</td></tr>
           <tr><td style="white-space:nowrap">辅助功能</td><td>meta 生成</td><td>用一个 .meta 模板给目标文件夹批量生成 meta 文件</td></tr>
-          <tr><td style="white-space:nowrap" rowspan="11">工作流</td><td>导出文字表</td><td>从主 Excel 文件导出文字表，可上传到多个 SVN 目录</td></tr>
-          <tr><td>合并文字表</td><td>把多个 Excel 的指定列按 ID 合并到目标文件</td></tr>
-          <tr><td>合并翻译</td><td>把翻译完成的 Excel 合入目标文件</td></tr>
-          <tr><td>SVN 锁定</td><td>锁定指定文件防止他人修改</td></tr>
-          <tr><td>SVN 解锁</td><td>解除文件锁定</td></tr>
-          <tr><td>SVN 回退</td><td>回退指定路径的 SVN 修改</td></tr>
-          <tr><td>打开表格</td><td>逐个打开 Excel 文件，支持锁定或不锁定两种模式</td></tr>
-          <tr><td>整合文字表</td><td>从源目录选文件复制到目标目录</td></tr>
-          <tr><td>整合错误码</td><td>从源提取错误码合入目标，语言代码留空自动识别</td></tr>
+          <tr class="dashed"><td style="white-space:nowrap" rowspan="11">工作流</td><td>导出文字表</td><td>从主 Excel 文件导出文字表，可上传到多个 SVN 目录</td></tr>
+          <tr class="dashed"><td>合并文字表</td><td>把多个 Excel 的指定列按 ID 合并到目标文件</td></tr>
+          <tr class="dashed"><td>合并翻译</td><td>把翻译完成的 Excel 合入目标文件</td></tr>
+          <tr class="dashed"><td>SVN 锁定</td><td>锁定指定文件防止他人修改</td></tr>
+          <tr class="dashed"><td>SVN 解锁</td><td>解除文件锁定</td></tr>
+          <tr class="dashed"><td>SVN 回退</td><td>回退指定路径的 SVN 修改</td></tr>
+          <tr class="dashed"><td>打开表格</td><td>逐个打开 Excel 文件，支持锁定或不锁定两种模式</td></tr>
+          <tr class="dashed"><td>整合文字表</td><td>从源目录选文件复制到目标目录</td></tr>
+          <tr class="dashed"><td>整合错误码</td><td>从源提取错误码合入目标，语言代码留空自动识别</td></tr>
           <tr><td>上传 SVN</td><td>把本地目录复制到 SVN 工作副本</td></tr>
         </tbody>
       </table>

@@ -2440,7 +2440,9 @@ def _exec_consolidate(step, put, task_id=None):
         else:
             extra_prefix = ""
         if extra_prefix:
-            put(f"  路径对齐: {extra_prefix}\n")
+            put(f"  路径对齐: +{extra_prefix}\n")
+        else:
+            put("  路径对齐: 直接覆盖（无公共路径段）\n")
         for root, dirs, files in os.walk(src_dir):
             for fn in files:
                 total += 1

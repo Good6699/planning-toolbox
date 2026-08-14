@@ -903,7 +903,9 @@ function buildPrefabTab(panel) {
 
   function refreshPrefabs() {
     if (!state.draft || state.busy) return;
-    mutateDraft("/api/prefab/atlas/refresh-prefabs", {draft_id:state.draft.id}, "刷新预制失败");
+    mutateDraft("/api/prefab/atlas/refresh-prefabs", {draft_id:state.draft.id}, "刷新预制失败").then(function() {
+      _showToast("预制引用已刷新");
+    });
   }
 
   function refreshAfterTask(operation, previousDraft, outputPath, taskId, requestGeneration) {

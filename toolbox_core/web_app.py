@@ -2481,8 +2481,11 @@ def _exec_consolidate(step, put, task_id=None):
         put("没有需要整合的文件\n")
         return True
 
-    # SVN add + changelist + commit
-    _run_svn_after_upload(put, tgt_dir, copied_files, commit_path=commit_dirs)
+    # SVN add + changelist + commit（put 是函数，包装成队列接口）
+    class _Q:
+        def __init__(self, fn): self._fn = fn
+        def put(self, msg): self._fn(msg)
+    _run_svn_after_upload(_Q(put), tgt_dir, copied_files, commit_path=commit_dirs)
     _notify_task_done("快速整合")
     return True
 

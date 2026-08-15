@@ -2767,6 +2767,8 @@ def _exec_error_code_entry(step, put, task_id=None):
                         proc.kill()
                     except Exception:
                         pass
+                put("导出失败，阻断后续语言\n")
+                break
 
         put(f"\n导出完成: {ok_count}/{len(codes)}\n")
         if ok_count > 0 and upload_dirs:

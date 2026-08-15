@@ -2765,8 +2765,29 @@ def _exec_error_code_entry(step, put, task_id=None):
                 _click(export_hwnd)
                 _wait_for_result(proc, log_hwnd, 3600, lambda: False, put)
                 _close(proc, hwnd, 15)
-                put(f"  [{code}] 导出成功\n")
-                ok_count += 1
+                put(f"  [{code}] 客户端导出成功\n")
+                # 服务端导出(erlang)，同导出错误码步骤
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                erl_script = os.path.join(script_dir, "..", "_export_error_code_erl.py")
+                _pm_path = os.path.join(script_dir, "py_modules")
+                _erl_env = {**os.environ, "PYTHONPATH": _pm_path} if os.path.isdir(_pm_path) else None
+                r_erl = subprocess.run(
+                    [sys.executable, erl_script, "--xlsm", xlsm_file, "--lang-dir", lang_path],
+                    capture_output=True,
+                    encoding=locale.getpreferredencoding(), errors="replace",
+                    timeout=60, env=_erl_env,
+                    **_get_subprocess_kwargs()
+                )
+                if r_erl.returncode == 0:
+                    for line in (r_erl.stdout or "").strip().split("\n"):
+                        if line.strip():
+                            put("    " + line.strip() + "\n")
+                    put(f"  [{code}] erlang 导出成功\n")
+                    ok_count += 1
+                else:
+                    err = (r_erl.stderr or r_erl.stdout or "").strip()[:1000]
+                    put(f"  [{code}] erlang 导出失败: {err}\n")
+                    raise RuntimeError("erlang 导出失败")
             except Exception as e:
                 put(f"  [{code}] 导出失败: {e}\n")
                 if proc and proc.poll() is None:

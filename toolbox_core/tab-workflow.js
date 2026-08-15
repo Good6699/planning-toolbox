@@ -1,7 +1,7 @@
 function buildWorkflowTab(panel) {
   const wfs = config.workflows || [];
-  const typeCn = {export_text:"导出文字表",export_modified_config:"导出修改配置表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表",merge_error_code:"整合错误码",consolidate:"快速整合"};
-  const typeIcon = {export_text:"📄",export_modified_config:"📝",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📦",merge_error_code:"🧩",consolidate:"⚡"};
+  const typeCn = {export_text:"导出文字表",export_modified_config:"导出修改配置表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表",merge_error_code:"整合错误码",consolidate:"快速整合",error_code_entry:"录入错误码"};
+  const typeIcon = {export_text:"📄",export_modified_config:"📝",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📦",merge_error_code:"🧩",consolidate:"⚡",error_code_entry:"📥"};
   const isEmpty = !wfs.length;
   panel.innerHTML = `
     <div class="wf-layout">
@@ -310,14 +310,16 @@ function buildWorkflowTab(panel) {
       revert_svn:["revert_paths"],
       copy_files:["src_dir","tgt_dir"],
       merge_error_code:["src_path","tgt_path"],
-      consolidate:["src_dir","tgt_dir","commit_dir"]
+      consolidate:["src_dir","tgt_dir","commit_dir"],
+      error_code_entry:["translation_file","target_path"]
     };
     const labels = {
       input_file:"输入文件", source_path:"本地 SVN 副本路径", upload_svn_dir:"上传 SVN 路径",
       dirs:"源目录", input_dir:"输入文件", target_dir:"输出文件", original_file:"目标文件",
       root_dir:"根目录", lang_codes:"语言代码", target_path:"目标文件路径", file_paths:"文件路径",
       revert_paths:"回退路径", src_dir:"源目录", tgt_dir:"目标目录", src_path:"源路径", tgt_path:"目标路径",
-      commit_dir:"提交路径"
+      commit_dir:"提交路径",
+      translation_file:"翻译文件",target_path:"目标路径"
     };
     for (const key of required[step.type] || []) {
       const value = step[key];
@@ -460,6 +462,9 @@ function buildWorkflowTab(panel) {
         ${_fb("来源路径（逗号分隔）","src_dir","wf_m_co_src","dir",true,"输入文件来源目录，多个用逗号分隔")}
         ${_fb("目标路径","tgt_dir","wf_m_co_tgt","dir",false,"输入 SVN 工作副本目标目录")}
         ${_fb("提交路径（逗号分隔）","commit_dir","wf_m_co_commit","dir",true,"输入 TortoiseSVN 提交的根路径，多个用逗号分隔")}`,
+      error_code_entry: `
+        ${_fb("翻译文件","translation_file","wf_m_ece_input","file",false,"输入包含错误码翻译的 Excel 文件路径")}
+        ${_fb("目标路径","target_path","wf_m_ece_target","dir",false,"输入 gameData 所在目录（自动找 Language 子目录）")}`,
     };
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
   }

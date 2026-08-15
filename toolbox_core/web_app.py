@@ -1569,6 +1569,8 @@ def _run_wf_task(q, wf, steps, task_id, skip_lock=False):
                 ok = _exec_merge_error_code(step, _put, task_id)
             elif stype == "consolidate":
                 ok = _exec_consolidate(step, _put, task_id)
+            elif stype == "error_code_entry":
+                ok = _exec_error_code_entry(step, _put, task_id)
             else:
                 _line(f"未知步骤类型: {stype}", "error")
                 ok = False
@@ -2511,6 +2513,183 @@ def _exec_consolidate(step, put, task_id=None):
     else:
         put("⚠ 未找到 TortoiseSVN\n")
     _notify_task_done("快速整合")
+    return True
+
+
+def _exec_error_code_entry(step, put, task_id=None):
+    """录入错误码：从翻译文件读取错误码翻译，按语言写入各 ErrorMessage.xlsm"""
+    import re as _re
+
+    translation_file = step.get("translation_file", "").strip()
+    target_path = step.get("target_path", "").strip()
+    if not translation_file or not os.path.isfile(translation_file):
+        put(f"翻译文件无效: {translation_file}\n"); return False
+    if not target_path:
+        put("未指定目标路径\n"); return False
+
+    # 解析 Language 目录（复用导出错误码逻辑）
+    lang_dir = _merge_error_code_resolve_lang(target_path)
+    if not lang_dir:
+        put(f"无法在 {target_path} 下找到 Language 目录\n"); return False
+
+    put(f"{'='*50}\n")
+    put("录入错误码\n")
+    put(f"翻译文件: {translation_file}\n")
+    put(f"语言目录: {lang_dir}\n\n")
+
+    # 读取翻译文件
+    import openpyxl
+    wb = openpyxl.load_workbook(translation_file, read_only=True, data_only=True)
+    ws = wb.active
+    all_rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+    if len(all_rows) < 2:
+        put("翻译文件无数据\n"); return False
+
+    headers = [str(c or "").strip() for c in all_rows[0]]
+    # 提取语言列（排除 ::ID:: 和 ::SC::）
+    lang_columns = []
+    for idx, h in enumerate(headers):
+        if h == "::ID::" or h == "::SC::" or not h:
+            continue
+        if h.startswith("::") and h.endswith("::"):
+            lang_columns.append((idx, h))
+
+    # 加载语言映射
+    cfg = load_config()
+    lang_id_map = cfg.get("tr_lang_id_map", {})
+    header_to_lang = {}
+    for lang_name, ids in lang_id_map.items():
+        for id_str in ids:
+            header_to_lang[id_str.strip().lower()] = lang_name
+
+    # 匹配列头到语言名，再匹配到目录名
+    lang_dirs = [d for d in os.listdir(lang_dir) if os.path.isdir(os.path.join(lang_dir, d))]
+    lang_tasks = []  # [(col_idx, lang_name, dir_name, dir_path)]
+    for col_idx, header in lang_columns:
+        header_key = header.replace("::", "").lower()
+        lang_name = header_to_lang.get(header_key) or header_to_lang.get(header.lower())
+        if not lang_name:
+            put(f"  ⚠ 列 {header} 无法识别语言，跳过\n")
+            continue
+        # 匹配目录名：用语言名的关键词列表匹配目录名
+        matched_dir = None
+        keywords = lang_id_map.get(lang_name, [])
+        for d in lang_dirs:
+            d_upper = d.upper()
+            for kw in keywords:
+                if kw.upper() in d_upper or d_upper in kw.upper():
+                    matched_dir = d
+                    break
+            if matched_dir:
+                break
+        if not matched_dir:
+            put(f"  ⚠ 语言 {lang_name}（{header}）未找到对应目录，跳过\n")
+            continue
+        lang_tasks.append((col_idx, lang_name, matched_dir, os.path.join(lang_dir, matched_dir)))
+
+    put(f"识别到 {len(lang_tasks)} 种语言\n")
+    for _, ln, dn, _ in lang_tasks:
+        put(f"  {ln} → {dn}\n")
+    put("\n")
+
+    # 提取纯数字 ID 行
+    id_rows = {}  # {id_str: row_values_tuple}
+    for row in all_rows[1:]:
+        id_val = str(row[0] or "").strip()
+        if id_val.isdigit():
+            id_rows[id_val] = row
+
+    if not id_rows:
+        put("翻译文件中没有纯数字 ID\n"); return True
+
+    put(f"翻译文件共 {len(id_rows)} 条错误码\n\n")
+
+    # SVN update
+    svn_exe = _get_svn_path()
+    result = subprocess.run(
+        [svn_exe, "info", lang_dir],
+        capture_output=True, timeout=15, **_get_subprocess_kwargs()
+    )
+    if result.returncode == 0:
+        wc_r = subprocess.run(
+            [svn_exe, "info", "--show-item", "wc-root", lang_dir],
+            capture_output=True, timeout=15, **_get_subprocess_kwargs()
+        )
+        wc_root = _decode_svn_output(wc_r.stdout).strip()
+        if wc_root:
+            put(f"正在更新 SVN: {wc_root}\n")
+            _svn_update_with_cleanup(svn_exe, wc_root, put, task_id)
+    else:
+        put("⚠ 目标目录没有 SVN 链接，跳过更新\n")
+
+    # 对每个语言执行录入
+    total_updated = total_inserted = 0
+    for col_idx, lang_name, dir_name, dir_path in lang_tasks:
+        xlsm_path = os.path.join(dir_path, "Data2", "ErrorMessage.xlsm")
+        if not os.path.isfile(xlsm_path):
+            put(f"[{lang_name}] 文件不存在: {xlsm_path}\n")
+            continue
+
+        put(f"[{lang_name}] 正在录入 {xlsm_path}\n")
+        try:
+            ec_wb = openpyxl.load_workbook(xlsm_path)
+            ec_ws = ec_wb.active
+
+            # 建立 ID→行号 映射（从第5行开始，B列=ID，C列=ErrorString）
+            id_to_row = {}
+            end_row = None
+            for r in range(5, ec_ws.max_row + 1):
+                id_cell = ec_ws.cell(row=r, column=2).value
+                col_a = ec_ws.cell(row=r, column=1).value
+                if str(col_a or "") == "END":
+                    end_row = r
+                    break
+                if id_cell is not None:
+                    id_str = str(id_cell).strip()
+                    if id_str:
+                        id_to_row[id_str] = r
+
+            if end_row is None:
+                put(f"  ⚠ 未找到 END 标记，跳过\n")
+                ec_wb.close()
+                continue
+
+            updated = inserted = 0
+            for id_str, row_data in id_rows.items():
+                new_val = str(row_data[col_idx] or "").strip()
+                if not new_val:
+                    continue
+                if id_str in id_to_row:
+                    # 已有 ID → 覆盖 C 列
+                    ec_ws.cell(row=id_to_row[id_str], column=3, value=new_val)
+                    updated += 1
+                else:
+                    # 新 ID → 在 END 行插入，END 下移
+                    ec_ws.cell(row=end_row, column=2, value=int(id_str))
+                    ec_ws.cell(row=end_row, column=3, value=new_val)
+                    ec_ws.cell(row=end_row, column=1, value="0")
+                    end_row += 1
+                    ec_ws.cell(row=end_row, column=1, value="END")
+                    inserted += 1
+
+            ec_wb.save(xlsm_path)
+            ec_wb.close()
+            total_updated += updated
+            total_inserted += inserted
+            put(f"  ✓ 更新 {updated} 条，新增 {inserted} 条\n")
+        except Exception as e:
+            put(f"  ✗ 失败: {e}\n")
+
+    put(f"\n{'─'*40}\n")
+    put(f"录入完成：更新 {total_updated} 条，新增 {total_inserted} 条\n")
+
+    # 弹出 TortoiseSVN 提交
+    tortoise = _get_tortoise_proc_path()
+    if tortoise:
+        subprocess.Popen([tortoise, "/command:commit", f"/path:{lang_dir}"])
+        put("✓ TortoiseSVN 提交对话框已打开\n")
+    _notify_task_done("录入错误码")
     return True
 
 

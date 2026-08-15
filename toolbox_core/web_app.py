@@ -2716,14 +2716,9 @@ def _exec_error_code_entry(step, put, task_id=None):
     else:
         upload_dirs = [s.strip() for s in str(raw_upload).split(",") if s.strip()]
 
-    if upload_dirs:
+    export_codes = step.get("lang_codes", "").strip()
+    if upload_dirs and export_codes:
         put("\n开始导出错误码...\n")
-        # 优先用设置的语言列表，否则用已录入的语言
-        raw_codes = step.get("lang_codes", "").strip()
-        if raw_codes:
-            export_codes = raw_codes
-        else:
-            export_codes = ",".join(dir_name for _, _, dir_name, _ in lang_tasks)
         gamedata_dir = os.path.dirname(lang_dir)
         export_ok = _exec_export_error_code({
             "root_dir": gamedata_dir,
@@ -2733,7 +2728,10 @@ def _exec_error_code_entry(step, put, task_id=None):
         if not export_ok:
             put("⚠ 导出错误码失败\n")
     else:
-        put("\n未设置导出SVN路径，跳过导出\n")
+        if not export_codes:
+            put("\n未设置导出语言，跳过导出\n")
+        elif not upload_dirs:
+            put("\n未设置导出SVN路径，跳过导出\n")
 
     _notify_task_done("录入错误码")
     return True

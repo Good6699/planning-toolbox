@@ -2673,25 +2673,29 @@ def _exec_error_code_entry(step, put, task_id=None):
                     ec_ws.cell(row=end_row, column=1, value="END")
                     inserted += 1
 
-            ec_wb.save(xlsm_path)
-            ec_wb.close()
-            # 用 Excel/WPS COM 重写文件，修复 openpyxl 兼容性问题
-            for app in ["Excel.Application", "Ket.Application"]:
-                try:
-                    import win32com.client as win32
-                    xl = win32.DispatchEx(app)
-                    xl.Visible = False
-                    xl.DisplayAlerts = False
-                    wb = xl.Workbooks.Open(xlsm_path)
-                    wb.Save()
-                    wb.Close()
-                    xl.Quit()
-                    break
-                except Exception:
-                    continue
-            total_updated += updated
-            total_inserted += inserted
-            put(f"  ✓ 更新 {updated} 条，新增 {inserted} 条\n")
+            if updated == 0 and inserted == 0:
+                ec_wb.close()
+                put(f"  ✓ 无需更新\n")
+            else:
+                ec_wb.save(xlsm_path)
+                ec_wb.close()
+                # 用 Excel/WPS COM 重写文件，修复 openpyxl 兼容性问题
+                for app in ["Excel.Application", "Ket.Application"]:
+                    try:
+                        import win32com.client as win32
+                        xl = win32.DispatchEx(app)
+                        xl.Visible = False
+                        xl.DisplayAlerts = False
+                        wb = xl.Workbooks.Open(xlsm_path)
+                        wb.Save()
+                        wb.Close()
+                        xl.Quit()
+                        break
+                    except Exception:
+                        continue
+                total_updated += updated
+                total_inserted += inserted
+                put(f"  ✓ 更新 {updated} 条，新增 {inserted} 条\n")
         except Exception as e:
             put(f"  ✗ 失败: {e}\n")
 

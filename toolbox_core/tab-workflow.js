@@ -1022,5 +1022,13 @@ function _wfAutoName(step) {
     const i = Math.max(s.lastIndexOf("\\"), s.lastIndexOf("/"));
     return i >= 0 ? s.substring(i+1) : s;
   }
+  if (t === "merge_error_code") {
+    const p = (step.tgt_path || "").replace(/[\\/]$/, "");
+    const parts = p.split(/[\\/]/);
+    return parts.length >= 2 ? parts[1] : p;
+  }
+  if (t === "consolidate") {
+    return step.tgt_dir || "";
+  }
   return "";
 }

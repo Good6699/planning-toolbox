@@ -2709,6 +2709,31 @@ def _exec_error_code_entry(step, put, task_id=None):
     put(f"\n{'─'*40}\n")
     put(f"录入完成：更新 {total_updated} 条，新增 {total_inserted} 条\n")
 
+    # 自动导出错误码（完全复用导出错误码步骤逻辑）
+    raw_upload = step.get("upload_svn_dir", "")
+    if isinstance(raw_upload, list):
+        upload_dirs = [s.strip() for s in raw_upload if s.strip()]
+    else:
+        upload_dirs = [s.strip() for s in str(raw_upload).split(",") if s.strip()]
+
+    raw_codes = step.get("lang_codes", "").strip()
+    if upload_dirs and raw_codes:
+        put("\n开始导出错误码...\n")
+        gamedata_dir = os.path.dirname(lang_dir)
+        export_step = {
+            "root_dir": gamedata_dir,
+            "lang_codes": raw_codes,
+            "upload_svn_dir": upload_dirs,
+        }
+        export_ok = _exec_export_error_code(export_step, put, task_id)
+        if not export_ok:
+            put("⚠ 导出错误码失败\n")
+    else:
+        if not raw_codes:
+            put("\n未设置语言代码，跳过导出\n")
+        elif not upload_dirs:
+            put("\n未设置上传SVN路径，跳过导出\n")
+
     _notify_task_done("录入错误码")
     return True
 

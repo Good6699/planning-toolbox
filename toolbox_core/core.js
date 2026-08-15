@@ -3278,8 +3278,6 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   setTimeout(checkZoom, 300);
 
-  setTimeout(checkUpdate, 2000);
-
   await _afterPaint();
 
   try {
@@ -3297,6 +3295,21 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
 });
+
+// 界面完全打开后再检查更新（避免阻塞启动）
+(function() {
+  function onAppReady() { setTimeout(checkUpdate, 1000); }
+  if (document.body.classList.contains("app-ready")) {
+    onAppReady();
+  } else {
+    new MutationObserver(function(mutations, obs) {
+      if (document.body.classList.contains("app-ready")) {
+        obs.disconnect();
+        onAppReady();
+      }
+    }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
+  }
+})();
 
 document.getElementById("close_btn")?.addEventListener("click", ()=>{
 

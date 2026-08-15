@@ -2672,13 +2672,15 @@ def _exec_error_code_entry(step, put, task_id=None):
                     ec_ws.cell(row=id_to_row[id_str], column=3, value=new_val)
                     updated += 1
                 else:
-                    # 新 ID → 在 END 行插入，END 下移
+                    # 新 ID → 在 END 行写入数据，原 END 行变为数据行
                     ec_ws.cell(row=end_row, column=2, value=int(id_str))
                     ec_ws.cell(row=end_row, column=3, value=new_val)
                     ec_ws.cell(row=end_row, column=1, value="0")
                     end_row += 1
-                    ec_ws.cell(row=end_row, column=1, value="END")
                     inserted += 1
+            # 所有插入完成后，在最后一行写 END
+            if inserted > 0:
+                ec_ws.cell(row=end_row, column=1, value="END")
 
             if updated == 0 and inserted == 0:
                 ec_wb.close()

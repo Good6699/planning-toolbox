@@ -1,7 +1,7 @@
 function buildWorkflowTab(panel) {
   const wfs = config.workflows || [];
   const typeCn = {export_text:"导出文字表",export_modified_config:"导出修改配置表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表",merge_error_code:"整合错误码",consolidate:"快速整合"};
-  const typeIcon = {export_text:"📄",export_modified_config:"📋",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📋",merge_error_code:"📋",consolidate:"⚡"};
+  const typeIcon = {export_text:"📄",export_modified_config:"📝",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📦",merge_error_code:"🧩",consolidate:"⚡"};
   const isEmpty = !wfs.length;
   panel.innerHTML = `
     <div class="wf-layout">

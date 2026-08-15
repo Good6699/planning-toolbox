@@ -1030,5 +1030,8 @@ function _wfAutoName(step) {
   if (t === "consolidate") {
     return step.tgt_dir || "";
   }
+  if (t === "error_code_entry") {
+    return step.target_path || "";
+  }
   return "";
 }

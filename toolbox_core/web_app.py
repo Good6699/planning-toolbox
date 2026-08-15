@@ -2649,18 +2649,17 @@ def _exec_error_code_entry(step, put, task_id=None):
             ec_wb = openpyxl.load_workbook(xlsm_path)
             ec_ws = ec_wb.active
 
-            # 建立 ID→行号 映射（从第5行开始，B列=ID，C列=ErrorString）
+            # 建立 ID→行号 映射（遍历整张表，不受 END 位置限制）
             id_to_row = {}
             end_row = None
             for r in range(5, ec_ws.max_row + 1):
-                id_cell = ec_ws.cell(row=r, column=2).value
                 col_a = ec_ws.cell(row=r, column=1).value
                 if str(col_a or "") == "END":
                     end_row = r
-                    break
+                id_cell = ec_ws.cell(row=r, column=2).value
                 if id_cell is not None:
                     id_str = str(id_cell).strip()
-                    if id_str:
+                    if id_str.isdigit():
                         id_to_row[id_str] = r
 
             if end_row is None:

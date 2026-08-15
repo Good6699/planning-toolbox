@@ -2719,36 +2719,54 @@ def _exec_error_code_entry(step, put, task_id=None):
 
     if raw_codes and upload_dirs:
         put("\n开始导出错误码...\n")
+        from exceltool_export import (
+            _wait_for_window, _send_drop, _wait_for_check_result,
+            _click, _wait_for_result, _close, SW_SHOWNOACTIVATE,
+            _user32,
+        )
         codes = [c.strip() for c in raw_codes.split(",") if c.strip()]
         ok_count = 0
         for code in codes:
             lang_path = os.path.join(lang_dir, code)
-            bat_file = os.path.join(lang_path, "客户端单个导出2.bat")
-            if not os.path.isfile(bat_file):
-                put(f"  [{code}] 找不到: 客户端单个导出2.bat\n")
-                continue
+            tool = os.path.join(lang_path, "ExcelTool2.exe")
             xlsm_file = os.path.join(lang_path, "Data2", "ErrorMessage.xlsm")
+            if not os.path.isfile(tool):
+                put(f"  [{code}] 找不到: ExcelTool2.exe\n")
+                continue
             if not os.path.isfile(xlsm_file):
                 put(f"  [{code}] 找不到: Data2\\ErrorMessage.xlsm\n")
                 continue
             put(f"  [{code}] 导出中...\n")
+            proc = None
             try:
                 si = subprocess.STARTUPINFO()
                 si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                r = subprocess.run(
-                    ["cmd", "/c", bat_file, lang_path, "ErrorMessage.xlsm"],
-                    capture_output=True, timeout=300,
-                    startupinfo=si, creationflags=subprocess.CREATE_NO_WINDOW,
-                    cwd=lang_path,
-                )
-                if r.returncode == 0:
-                    put(f"  [{code}] 导出成功\n")
-                    ok_count += 1
+                si.wShowWindow = SW_SHOWNOACTIVATE
+                proc = subprocess.Popen([tool], cwd=lang_path, startupinfo=si)
+                hwnd, list_hwnd, log_hwnd, export_hwnd = _wait_for_window(proc, 15, lambda: False)
+                _send_drop(hwnd, [xlsm_file])
+                _wait_for_check_result(proc, 60, lambda: False, put)
+                deadline = time.time() + 30
+                while time.time() < deadline:
+                    if proc.poll() is not None:
+                        raise RuntimeError("ExcelTool2 退出")
+                    if _user32.SendMessageW(list_hwnd, 0x1004, 0, 0) >= 1:
+                        break
+                    time.sleep(0.2)
                 else:
-                    err = (r.stderr or r.stdout or b"").decode("gbk", errors="replace").strip()[:500]
-                    put(f"  [{code}] 导出失败: {err}\n")
+                    raise RuntimeError("ExcelTool2 未接收文件")
+                _click(export_hwnd)
+                _wait_for_result(proc, log_hwnd, 3600, lambda: False, put)
+                _close(proc, hwnd, 15)
+                put(f"  [{code}] 导出成功\n")
+                ok_count += 1
             except Exception as e:
-                put(f"  [{code}] 导出异常: {e}\n")
+                put(f"  [{code}] 导出失败: {e}\n")
+                if proc and proc.poll() is None:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
 
         put(f"\n导出完成: {ok_count}/{len(codes)}\n")
         if ok_count > 0 and upload_dirs:

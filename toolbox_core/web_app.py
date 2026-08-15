@@ -2709,25 +2709,50 @@ def _exec_error_code_entry(step, put, task_id=None):
     put(f"\n{'─'*40}\n")
     put(f"录入完成：更新 {total_updated} 条，新增 {total_inserted} 条\n")
 
-    # 自动导出错误码（完全复用导出错误码步骤逻辑）
+    # 自动导出错误码（直接调用 客户端单个导出2.bat）
+    raw_codes = step.get("lang_codes", "").strip()
     raw_upload = step.get("upload_svn_dir", "")
     if isinstance(raw_upload, list):
         upload_dirs = [s.strip() for s in raw_upload if s.strip()]
     else:
         upload_dirs = [s.strip() for s in str(raw_upload).split(",") if s.strip()]
 
-    raw_codes = step.get("lang_codes", "").strip()
-    if upload_dirs and raw_codes:
+    if raw_codes and upload_dirs:
         put("\n开始导出错误码...\n")
-        gamedata_dir = os.path.dirname(lang_dir)
-        export_step = {
-            "root_dir": gamedata_dir,
-            "lang_codes": raw_codes,
-            "upload_svn_dir": upload_dirs,
-        }
-        export_ok = _exec_export_error_code(export_step, put, task_id)
-        if not export_ok:
-            put("⚠ 导出错误码失败\n")
+        codes = [c.strip() for c in raw_codes.split(",") if c.strip()]
+        ok_count = 0
+        for code in codes:
+            lang_path = os.path.join(lang_dir, code)
+            bat_file = os.path.join(lang_path, "客户端单个导出2.bat")
+            if not os.path.isfile(bat_file):
+                put(f"  [{code}] 找不到: 客户端单个导出2.bat\n")
+                continue
+            xlsm_file = os.path.join(lang_path, "Data2", "ErrorMessage.xlsm")
+            if not os.path.isfile(xlsm_file):
+                put(f"  [{code}] 找不到: Data2\\ErrorMessage.xlsm\n")
+                continue
+            put(f"  [{code}] 导出中...\n")
+            try:
+                si = subprocess.STARTUPINFO()
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                r = subprocess.run(
+                    ["cmd", "/c", bat_file, lang_path, "ErrorMessage.xlsm"],
+                    capture_output=True, timeout=300,
+                    startupinfo=si, creationflags=subprocess.CREATE_NO_WINDOW,
+                    cwd=lang_path,
+                )
+                if r.returncode == 0:
+                    put(f"  [{code}] 导出成功\n")
+                    ok_count += 1
+                else:
+                    err = (r.stderr or r.stdout or b"").decode("gbk", errors="replace").strip()[:500]
+                    put(f"  [{code}] 导出失败: {err}\n")
+            except Exception as e:
+                put(f"  [{code}] 导出异常: {e}\n")
+
+        put(f"\n导出完成: {ok_count}/{len(codes)}\n")
+        if ok_count > 0 and upload_dirs:
+            _exec_upload_svn({"dirs": upload_dirs}, put, task_id)
     else:
         if not raw_codes:
             put("\n未设置语言代码，跳过导出\n")

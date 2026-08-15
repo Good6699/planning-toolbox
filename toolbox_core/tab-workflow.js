@@ -464,7 +464,8 @@ function buildWorkflowTab(panel) {
         ${_fb("提交路径（逗号分隔）","commit_dir","wf_m_co_commit","dir",true,"输入 TortoiseSVN 提交的根路径，多个用逗号分隔")}`,
       error_code_entry: `
         ${_fb("翻译文件","translation_file","wf_m_ece_input","file",false,"输入包含错误码翻译的 Excel 文件路径")}
-        ${_fb("目标路径","target_path","wf_m_ece_target","dir",false,"输入 gameData 所在目录（自动找 Language 子目录）")}`,
+        ${_fb("目标路径","target_path","wf_m_ece_target","dir",false,"输入 gameData 所在目录（自动找 Language 子目录）")}
+        ${_fb("导出SVN路径（逗号分隔）","upload_svn_dir","wf_m_ece_upload","dir",true,"输入导出后要上传的本地SVN路径，多个用逗号分隔")}`,
     };
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
   }

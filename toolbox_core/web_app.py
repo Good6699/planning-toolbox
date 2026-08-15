@@ -2684,11 +2684,28 @@ def _exec_error_code_entry(step, put, task_id=None):
     put(f"\n{'─'*40}\n")
     put(f"录入完成：更新 {total_updated} 条，新增 {total_inserted} 条\n")
 
-    # 弹出 TortoiseSVN 提交
-    tortoise = _get_tortoise_proc_path()
-    if tortoise:
-        subprocess.Popen([tortoise, "/command:commit", f"/path:{lang_dir}"])
-        put("✓ TortoiseSVN 提交对话框已打开\n")
+    # 自动执行导出错误码
+    raw_upload = step.get("upload_svn_dir", "")
+    if isinstance(raw_upload, list):
+        upload_dirs = [s.strip() for s in raw_upload if s.strip()]
+    else:
+        upload_dirs = [s.strip() for s in str(raw_upload).split(",") if s.strip()]
+
+    if upload_dirs:
+        put("\n开始导出错误码...\n")
+        # 收集已处理的语言目录名
+        processed_codes = [dir_name for _, _, dir_name, _ in lang_tasks]
+        gamedata_dir = os.path.dirname(lang_dir)
+        export_ok = _exec_export_error_code({
+            "root_dir": gamedata_dir,
+            "lang_codes": ",".join(processed_codes),
+            "upload_svn_dir": upload_dirs,
+        }, put, task_id)
+        if not export_ok:
+            put("⚠ 导出错误码失败\n")
+    else:
+        put("\n未设置导出SVN路径，跳过导出\n")
+
     _notify_task_done("录入错误码")
     return True
 

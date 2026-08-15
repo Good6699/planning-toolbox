@@ -90,6 +90,7 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--worker":
 _quit_app_callback = lambda: None
 _hide_window_callback = lambda: False
 _is_window_visible_callback = lambda: True
+_show_window_callback = lambda: None
 
 app = Flask(__name__)
 _atlas_migration = AtlasMigrationService()
@@ -2520,17 +2521,22 @@ def _exec_error_code_entry(step, put, task_id=None):
     """录入错误码：从翻译文件读取错误码翻译，按语言写入各 ErrorMessage.xlsm"""
     import re as _re
 
+    def _fail(msg):
+        put(msg)
+        _show_window_callback()
+        return False
+
     translation_file = step.get("translation_file", "").strip()
     target_path = step.get("target_path", "").strip()
     if not translation_file or not os.path.isfile(translation_file):
-        put(f"翻译文件无效: {translation_file}\n"); return False
+        return _fail(f"翻译文件无效: {translation_file}\n")
     if not target_path:
-        put("未指定目标路径\n"); return False
+        return _fail("未指定目标路径\n")
 
     # 解析 Language 目录（复用导出错误码逻辑）
     lang_dir = _merge_error_code_resolve_lang(target_path)
     if not lang_dir:
-        put(f"无法在 {target_path} 下找到 Language 目录\n"); return False
+        return _fail(f"无法在 {target_path} 下找到 Language 目录\n")
 
     put(f"{'='*50}\n")
     put("录入错误码\n")
@@ -2544,7 +2550,7 @@ def _exec_error_code_entry(step, put, task_id=None):
     all_rows = list(ws.iter_rows(values_only=True))
     wb.close()
     if len(all_rows) < 2:
-        put("翻译文件无数据\n"); return False
+        return _fail("翻译文件无数据\n")
 
     headers = [str(c or "").strip() for c in all_rows[0]]
     # 提取语言列（排除 ::ID:: 和 ::SC::）
@@ -2773,6 +2779,10 @@ def _exec_error_code_entry(step, put, task_id=None):
                 break
 
         put(f"\n导出完成: {ok_count}/{len(codes)}\n")
+        if ok_count != len(codes):
+            _show_window_callback()
+            _notify_task_done("录入错误码")
+            return False
         if ok_count > 0 and upload_dirs:
             _exec_upload_svn({"dirs": upload_dirs}, put, task_id)
     else:

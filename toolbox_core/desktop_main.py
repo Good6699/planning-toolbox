@@ -761,6 +761,7 @@ def _start_flask():
     _wa._quit_app_callback = _quit_app
     _wa._hide_window_callback = _hide_main_window
     _wa._is_window_visible_callback = _is_main_window_visible
+    _wa._show_window_callback = lambda: _show_window(None, None)
     from werkzeug.serving import make_server
     _flask_server = make_server("127.0.0.1", 18123, app, threaded=True)
     _flask_server.serve_forever()

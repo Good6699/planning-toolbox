@@ -465,6 +465,7 @@ function buildWorkflowTab(panel) {
       error_code_entry: `
         ${_fb("翻译文件","translation_file","wf_m_ece_input","file",false,"输入包含错误码翻译的 Excel 文件路径")}
         ${_fb("目标路径","target_path","wf_m_ece_target","dir",false,"输入 gameData 所在目录（自动找 Language 子目录）")}
+        <div class="form-group"><label>导出语言</label><input type="text" class="wf-modal-input" id="wf_m_ece_lang" data-key="lang_codes" value="${v("lang_codes")}" placeholder="输入语言代码，多个用逗号分隔，留空导出全部"></div>
         ${_fb("导出SVN路径（逗号分隔）","upload_svn_dir","wf_m_ece_upload","dir",true,"输入导出后要上传的本地SVN路径，多个用逗号分隔")}`,
     };
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';

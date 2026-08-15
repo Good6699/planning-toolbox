@@ -2711,12 +2711,16 @@ def _exec_error_code_entry(step, put, task_id=None):
 
     if upload_dirs:
         put("\n开始导出错误码...\n")
-        # 收集已处理的语言目录名
-        processed_codes = [dir_name for _, _, dir_name, _ in lang_tasks]
+        # 优先用设置的语言列表，否则用已录入的语言
+        raw_codes = step.get("lang_codes", "").strip()
+        if raw_codes:
+            export_codes = raw_codes
+        else:
+            export_codes = ",".join(dir_name for _, _, dir_name, _ in lang_tasks)
         gamedata_dir = os.path.dirname(lang_dir)
         export_ok = _exec_export_error_code({
             "root_dir": gamedata_dir,
-            "lang_codes": ",".join(processed_codes),
+            "lang_codes": export_codes,
             "upload_svn_dir": upload_dirs,
         }, put, task_id)
         if not export_ok:

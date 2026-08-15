@@ -2684,9 +2684,9 @@ def _exec_error_code_entry(step, put, task_id=None):
                     ec_ws.cell(row=end_row, column=1, value="0")
                     end_row += 1
                     inserted += 1
-            # 所有插入完成后，在最后一行写 END
+            # 所有插入完成后，END 写在最后一条数据行上
             if inserted > 0:
-                ec_ws.cell(row=end_row, column=1, value="END")
+                ec_ws.cell(row=end_row - 1, column=1, value="END")
 
             if updated == 0 and inserted == 0:
                 ec_wb.close()

@@ -2588,6 +2588,13 @@ def _exec_error_code_entry(step, put, task_id=None):
             continue
         lang_tasks.append((col_idx, lang_name, matched_dir, os.path.join(lang_dir, matched_dir)))
 
+    # 如果设置了导出语言，只保留指定的语言
+    filter_codes = step.get("lang_codes", "").strip()
+    if filter_codes:
+        allowed = {c.strip().upper() for c in filter_codes.split(",") if c.strip()}
+        lang_tasks = [(ci, ln, dn, dp) for ci, ln, dn, dp in lang_tasks if dn.upper() in allowed]
+        put(f"按设置筛选导出语言: {filter_codes}\n")
+
     put(f"识别到 {len(lang_tasks)} 种语言\n")
     for _, ln, dn, _ in lang_tasks:
         put(f"  {ln} → {dn}\n")

@@ -318,6 +318,33 @@ code{padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.3);color:#c8d8ff;f
           <tr><td>执行</td><td>svn update 目标 → 复制文件 → svn add → 弹出 TortoiseSVN 提交</td></tr>
         </tbody>
       </table>
+      <h3 style="margin:12px 0 6px;font-size:14px">录入错误码</h3>
+      <div class="flow">
+        <span class="step">选翻译文件</span>
+        <span class="step">填目标路径</span>
+        <span class="step">设语言/提交路径</span>
+        <span class="step">执行</span>
+      </div>
+      <table>
+        <thead><tr><th>设置</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>翻译文件</td><td>包含错误码翻译的 Excel，第1列 ID（纯数字为错误码），每列一种语言（<code>::EN::</code> 等）</td></tr>
+          <tr><td>目标路径</td><td>gameData 所在目录，自动找 Language 子目录</td></tr>
+          <tr><td>语言代码</td><td>筛选录入和导出的语言，留空自动匹配所有语言</td></tr>
+          <tr><td>上传SVN路径</td><td>导出后弹 TortoiseSVN 提交的路径，多个用逗号分隔</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>语言匹配</td><td>用翻译页签的语言ID映射自动匹配列头到语言目录（如 <code>::EN::</code> → EN_US）</td></tr>
+          <tr><td>已有 ID</td><td>覆盖 ErrorMessage.xlsm 的 ErrorString 列</td></tr>
+          <tr><td>新 ID</td><td>在 END 标记行插入数据，END 移到最后一条数据行上</td></tr>
+          <tr><td>保存</td><td>openpyxl 保存后用 Excel/WPS COM 重写，确保格式完整</td></tr>
+          <tr><td>导出</td><td>完全复用导出错误码步骤流程（ExcelTool2.exe + erlang 导出）</td></tr>
+          <tr><td>失败</td><td>弹出应用窗口，阻断后续步骤</td></tr>
+        </tbody>
+      </table>
     </section>
 
     <!-- 更新 -->

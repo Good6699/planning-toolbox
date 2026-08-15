@@ -2716,7 +2716,7 @@ def _exec_error_code_entry(step, put, task_id=None):
     put(f"\n{'─'*40}\n")
     put(f"录入完成：更新 {total_updated} 条，新增 {total_inserted} 条\n")
 
-    # 自动导出错误码（直接调用 客户端单个导出2.bat）
+    # 自动导出错误码（完全复用导出错误码步骤流程）
     raw_codes = step.get("lang_codes", "").strip()
     raw_upload = step.get("upload_svn_dir", "")
     if isinstance(raw_upload, list):
@@ -2726,85 +2726,18 @@ def _exec_error_code_entry(step, put, task_id=None):
 
     if raw_codes and upload_dirs:
         put("\n开始导出错误码...\n")
-        from exceltool_export import (
-            _wait_for_window, _send_drop, _wait_for_check_result,
-            _click, _wait_for_result, _close, SW_SHOWNOACTIVATE,
-            _user32,
-        )
-        codes = [c.strip() for c in raw_codes.split(",") if c.strip()]
-        ok_count = 0
-        for code in codes:
-            lang_path = os.path.join(lang_dir, code)
-            tool = os.path.join(lang_path, "ExcelTool2.exe")
-            xlsm_file = os.path.join(lang_path, "Data2", "ErrorMessage.xlsm")
-            if not os.path.isfile(tool):
-                put(f"  [{code}] 找不到: ExcelTool2.exe\n")
-                continue
-            if not os.path.isfile(xlsm_file):
-                put(f"  [{code}] 找不到: Data2\\ErrorMessage.xlsm\n")
-                continue
-            put(f"  [{code}] 导出中...\n")
-            proc = None
-            try:
-                si = subprocess.STARTUPINFO()
-                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                si.wShowWindow = SW_SHOWNOACTIVATE
-                proc = subprocess.Popen([tool], cwd=lang_path, startupinfo=si)
-                hwnd, list_hwnd, log_hwnd, export_hwnd = _wait_for_window(proc, 15, lambda: False)
-                _send_drop(hwnd, [xlsm_file])
-                _wait_for_check_result(proc, 60, lambda: False, put)
-                deadline = time.time() + 30
-                while time.time() < deadline:
-                    if proc.poll() is not None:
-                        raise RuntimeError("ExcelTool2 退出")
-                    if _user32.SendMessageW(list_hwnd, 0x1004, 0, 0) >= 1:
-                        break
-                    time.sleep(0.2)
-                else:
-                    raise RuntimeError("ExcelTool2 未接收文件")
-                _click(export_hwnd)
-                _wait_for_result(proc, log_hwnd, 3600, lambda: False, put)
-                _close(proc, hwnd, 15)
-                put(f"  [{code}] 客户端导出成功\n")
-                # 服务端导出(erlang)，同导出错误码步骤
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                erl_script = os.path.join(script_dir, "..", "_export_error_code_erl.py")
-                _pm_path = os.path.join(script_dir, "py_modules")
-                _erl_env = {**os.environ, "PYTHONPATH": _pm_path} if os.path.isdir(_pm_path) else None
-                r_erl = subprocess.run(
-                    [sys.executable, erl_script, "--xlsm", xlsm_file, "--lang-dir", lang_path],
-                    capture_output=True,
-                    encoding=locale.getpreferredencoding(), errors="replace",
-                    timeout=60, env=_erl_env,
-                    **_get_subprocess_kwargs()
-                )
-                if r_erl.returncode == 0:
-                    for line in (r_erl.stdout or "").strip().split("\n"):
-                        if line.strip():
-                            put("    " + line.strip() + "\n")
-                    put(f"  [{code}] erlang 导出成功\n")
-                    ok_count += 1
-                else:
-                    err = (r_erl.stderr or r_erl.stdout or "").strip()[:1000]
-                    put(f"  [{code}] erlang 导出失败: {err}\n")
-                    raise RuntimeError("erlang 导出失败")
-            except Exception as e:
-                put(f"  [{code}] 导出失败: {e}\n")
-                if proc and proc.poll() is None:
-                    try:
-                        proc.kill()
-                    except Exception:
-                        pass
-                put("导出失败，阻断后续语言\n")
-                break
-
-        put(f"\n导出完成: {ok_count}/{len(codes)}\n")
-        if ok_count != len(codes):
+        gamedata_dir = os.path.dirname(lang_dir)
+        export_step = {
+            "root_dir": gamedata_dir,
+            "lang_codes": raw_codes,
+            "upload_svn_dir": upload_dirs,
+        }
+        export_ok = _exec_export_error_code(export_step, put, task_id)
+        if not export_ok:
+            put("⚠ 导出错误码失败\n")
             _show_window_callback()
             _notify_task_done("录入错误码")
             return False
-        if ok_count > 0 and upload_dirs:
-            _exec_upload_svn({"dirs": upload_dirs}, put, task_id)
     else:
         if not raw_codes:
             put("\n未设置语言代码，跳过导出\n")

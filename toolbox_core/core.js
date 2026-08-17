@@ -3277,6 +3277,11 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   switchTab("svn");
 
+  fetch("/api/version").then(r => r.json()).then(d => {
+    const el = document.getElementById("app_version");
+    if (el && d.version) el.textContent = d.version;
+  }).catch(() => {});
+
   setTimeout(checkZoom, 300);
 
   await _afterPaint();

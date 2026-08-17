@@ -588,10 +588,21 @@ def _force_kill_old_instance():
 
     for pid in pids:
         try:
-            _sp.run(["taskkill", "/f", "/pid", pid],
+            # /t 必须：连同子进程树一起杀（msedgewebview2.exe 等），
+            # 否则残留的 WebView2 进程持有用户数据目录锁，新实例启动会卡在页面加载
+            _sp.run(["taskkill", "/f", "/t", "/pid", pid],
                     capture_output=True, timeout=5, **_kw)
         except Exception:
             pass
+
+    # 3. 补充清理残留的 WebView2 进程（旧 python 已退出但 msedgewebview2.exe 孤儿残留时，
+    #    端口扫描找不到它们；它们持有用户数据目录锁导致新实例 WebView2 启动卡死）
+    #    msedgewebview2.exe 仅由嵌入 WebView2 的应用使用（普通 Edge 是 msedge.exe），杀它安全
+    try:
+        _sp.run(["taskkill", "/f", "/im", "msedgewebview2.exe"],
+                capture_output=True, timeout=5, **_kw)
+    except Exception:
+        pass
     # 强制杀死后主动删除旧托盘图标（HWND 可能已失效，但 NIM_DELETE 仍可能被 Explorer 处理）
     try:
         old_hwnd2 = ctypes.windll.user32.FindWindowW("PlanningToolboxTrayWindow", None)

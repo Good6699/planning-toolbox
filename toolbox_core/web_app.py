@@ -5429,6 +5429,12 @@ def api_log_stream(task_id):
 # 更新检查 API
 # ═══════════════════════════════════════════════════════════
 
+@app.route("/api/version")
+def api_version():
+    from update_version import APP_VERSION
+    return jsonify({"version": APP_VERSION})
+
+
 @app.route("/api/update/check")
 def api_update_check():
     from update_version import APP_VERSION, UPDATE_URL

@@ -112,6 +112,13 @@ button,input,textarea,select{
   color:var(--dim);
   font-size:11px;
 }
+.logo span .app-version{
+  margin-left:6px;
+  font-size:10px;
+  color:var(--accent);
+  opacity:.8;
+  vertical-align:middle;
+}
 .nav{
   display:flex;
   flex-direction:column;
@@ -2723,7 +2730,7 @@ body.app-ready .startup-splash{
       </div>
       <div id="help_btn" title="查看交互说明" style="cursor:pointer">
         <h1>策划工具箱 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;vertical-align:middle;color:var(--accent)"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></h1>
-        <span>Game Pipeline Toolkit</span>
+        <span>Game Pipeline Toolkit<span class="app-version" id="app_version"></span></span>
       </div>
     </div>
     <nav class="nav" id="sidebar_nav"></nav>

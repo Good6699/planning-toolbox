@@ -105,136 +105,8 @@ _window_visible = True
 _force_close = False
 _docker = None
 _is_dragging = False
-_splash_hwnd = None
-_splash_progress = 0
-_splash_text = "初始化中..."
-_splash_ready = threading.Event()
-_splash_root = None
-_splash_should_close = False
-
 WS_EX_TOOLWINDOW = 0x80
 WS_EX_APPWINDOW = 0x40000
-
-
-def _native_splash_proc(hwnd, msg, wparam, lparam):
-    global _splash_hwnd
-    if msg == win32con.WM_PAINT:
-        hdc, ps = win32gui.BeginPaint(hwnd)
-        try:
-            rect = win32gui.GetClientRect(hwnd)
-            bg = win32gui.CreateSolidBrush(win32api.RGB(15, 17, 21))
-            panel = win32gui.CreateSolidBrush(win32api.RGB(23, 27, 36))
-            bar = win32gui.CreateSolidBrush(win32api.RGB(94, 162, 255))
-            try:
-                win32gui.FillRect(hdc, rect, bg)
-                w = rect[2] - rect[0]
-                h = rect[3] - rect[1]
-                cx = w // 2
-                win32gui.SetBkMode(hdc, win32con.TRANSPARENT)
-                title_font = win32gui.CreateFont(30, 0, 0, 0, 700, 0, 0, 0, win32con.DEFAULT_CHARSET, 0, 0, 0, 0, "Microsoft YaHei UI")
-                sub_font = win32gui.CreateFont(13, 0, 0, 0, 500, 0, 0, 0, win32con.DEFAULT_CHARSET, 0, 0, 0, 0, "Microsoft YaHei UI")
-                small_font = win32gui.CreateFont(11, 0, 0, 0, 500, 0, 0, 0, win32con.DEFAULT_CHARSET, 0, 0, 0, 0, "Microsoft YaHei UI")
-                try:
-                    logo_rect = (cx - 50, h // 2 - 120, cx + 50, h // 2 - 20)
-                    win32gui.FillRect(hdc, logo_rect, panel)
-                    old = win32gui.SelectObject(hdc, title_font)
-                    win32gui.SetTextColor(hdc, win32api.RGB(242, 245, 255))
-                    win32gui.DrawText(hdc, "策划工具箱", -1, (0, h // 2, w, h // 2 + 42), win32con.DT_CENTER | win32con.DT_SINGLELINE)
-                    win32gui.SelectObject(hdc, sub_font)
-                    win32gui.SetTextColor(hdc, win32api.RGB(139, 150, 173))
-                    win32gui.DrawText(hdc, "Game Pipeline Toolkit", -1, (0, h // 2 + 44, w, h // 2 + 70), win32con.DT_CENTER | win32con.DT_SINGLELINE)
-                    win32gui.SelectObject(hdc, small_font)
-                    win32gui.DrawText(hdc, _splash_text, -1, (0, h - 96, w, h - 70), win32con.DT_CENTER | win32con.DT_SINGLELINE)
-                    bar_rect = (cx - 400, h - 64, cx + 400, h - 55)
-                    win32gui.FillRect(hdc, bar_rect, bg)
-                    fill_w = int(800 * max(0, min(100, _splash_progress)) / 100)
-                    if fill_w > 0:
-                        win32gui.FillRect(hdc, (bar_rect[0], bar_rect[1], bar_rect[0] + fill_w, bar_rect[3]), bar)
-                    win32gui.SetTextColor(hdc, win32api.RGB(95, 107, 128))
-                    win32gui.DrawText(hdc, f"{_splash_progress}%", -1, (0, h - 48, w, h - 24), win32con.DT_CENTER | win32con.DT_SINGLELINE)
-                    win32gui.SelectObject(hdc, old)
-                finally:
-                    win32gui.DeleteObject(title_font)
-                    win32gui.DeleteObject(sub_font)
-                    win32gui.DeleteObject(small_font)
-            finally:
-                win32gui.DeleteObject(bg)
-                win32gui.DeleteObject(panel)
-                win32gui.DeleteObject(bar)
-        finally:
-            win32gui.EndPaint(hwnd, ps)
-        return 0
-    if msg == win32con.WM_CLOSE:
-        win32gui.DestroyWindow(hwnd)
-        return 0
-    if msg == win32con.WM_DESTROY:
-        _splash_hwnd = None
-        win32gui.PostQuitMessage(0)
-        return 0
-    return win32gui.DefWindowProc(hwnd, msg, wparam, lparam)
-
-
-def _show_native_splash(x, y, w, h):
-    def _run():
-        global _splash_hwnd, _splash_root, _splash_should_close
-        import tkinter as tk
-        _splash_should_close = False
-        root = tk.Tk()
-        _splash_root = root
-        root.withdraw()
-        root.overrideredirect(True)
-        root.configure(bg="#0f1115")
-        root.geometry(f"{w}x{h}+{x}+{y}")
-        root.attributes("-topmost", True)
-        try:
-            root.attributes("-toolwindow", True)
-        except Exception:
-            pass
-        canvas = tk.Canvas(root, width=w, height=h, bg="#0f1115", highlightthickness=0, bd=0)
-        canvas.pack(fill="both", expand=True)
-        cx = w // 2
-        logo_top = h // 2 - 120
-        canvas.create_rectangle(cx - 50, logo_top, cx + 50, logo_top + 100, fill="#171b24", outline="#2a3142", width=1)
-        canvas.create_text(cx, logo_top + 50, text="◇", fill="#5ea2ff", font=("Microsoft YaHei UI", 46, "bold"))
-        canvas.create_text(cx, h // 2 + 20, text="策划工具箱", fill="#f2f5ff", font=("Microsoft YaHei UI", 30, "bold"))
-        canvas.create_text(cx, h // 2 + 62, text="Game Pipeline Toolkit", fill="#8b96ad", font=("Segoe UI", 13))
-        text_id = canvas.create_text(cx, h - 86, text=_splash_text, fill="#8b96ad", font=("Microsoft YaHei UI", 11))
-        bar_x = cx - 400
-        bar_y = h - 64
-        canvas.create_rectangle(bar_x, bar_y, bar_x + 800, bar_y + 9, fill="#151821", outline="")
-        fill_id = canvas.create_rectangle(bar_x, bar_y, bar_x, bar_y + 9, fill="#5ea2ff", outline="")
-        pct_id = canvas.create_text(cx, h - 38, text="0%", fill="#5f6b80", font=("Segoe UI", 11))
-
-        def _tick():
-            if _splash_should_close:
-                root.destroy()
-                return
-            pct = max(0, min(100, int(_splash_progress)))
-            canvas.itemconfigure(text_id, text=_splash_text)
-            canvas.coords(fill_id, bar_x, bar_y, bar_x + int(800 * pct / 100), bar_y + 9)
-            canvas.itemconfigure(pct_id, text=f"{pct}%")
-            root.after(80, _tick)
-
-        root.update_idletasks()
-        _splash_hwnd = root.winfo_id()
-        _splash_ready.set()
-        root.deiconify()
-        root.after(80, _tick)
-        root.mainloop()
-    _splash_ready.clear()
-    threading.Thread(target=_run, daemon=True).start()
-    _splash_ready.wait(timeout=2)
-
-
-def _set_native_splash(pct, text):
-    global _splash_progress, _splash_text
-    _splash_progress = int(pct)
-    _splash_text = text
-
-
-def _close_native_splash():
-    global _splash_should_close
-    _splash_should_close = True
 
 
 def _hwnd_belongs_to_current_process(hwnd):
@@ -685,12 +557,12 @@ def _force_kill_old_instance():
         old_hwnd = ctypes.windll.user32.FindWindowW("PlanningToolboxTrayWindow", None)
         if old_hwnd:
             ctypes.windll.user32.PostMessageW(old_hwnd, 0x12, 0, 0)  # WM_QUIT
-            _time.sleep(0.3)
+            _time.sleep(0.15)
     except Exception:
         pass
 
+    # 1. 扫端口 18124（实例锁）和 18123（Flask），收集旧 PID（主机制，netstat 快）
     try:
-        # 1. 扫端口 18124（实例锁）和 18123（Flask），收集旧 PID
         r = _sp.run(["netstat", "-ano"], capture_output=True, text=True, timeout=5, **_kw)
         for line in r.stdout.splitlines():
             if ("18124" in line or "18123" in line) and "LISTENING" in line:
@@ -702,16 +574,17 @@ def _force_kill_old_instance():
     except Exception:
         pass
 
-    # 2. 按 exe 名搜同类进程（兜底，同名但端口可能不同的情况）
-    try:
-        r = _sp.run(["tasklist", "/fi", "IMAGENAME eq 策划工具箱.exe", "/fo", "csv", "/nh"],
-                    capture_output=True, text=True, timeout=5, **_kw)
-        for line in r.stdout.splitlines():
-            parts = line.strip().strip('"').split('","')
-            if len(parts) >= 2 and parts[1].isdigit() and parts[1] != _my_pid:
-                pids.add(parts[1])
-    except Exception:
-        pass
+    # 2. 端口没找到旧实例时按托盘窗口类名查进程（僵尸实例不占端口的情况，比 tasklist 快得多）
+    if not pids:
+        try:
+            old_hwnd3 = ctypes.windll.user32.FindWindowW("PlanningToolboxTrayWindow", None)
+            if old_hwnd3:
+                pid = ctypes.wintypes.DWORD()
+                ctypes.windll.user32.GetWindowThreadProcessId(old_hwnd3, ctypes.byref(pid))
+                if pid.value and str(pid.value) != _my_pid:
+                    pids.add(str(pid.value))
+        except Exception:
+            pass
 
     for pid in pids:
         try:
@@ -727,7 +600,7 @@ def _force_kill_old_instance():
             Shell_NotifyIcon(NIM_DELETE, (old_hwnd2, 1, 0, 0, 0, ""))
     except Exception:
         pass
-    _time.sleep(0.3)
+    _time.sleep(0.15)
 
 
 def _acquire_instance_lock():
@@ -813,6 +686,12 @@ def _quit_app():
     _force_close = True
     _save_window_rect()
     _stop_flask()
+    # 退出前杀掉所有已注册的子进程（svn/导出 bat/erlang 等），防止残留
+    try:
+        import web_app as _wa
+        _wa._kill_all_subprocesses()
+    except Exception:
+        pass
     if _tray_icon:
         try:
             # 发 WM_QUIT 让托盘线程的消息循环退出
@@ -1283,7 +1162,6 @@ def _init_dnd(window):
 
 
 def _set_progress(window, pct, text):
-    _set_native_splash(pct, text)
     try:
         window.evaluate_js(
             f"var e=document.getElementById('sbar');if(e)e.style.width='{pct}%';"
@@ -1439,7 +1317,6 @@ def main():
     try:
         webview.start(_boot_app, window, debug=False)
     finally:
-        _close_native_splash()
         _stop_flask()
         if _tray_icon:
             try:

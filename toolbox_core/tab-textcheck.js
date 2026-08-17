@@ -105,6 +105,16 @@ async function runTextCheck() {
         if (/\[error\]/.test(raw)) _focusAppOnError("textcheck", logEl);
       }
     };
+    evtSrc.onerror = () => {
+      evtSrc.close();
+      window._esTc = null;
+      _tcDone();
+      const div = document.createElement("div");
+      div.className = "warn";
+      div.textContent = "⚠ 日志连接中断";
+      _logAppend(logEl, div);
+      _focusAppOnError("textcheck", logEl);
+    };
   } catch (err) {
     if (btn.dataset.taskId) { btn.dataset.taskId = ''; btn.classList.remove("stop"); btn.innerHTML = btn.dataset.orig; }
     const div = document.createElement("div");

@@ -660,6 +660,7 @@ const _URL_TAB = {
   "/api/prefab/clear-text":"prefab", "/api/prefab/atlas/copy":"prefab",
 
   "/api/prefab/atlas/resolve":"prefab", "/api/prefab/atlas/rewrite":"prefab",
+  "/api/prefab/font-scan":"prefab", "/api/prefab/font-modify":"prefab",
 };
 
 

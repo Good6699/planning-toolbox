@@ -679,22 +679,19 @@ function buildPrefabTab(panel) {
   var fontScanData = null;
   var fontScanPaths = [];
 
-  function _fontLog(msg) {
-    var el = panel.querySelector("#font_log");
-    if (!el) return;
-    var anchor = el.querySelector(".log-anchor");
-    var line = document.createElement("div");
-    var ts = new Date().toLocaleTimeString("zh-CN", {hour12: false});
-    line.innerHTML = '<span class="ts">' + ts + '</span> ' + escapeHtml(msg);
-    el.insertBefore(line, anchor);
-    el.scrollTop = el.scrollHeight;
-  }
-
   function _clearFontLog() {
     var el = panel.querySelector("#font_log");
     if (!el) return;
     var anchor = el.querySelector(".log-anchor");
     while (el.firstChild && el.firstChild !== anchor) el.removeChild(el.firstChild);
+  }
+
+  function _syncDropDisabled() {
+    var dropInput = panel.querySelector("#prefab_drop_input");
+    if (dropInput) dropInput.disabled = state.busy;
+    panel.querySelectorAll("[data-action='set-prefab-mode']").forEach(function(button) { button.disabled = state.busy; });
+    var browseDirButton = panel.querySelector("[data-action='browse-prefab-dir']");
+    if (browseDirButton) browseDirButton.disabled = state.busy;
   }
 
   function _clearAtlasLog() {
@@ -706,28 +703,25 @@ function buildPrefabTab(panel) {
 
   function scanFonts(paths) {
     if (state.busy) return;
-    var requestGeneration = ++state.requestGeneration;
+    var gen = ++state.requestGeneration;
     state.busy = true;
     fontScanPaths = paths;
-    _incRunning();
-    _incTabRunning("prefab");
     _clearFontLog();
-    _fontLog("开始扫描字体引用...");
-    apiPost("/api/prefab/font-scan", {paths:paths}).then(function(data) {
-      if (requestGeneration !== state.requestGeneration) return;
-      fontScanData = data;
-      renderFontList();
-      _fontLog("扫描完成，共 " + data.total_prefabs + " 个预制，发现 " + data.fonts.length + " 种字体");
-    }).catch(function(error) {
-      if (requestGeneration !== state.requestGeneration) return;
-      fontScanData = null;
-      _fontLog("扫描失败：" + error.message);
-      _showToast("字体扫描失败：" + error.message);
-    }).finally(function() {
-      if (requestGeneration !== state.requestGeneration) return;
-      state.busy = false;
-      _decRunning();
-      _decTabRunning("prefab");
+    runTask("/api/prefab/font-scan", {paths:paths}, null, "font_log", null, function(outputPath, taskId) {
+      if (gen !== state.requestGeneration) { state.busy = false; _syncDropDisabled(); return; }
+      if (!taskId) { state.busy = false; _syncDropDisabled(); return; }
+      apiPost("/api/prefab/font-result", {task_id:taskId}).then(function(data) {
+        if (gen !== state.requestGeneration) return;
+        fontScanData = data;
+        renderFontList();
+      }).catch(function(error) {
+        if (gen !== state.requestGeneration) return;
+        fontScanData = null;
+        _showToast("字体扫描失败：" + error.message);
+      }).finally(function() {
+        state.busy = false;
+        _syncDropDisabled();
+      });
     });
   }
 
@@ -804,27 +798,22 @@ function buildPrefabTab(panel) {
 
   function fontExecute(changes) {
     if (state.busy) return;
-    var requestGeneration = ++state.requestGeneration;
+    var gen = ++state.requestGeneration;
     state.busy = true;
-    _incRunning();
-    _incTabRunning("prefab");
     _clearFontLog();
-    var logEl = panel.querySelector("#font_log");
-    if (logEl) setTimeout(function() { logEl.scrollIntoView({behavior:"smooth", block:"nearest"}); }, 100);
-    _fontLog("开始修改字体引用...");
-    apiPost("/api/prefab/font-modify", {paths:fontScanPaths, changes:changes}).then(function(data) {
-      if (requestGeneration !== state.requestGeneration) return;
-      _fontLog("修改完成，共修改 " + data.total + " 个文件");
-      _showToast("修改完成，共修改 " + data.total + " 个文件");
-    }).catch(function(error) {
-      if (requestGeneration !== state.requestGeneration) return;
-      _fontLog("修改失败：" + error.message);
-      _showToast("字体修改失败：" + error.message);
-    }).finally(function() {
-      if (requestGeneration !== state.requestGeneration) return;
-      state.busy = false;
-      _decRunning();
-      _decTabRunning("prefab");
+    runTask("/api/prefab/font-modify", {paths:fontScanPaths, changes:changes}, null, "font_log", null, function(outputPath, taskId) {
+      if (gen !== state.requestGeneration) { state.busy = false; return; }
+      if (!taskId) { state.busy = false; return; }
+      apiPost("/api/prefab/font-result", {task_id:taskId}).then(function(data) {
+        if (gen !== state.requestGeneration) return;
+        _showToast("修改完成，共修改 " + data.total + " 个文件");
+      }).catch(function(error) {
+        if (gen !== state.requestGeneration) return;
+        _showToast("字体修改失败：" + error.message);
+      }).finally(function() {
+        state.busy = false;
+        _syncDropDisabled();
+      });
     });
   }
 

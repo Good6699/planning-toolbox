@@ -622,6 +622,16 @@ async function runMergeQuery() {
         if (/\[error\]/.test(raw)) _focusAppOnError("merge", logEl);
       }
     };
+    evtSrc.onerror = () => {
+      evtSrc.close();
+      if (window._esMergeQ === evtSrc) window._esMergeQ = null;
+      _mergeDone();
+      const div = document.createElement("div");
+      div.className = "warn";
+      div.textContent = "⚠ 日志连接中断";
+      _logAppend(logEl, div);
+      _focusAppOnError("merge", logEl);
+    };
   } catch (err) {
     if (btn.dataset.taskId) { btn.dataset.taskId = ''; btn.classList.remove("stop"); btn.innerHTML = btn.dataset.orig; }
     _decRunning();
@@ -723,6 +733,16 @@ async function runMergeAnalysis() {
       }
       _mergeAnaLogPush(e.data);
     };
+    evtSrc.onerror = () => {
+      evtSrc.close();
+      window._esMergeAna = null;
+      _mergeAnaDone();
+      const div = document.createElement("div");
+      div.className = "warn";
+      div.textContent = "⚠ 日志连接中断";
+      _logAppend(logEl, div);
+      _focusAppOnError("merge", logEl);
+    };
   } catch (err) {
     if (btn.dataset.taskId) { btn.dataset.taskId = ''; btn.classList.remove("stop"); btn.innerHTML = btn.dataset.orig; }
     _decRunning();
@@ -809,6 +829,16 @@ async function runMergeRun() {
         _logAppend(logEl, div);
         if (/\[error\]/.test(raw)) _focusAppOnError("merge", logEl);
       }
+    };
+    evtSrc.onerror = () => {
+      evtSrc.close();
+      window._esMergeRun = null;
+      _mergeRunDone();
+      const div = document.createElement("div");
+      div.className = "warn";
+      div.textContent = "⚠ 日志连接中断";
+      _logAppend(logEl, div);
+      _focusAppOnError("merge", logEl);
     };
   } catch (err) {
     logEl.innerHTML = '<span class="error">❌ 请求失败: '+escapeHtml(err.message)+'</span>';

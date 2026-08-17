@@ -122,6 +122,8 @@ def _no_cache(response):
 
 # ── SSE 日志流 ───────────────────────────────────────────
 _log_queues = {}  # task_id -> queue.Queue
+_font_results = {}  # task_id -> {"fonts": [...]} or {"modified_files": [...]} or {"error": ...}
+_font_ts = {}  # task_id -> time.time() 结果时间戳，用于 TTL 清理
 
 
 def _get_next_task_id():
@@ -174,14 +176,23 @@ def _unregister_proc(proc, task_id=None):
                 del _active_tasks[task_id]
 
 
-def _handle_shutdown(signum, frame):
+def _kill_all_subprocesses():
+    """杀掉所有已注册的子进程（应用退出前调用）"""
     with _procs_lock:
-        for proc in list(_active_subprocesses):
-            try:
-                proc.kill()
-                proc.communicate(timeout=5)
-            except Exception:
-                pass
+        procs = list(_active_subprocesses)
+    for proc in procs:
+        try:
+            proc.kill()
+            proc.communicate(timeout=5)
+        except Exception:
+            pass
+    with _procs_lock:
+        _active_subprocesses.clear()
+        _active_tasks.clear()
+
+
+def _handle_shutdown(signum, frame):
+    _kill_all_subprocesses()
     _log_queues.clear()
     sys.exit(0)
 
@@ -338,6 +349,7 @@ def _run_svn_task(q, svn_url, mode, start_date, end_date, keyword, author, outpu
     with _cancel_lock:
         _cancelled_tasks.discard(task_id)
     q.put(None)
+    _log_queues.pop(task_id, None)
 
 
 @app.route("/api/svn/run", methods=["POST"])
@@ -1287,26 +1299,39 @@ def _replace_line_spacing_for_font(content, font_guid, new_spacing):
 
 @app.route("/api/prefab/font-scan", methods=["POST"])
 def api_prefab_font_scan():
+    data = request.get_json(force=True)
+    paths = data.get("paths", [])
+    if not paths:
+        return jsonify({"error": "请选择预制文件或目录"}), 400
+    prefabs = _collect_prefabs(paths)
+    if not prefabs:
+        return jsonify({"error": "未找到 .prefab 文件"}), 400
+    project_root = _find_project_root(paths)
+    if not project_root:
+        return jsonify({"error": "无法确定项目根目录（需包含 Assets 目录）"}), 400
+    _prune_font_results()
+    task_id = _get_next_task_id()
+    q = queue.Queue()
+    _log_queues[task_id] = q
+    threading.Thread(target=_font_scan_worker, args=(prefabs, project_root, q, task_id), daemon=True).start()
+    return jsonify({"task_id": task_id})
+
+
+def _font_scan_worker(prefabs, project_root, q, task_id):
     try:
-        data = request.get_json(force=True)
-        paths = data.get("paths", [])
-        if not paths:
-            return jsonify({"error": "请选择预制文件或目录"}), 400
-        prefabs = _collect_prefabs(paths)
-        if not prefabs:
-            return jsonify({"error": "未找到 .prefab 文件"}), 400
-        project_root = _find_project_root(paths)
-        if not project_root:
-            return jsonify({"error": "无法确定项目根目录（需包含 Assets 目录）"}), 400
         assets_dir = os.path.join(project_root, "Assets")
+        q.put(f"开始扫描 {len(prefabs)} 个预制文件...\n")
         font_data = {}
-        for pf in prefabs:
+        for i, pf in enumerate(prefabs):
             guids = _extract_font_guids(pf)
             for guid in guids:
                 if guid not in font_data:
                     font_data[guid] = {"prefab_files": [], "ref_count": 0}
                 font_data[guid]["prefab_files"].append(os.path.basename(pf))
                 font_data[guid]["ref_count"] += 1
+            if (i + 1) % 50 == 0:
+                q.put(f"已扫描 {i + 1}/{len(prefabs)} 个预制...\n")
+        q.put(f"扫描完成，发现 {len(font_data)} 种字体，正在解析资源路径...\n")
         guid_map = _resolve_font_guids(assets_dir, set(font_data.keys()))
         fonts = []
         for guid, info in sorted(font_data.items(), key=lambda x: x[0]):
@@ -1319,49 +1344,101 @@ def api_prefab_font_scan():
                 "ref_count": info["ref_count"],
                 "prefab_files": sorted(set(info["prefab_files"])),
             })
-        _notify_task_done("字体检测")
-        return jsonify({
-            "fonts": fonts,
-            "total_prefabs": len(prefabs),
-        })
+        _font_results[task_id] = {"fonts": fonts, "total_prefabs": len(prefabs)}
+        _font_ts[task_id] = time.time()
+        q.put(f"共 {len(prefabs)} 个预制，发现 {len(fonts)} 种字体\n")
+        try:
+            _notify_task_done("字体检测")
+        except Exception:
+            pass
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 400
+        if task_id not in _font_results:
+            _font_results[task_id] = {"error": str(exc)}
+            _font_ts[task_id] = time.time()
+        q.put(f"[错误] {exc}\n")
+    finally:
+        q.put(None)
+        _log_queues.pop(task_id, None)
+
+
+@app.route("/api/prefab/font-result", methods=["POST"])
+def api_prefab_font_result():
+    data = request.get_json(force=True)
+    task_id = data.get("task_id", "")
+    _font_ts.pop(task_id, None)
+    result = _font_results.pop(task_id, None)
+    if result is None:
+        return jsonify({"error": "结果已过期或不存在"}), 404
+    if "error" in result:
+        return jsonify({"error": result["error"]}), 400
+    return jsonify(result)
+
+
+def _prune_font_results(max_age=600):
+    """清理超过 max_age 秒未被取走的字体任务结果，防止内存累积"""
+    now = time.time()
+    for tid in [t for t, ts in _font_ts.items() if now - ts > max_age]:
+        _font_ts.pop(tid, None)
+        _font_results.pop(tid, None)
 
 
 @app.route("/api/prefab/font-modify", methods=["POST"])
 def api_prefab_font_modify():
+    data = request.get_json(force=True)
+    paths = data.get("paths", [])
+    changes = data.get("changes", [])
+    if not changes:
+        return jsonify({"error": "没有需要修改的字体"}), 400
+    prefabs = _collect_prefabs(paths)
+    if not prefabs:
+        return jsonify({"error": "未找到 .prefab 文件"}), 400
+    project_root = _find_project_root(paths)
+    if not project_root:
+        return jsonify({"error": "无法确定项目根目录"}), 400
+    _prune_font_results()
+    task_id = _get_next_task_id()
+    q = queue.Queue()
+    _log_queues[task_id] = q
+    threading.Thread(target=_font_modify_worker, args=(prefabs, project_root, changes, q, task_id), daemon=True).start()
+    return jsonify({"task_id": task_id})
+
+
+def _font_modify_worker(prefabs, project_root, changes, q, task_id):
     try:
-        data = request.get_json(force=True)
-        paths = data.get("paths", [])
-        changes = data.get("changes", [])
-        if not changes:
-            return jsonify({"error": "没有需要修改的字体"}), 400
-        prefabs = _collect_prefabs(paths)
-        if not prefabs:
-            return jsonify({"error": "未找到 .prefab 文件"}), 400
-        project_root = _find_project_root(paths)
-        if not project_root:
-            return jsonify({"error": "无法确定项目根目录"}), 400
         assets_dir = os.path.join(project_root, "Assets")
+        q.put("正在构建字体名称索引...\n")
+        # 只索引字体资源（.ttf/.otf/.ttc 等），且只扫描字体目录（D3Fonts / Language）
+        _FONT_ASSET_EXTS = {".ttf", ".otf", ".ttc", ".otc", ".fontsettings", ".ttfasset"}
+        font_roots = [
+            os.path.join(assets_dir, "Resources", "UI", "D3Fonts"),
+            os.path.join(assets_dir, "Resources", "Language"),
+        ]
+        scanned_roots = [fr for fr in font_roots if os.path.isdir(fr)]
+        if not scanned_roots:
+            scanned_roots = [assets_dir]
         name_to_guid = {}
-        for root, dirs, files in os.walk(assets_dir):
-            dirs[:] = [d for d in dirs if d not in {"Library", "Temp", "obj", "Obj", "Plugin", "Plugins"}]
-            for f in files:
-                if not f.endswith(".meta"):
-                    continue
-                meta_path = os.path.join(root, f)
-                try:
-                    with open(meta_path, "rb") as mf:
-                        head = mf.read(200).decode("utf-8", errors="ignore")
-                    m = _META_GUID_RE.search(head)
-                    if m:
-                        asset_path = meta_path[:-5]
-                        rel = os.path.relpath(asset_path, assets_dir).replace("\\", "/")
-                        asset_name = os.path.basename(asset_path)
-                        name_to_guid[asset_name.lower()] = m.group(1)
-                        name_to_guid[rel.lower()] = m.group(1)
-                except Exception:
-                    continue
+        for scan_root in scanned_roots:
+            for root, dirs, files in os.walk(scan_root):
+                dirs[:] = [d for d in dirs if d not in {"Library", "Temp", "obj", "Obj", "Plugin", "Plugins"}]
+                for f in files:
+                    if not f.endswith(".meta"):
+                        continue
+                    asset_path = os.path.join(root, f[:-5])
+                    if os.path.splitext(asset_path)[1].lower() not in _FONT_ASSET_EXTS:
+                        continue
+                    meta_path = os.path.join(root, f)
+                    try:
+                        with open(meta_path, "rb") as mf:
+                            head = mf.read(200).decode("utf-8", errors="ignore")
+                        m = _META_GUID_RE.search(head)
+                        if m:
+                            rel = os.path.relpath(asset_path, assets_dir).replace("\\", "/")
+                            asset_name = os.path.basename(asset_path)
+                            name_to_guid[asset_name.lower()] = m.group(1)
+                            name_to_guid[rel.lower()] = m.group(1)
+                    except Exception:
+                        continue
+        q.put(f"字体索引完成，共 {len(name_to_guid)} 条\n")
         change_map = {}
         for c in changes:
             old_guid = c.get("old_guid", "")
@@ -1375,8 +1452,21 @@ def api_prefab_font_modify():
                 "new_font_name": new_font_name,
                 "line_spacing": str(line_spacing).strip(),
             }
+        # 只处理引用了目标字体的预制（用前端传入的 prefab_files 过滤）
+        prefab_files_by_change = set()
+        has_prefab_info = False
+        for c in changes:
+            pf_list = c.get("prefab_files") or []
+            if pf_list:
+                has_prefab_info = True
+                prefab_files_by_change.update(pf_list)
+        if has_prefab_info:
+            prefabs_to_process = [p for p in prefabs if os.path.basename(p) in prefab_files_by_change]
+        else:
+            prefabs_to_process = list(prefabs)
+        q.put(f"开始修改 {len(prefabs_to_process)} 个预制文件...\n")
         modified_files = []
-        for pf in prefabs:
+        for i, pf in enumerate(prefabs_to_process):
             try:
                 with open(pf, "r", encoding="utf-8") as f:
                     content = f.read()
@@ -1393,25 +1483,41 @@ def api_prefab_font_modify():
                     with open(pf, "w", encoding="utf-8") as f:
                         f.write(content)
                     modified_files.append(os.path.basename(pf))
+                    q.put(f"[修改] {os.path.basename(pf)}\n")
                 except Exception:
                     continue
-        _notify_task_done("字体修改")
-        return jsonify({
-            "modified_files": modified_files,
-            "total": len(modified_files),
-        })
+            if (i + 1) % 50 == 0:
+                q.put(f"已处理 {i + 1}/{len(prefabs_to_process)} 个预制...\n")
+        _font_results[task_id] = {"modified_files": modified_files, "total": len(modified_files)}
+        _font_ts[task_id] = time.time()
+        q.put(f"修改完成，共修改 {len(modified_files)} 个文件\n")
+        try:
+            _notify_task_done("字体修改")
+        except Exception:
+            pass
     except Exception as exc:
-        return jsonify({"error": str(exc)}), 400
+        if task_id not in _font_results:
+            _font_results[task_id] = {"error": str(exc)}
+            _font_ts[task_id] = time.time()
+        q.put(f"[错误] {exc}\n")
+    finally:
+        q.put(None)
+        _log_queues.pop(task_id, None)
 
 
 @app.route("/api/open-help", methods=["GET", "POST"])
 def api_open_help():
     cwd = os.getcwd()
-    # 优先找 toolbox_core 目录下
+    # 优先找 toolbox_core 目录下（开发模式）
     help_file = os.path.join(cwd, "toolbox_core", "策划工具箱_交互说明书.html")
     if not os.path.isfile(help_file):
         # 兜底：当前目录下
         help_file = os.path.join(cwd, "策划工具箱_交互说明书.html")
+    if not os.path.isfile(help_file):
+        # 打包模式：exe 同级目录（cwd 可能是 sys._MEIPASS）
+        if getattr(sys, 'frozen', False):
+            exe_dir = os.path.dirname(sys.executable)
+            help_file = os.path.join(exe_dir, "策划工具箱_交互说明书.html")
     if not os.path.isfile(help_file):
         return jsonify({"error": f"说明文件不存在: {help_file}"})
     try:
@@ -5315,7 +5421,8 @@ def api_log_stream(task_id):
                         mimetype="text/event-stream")
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["X-Accel-Buffering"] = "no"
-    response.headers["Connection"] = "keep-alive"
+    # Connection: close 防止 SSE 结束后连接被 WebView2 复用给后续 fetch 导致挂起
+    response.headers["Connection"] = "close"
     return response
 
 # ═══════════════════════════════════════════════════════════

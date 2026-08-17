@@ -4430,14 +4430,18 @@ def api_translate_run():  # noqa: C901
                 q.put(f"读取参考文件失败: {e}\n")
             return refs
 
+        # 语言名 -> ISO 语言代码（JSON 输出的键）
+        _LANG_CODE_MAP = {
+            "俄文": "ru", "印尼文": "id", "土耳其文": "tr", "德文": "de", "日文": "ja",
+            "法文": "fr", "泰文": "th", "简体中文": "zh", "繁体中文": "zh-tw",
+            "英文": "en", "葡萄牙文": "pt", "西班牙文": "es", "韩文": "ko",
+        }
+
         def _call_api(texts, tgt_names, refs_by_target, retries=5):
             user_parts = []
-            has_raw = any(r.get("__raw_text__") for r in refs_by_target.values() if r)
-            if has_raw:
-                for tgt in tgt_names:
-                    r = refs_by_target.get(tgt, {})
-                    if r.get("__raw_text__"):
-                        user_parts.append(f"参考内容 ({_clean(tgt)}):\n{r['__raw_text__']}")
+            raw_ref = refs_by_target.get("__raw__")
+            if raw_ref:
+                user_parts.append(f"参考翻译表（原文件内容，可直接参考对应条目）：\n{raw_ref}")
             else:
                 ref_parts = []
                 for tgt in tgt_names:
@@ -4448,16 +4452,24 @@ def api_translate_run():  # noqa: C901
                 if ref_parts:
                     user_parts.append("\n".join(ref_parts))
 
+            # 目标语言 -> 代码，生成 JSON 键说明（如 tr(土耳其文), de(德文)...）
+            tgt_codes = {}
+            for tgt in tgt_names:
+                code = _LANG_CODE_MAP.get(tgt, tgt.strip(":").lower()[:2])
+                tgt_codes[tgt] = code
+            code_desc = ", ".join(f"{c}({t})" for t, c in tgt_codes.items())
+
             protected_items = [_protect_translate_text(t) for t in texts]
-            numbered = [f"{i+1}|{item[0]}" for i, item in enumerate(protected_items)]
             placeholder_maps = [item[1] for item in protected_items]
+
             user_parts.append(
-                f"请将以下文本从 {clean_src} 一次性翻译为 {lang_display}。"
-                f"\n严格按照编号和分隔符格式返回，每行一条："
-                f"\n编号|翻译1|翻译2|翻译3..."
-                f"\n不要包含任何额外说明、解释或空行。"
-                f"\n文本中的 {{R}}、{{N}}、{{T}}、{{S}}、{{P数字}} 是格式占位符，必须原样保留。"
-                f"\n\n待翻译文本：\n" + "\n".join(numbered)
+                f"请将以下文本从 {clean_src} 翻译为以下语言（键用指定代码）：{code_desc}。"
+                f"\n以 JSON 对象返回，外层键为待翻译文本的编号（1、2、3...），"
+                f"内层键为语言代码，值为该条该语言的完整翻译文本。不要有任何额外内容。"
+                f"\n示例：{{\"1\": {{\"tr\": \"翻译\", \"de\": \"翻译\"}}, \"2\": {{...}}}}"
+                f"\n文本中的 <color> 标签、{{R}}、{{N}}、{{T}}、{{S}}、{{P数字}} 等格式占位符必须原样保留，"
+                f"翻译文本开头不要带编号。"
+                f"\n\n待翻译文本：\n" + "\n".join(f"{i+1}. {t}" for i, t in enumerate(texts))
             )
 
             messages = [
@@ -4468,7 +4480,10 @@ def api_translate_run():  # noqa: C901
                 "model": model,
                 "messages": messages,
                 "temperature": 0.3,
-                "max_tokens": 4096 + len(texts) * len(tgt_names) * 200
+                # 关闭思考模式：deepseek-v4-flash 默认 thinking 开启会做大量推理
+                # （reasoning_tokens 可达 1.3 万+），翻译任务不需要推理，关掉后又快又稳
+                "thinking": {"type": "disabled"},
+                "max_tokens": 16384 + len(texts) * len(tgt_names) * 300
             }
             headers = {
                 "Authorization": f"Bearer {api_key}",
@@ -4487,21 +4502,36 @@ def api_translate_run():  # noqa: C901
                             q.put(f"  缓存命中 {hit}/{total_p} tokens ({rate:.1f}%)\n")
                         raw = data["choices"][0]["message"]["content"].strip()
                         results = [None] * len(texts)
-                        for line in raw.split("\n"):
-                            line = line.strip()
-                            if not line:
-                                continue
-                            m = _re.match(r"^\s*(\d+)\s*[|.:、]\s*(.*)", line)
-                            if m:
-                                idx = int(m.group(1)) - 1
-                                if 0 <= idx < len(texts):
-                                    parts = m.group(2).split("|")
-                                    row_result = {}
-                                    for ti, tgt in enumerate(tgt_names):
-                                        if ti < len(parts) and parts[ti]:
-                                            restored = _restore_translate_text(parts[ti], placeholder_maps[idx])
-                                            row_result[tgt] = _format_numbers_for_lang(restored, tgt)
-                                    results[idx] = row_result
+                        code_to_tgt = {c: t for t, c in tgt_codes.items()}
+                        try:
+                            parsed = json.loads(raw)
+                            if isinstance(parsed, dict):
+                                for num_str, lang_dict in parsed.items():
+                                    try:
+                                        idx = int(str(num_str).strip().lstrip("#")) - 1
+                                    except ValueError:
+                                        continue
+                                    if not (0 <= idx < len(texts)) or not isinstance(lang_dict, dict):
+                                        continue
+                                    row = {}
+                                    for code, val in lang_dict.items():
+                                        tgt = code_to_tgt.get(code.strip().lower())
+                                        if not tgt or not isinstance(val, str) or not val.strip():
+                                            continue
+                                        # 去掉模型可能带回的编号前缀（如 "1. "、"1、"）
+                                        v = _re.sub(r"^\s*\d+\s*[.|:、]\s*", "", val.strip())
+                                        restored = _restore_translate_text(v, placeholder_maps[idx])
+                                        row[tgt] = _format_numbers_for_lang(restored, tgt)
+                                    if row:
+                                        results[idx] = row
+                        except Exception:
+                            q.put("  [警告] JSON 解析失败，尝试按行匹配\n")
+                            for line in raw.split("\n"):
+                                m = _re.match(r"^\s*(\d+)\s*[|.:、]\s*(.*)", line)
+                                if m and int(m.group(1)) - 1 < len(texts):
+                                    idx = int(m.group(1)) - 1
+                                    if results[idx] is None:
+                                        results[idx] = {}
                         return results
                     elif resp.status_code == 429:
                         wait = 5 * (3 ** attempt)
@@ -4558,10 +4588,29 @@ def api_translate_run():  # noqa: C901
             q.put("加载参考文件...\n")
             all_refs = {}
             has_raw = False
+            # 参考文件整体作为表格原文给 AI（xlsx 转 tab 分隔文本，其他格式原文）
+            if ref_path and os.path.isfile(ref_path):
+                _ref_ext = os.path.splitext(ref_path)[1].lower()
+                try:
+                    if _ref_ext in (".xlsx", ".xlsm"):
+                        _twb = openpyxl.load_workbook(ref_path, read_only=True, data_only=True)
+                        _tws = _twb.active
+                        _trows = list(_tws.iter_rows(values_only=True))
+                        _twb.close()
+                        if _trows:
+                            _clean_cell = lambda c: "" if c is None else str(c).replace("\t", " ").replace("\r", " ").replace("\n", "\\n")
+                            all_refs["__raw__"] = "\n".join(
+                                "\t".join(_clean_cell(c) for c in row) for row in _trows[:300]
+                            )
+                    else:
+                        with open(ref_path, "r", encoding="utf-8") as _rf:
+                            all_refs["__raw__"] = _rf.read()
+                except Exception:
+                    all_refs.pop("__raw__", None)
+                if all_refs.get("__raw__"):
+                    has_raw = True
             for tgt in tgt_names:
                 all_refs[tgt] = _load_ref(tgt)
-                if all_refs[tgt].get("__raw_text__"):
-                    has_raw = True
 
             batch_items = []
             ref_matched = 0

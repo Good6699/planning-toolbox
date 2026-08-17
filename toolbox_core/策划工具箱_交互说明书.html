@@ -136,9 +136,30 @@ code{padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.3);color:#c8d8ff;f
           <tr><td>目标路径</td><td>必须是本地 SVN 工作副本</td></tr>
         </tbody>
       </table>
+      <h3 style="margin:12px 0 6px;font-size:14px">筛选条件</h3>
       <table>
         <thead><tr><th>操作</th><th>结果</th></tr></thead>
         <tbody>
+          <tr><td>关键字</td><td>筛选提交信息中包含该关键字的版本，多个用逗号分隔</td></tr>
+          <tr><td>提交人</td><td>只看该 SVN 账户名提交的版本</td></tr>
+          <tr><td>排除设置（筛选条件旁 ⚙）</td><td>弹窗设置排除路径（逗号分隔），SVN 回退时自动跳过这些路径</td></tr>
+        </tbody>
+      </table>
+      <h3 style="margin:12px 0 6px;font-size:14px">版本列表设置</h3>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>版本列表旁 ⚙ 按钮</td><td>弹窗设置文件筛选模式，影响版本列表下方的变更文件显示</td></tr>
+          <tr><td>「只包含」模式</td><td>只显示匹配路径的变更文件</td></tr>
+          <tr><td>「只排除」模式</td><td>隐藏匹配路径的变更文件</td></tr>
+          <tr><td>筛选路径</td><td>每行一个路径片段（不需要完整路径），文件路径包含该片段即匹配</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>操作</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>版本列表</td><td>全选/反选/清空按钮只影响版本勾选状态</td></tr>
+          <tr><td>变更文件列表</td><td>顶部下拉可按路径前缀过滤，全选/反选/清空只影响当前筛选结果</td></tr>
           <tr><td>拖入本地副本到源地址</td><td>自动检测并填入 SVN URL</td></tr>
           <tr><td>变更文件最终动作</td><td>最新是删除→删除；曾新增→新增；否则→修改</td></tr>
           <tr><td>开始合并</td><td>直接改目标工作副本；可能弹出 TortoiseSVN 提交窗口（需手动确认）</td></tr>

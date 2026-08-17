@@ -4690,9 +4690,9 @@
     "semantic_hash": "c2eb2be5710f086b2b1776ea933dc56e"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\desktop_main.py": {
-    "mtime": 1786413626.3278449,
-    "ast_hash": "2eb169032ba34a2c48393ce28f5e24f6",
-    "semantic_hash": "2eb169032ba34a2c48393ce28f5e24f6"
+    "mtime": 1786799504.5968962,
+    "ast_hash": "c8fea40b461ac95bb6d574126f52496b",
+    "semantic_hash": "c8fea40b461ac95bb6d574126f52496b"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\dist_update.py": {
     "mtime": 1780195561.3211899,
@@ -6695,9 +6695,9 @@
     "semantic_hash": "7f932e5ffdf84a9439752164188482ae"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\update_version.py": {
-    "mtime": 1786521160.6396778,
-    "ast_hash": "ee340c220146391cb4b843ca0933f68b",
-    "semantic_hash": "ee340c220146391cb4b843ca0933f68b"
+    "mtime": 1786937306.94234,
+    "ast_hash": "e29c29683d82912b7f4eb18f1cccc0eb",
+    "semantic_hash": "e29c29683d82912b7f4eb18f1cccc0eb"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\xlsm_zipper.py": {
     "mtime": 1784526355.218692,
@@ -9320,9 +9320,9 @@
     "semantic_hash": "573aff2936aecb8d68ad976f7ec46224"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\core.js": {
-    "mtime": 1786685686.8219926,
-    "ast_hash": "97a4376c50f8e144c537fc6d730be741",
-    "semantic_hash": "97a4376c50f8e144c537fc6d730be741"
+    "mtime": 1786792445.5883641,
+    "ast_hash": "dd10bbe3911eba8e1be14e493b2b49af",
+    "semantic_hash": "dd10bbe3911eba8e1be14e493b2b49af"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\core.min.js": {
     "mtime": 1782458434.3193343,
@@ -13770,9 +13770,9 @@
     "semantic_hash": "fa7a261bbeae9146d620ddff05ddbd92"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\tab-merge.js": {
-    "mtime": 1786344143.904258,
-    "ast_hash": "1035837758123387875fe84bbc250777",
-    "semantic_hash": "1035837758123387875fe84bbc250777"
+    "mtime": 1786798047.643433,
+    "ast_hash": "7afadac5ab522b349e3a315c31c6e3ac",
+    "semantic_hash": "7afadac5ab522b349e3a315c31c6e3ac"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\tab-merge.min.js": {
     "mtime": 1782458434.320332,
@@ -13780,9 +13780,9 @@
     "semantic_hash": "1d74b3eaa6865829bc43fb8a40cbd33c"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\tab-prefab.js": {
-    "mtime": 1786613589.319528,
-    "ast_hash": "4afad87e54528ba44af7afab5bd03dd7",
-    "semantic_hash": "4afad87e54528ba44af7afab5bd03dd7"
+    "mtime": 1786797627.2062116,
+    "ast_hash": "c4720a74a7b5ac7553cd11a8007283f4",
+    "semantic_hash": "c4720a74a7b5ac7553cd11a8007283f4"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\tab-prefab.min.js": {
     "mtime": 1782458434.3263159,
@@ -13790,9 +13790,9 @@
     "semantic_hash": "1e4b30028447b9cc5f946e2169f0b891"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\tab-textcheck.js": {
-    "mtime": 1786343182.0109272,
-    "ast_hash": "2749a33b30cba15063e6b915065c78fc",
-    "semantic_hash": "2749a33b30cba15063e6b915065c78fc"
+    "mtime": 1786798052.5163798,
+    "ast_hash": "c0754ce17cbdab29127f4ba7db4952bd",
+    "semantic_hash": "c0754ce17cbdab29127f4ba7db4952bd"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\tab-textcheck.min.js": {
     "mtime": 1782458434.325319,
@@ -13820,9 +13820,9 @@
     "semantic_hash": "70dc851fdbcc212b9f224b8e80e1a3fc"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\tab-workflow.js": {
-    "mtime": 1786349147.5111759,
-    "ast_hash": "0d3beaea6a9921db65c9d1528fb8019c",
-    "semantic_hash": "0d3beaea6a9921db65c9d1528fb8019c"
+    "mtime": 1786777148.5047073,
+    "ast_hash": "3abb62683a9f2e715b02e0c20349e56d",
+    "semantic_hash": "3abb62683a9f2e715b02e0c20349e56d"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\tab-workflow.min.js": {
     "mtime": 1782458434.3233237,
@@ -13855,9 +13855,9 @@
     "semantic_hash": "4596a5318a6ea8ccdc55ac6f1ef87369"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\web_app.py": {
-    "mtime": 1786685731.356062,
-    "ast_hash": "8dabc984b6a5366844f529295c861834",
-    "semantic_hash": "8dabc984b6a5366844f529295c861834"
+    "mtime": 1786935496.7523618,
+    "ast_hash": "d04c0c3cf8d8240b24bb2b8e6552c302",
+    "semantic_hash": "d04c0c3cf8d8240b24bb2b8e6552c302"
   },
   "G:\\DGameAI\\workspace\\web_launcher.py": {
     "mtime": 1778487911.685763,
@@ -14450,9 +14450,9 @@
     "semantic_hash": "cb935f7439ea663567cf96a5a7d4d7ea"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\templates\\index.html": {
-    "mtime": 1786679566.2598436,
-    "ast_hash": "06c2ca9e8e0205de05ec6f4280596817",
-    "semantic_hash": "06c2ca9e8e0205de05ec6f4280596817"
+    "mtime": 1786763781.0948367,
+    "ast_hash": "4f56105965dbb940c02b320ccffe00eb",
+    "semantic_hash": "4f56105965dbb940c02b320ccffe00eb"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\\u8f93\u51fa\\\u5bf9\u51b3_\u51fa\u6218\\\u4fee\u6539\u603b\u7ed3.txt": {
     "mtime": 1784180432.953984,
@@ -14475,9 +14475,9 @@
     "semantic_hash": "a22180c67794c6251ef4e90e86d2e4b6"
   },
   "G:\\DGameAI\\workspace\\toolbox_core\\\u7b56\u5212\u5de5\u5177\u7bb1_\u4ea4\u4e92\u8bf4\u660e\u4e66.html": {
-    "mtime": 1786364168.3732755,
-    "ast_hash": "aaf80cd6d00fb33c9b8cbfd9fe973774",
-    "semantic_hash": "aaf80cd6d00fb33c9b8cbfd9fe973774"
+    "mtime": 1786777561.9906585,
+    "ast_hash": "f50eff2f41f8eeced454294fedc5047d",
+    "semantic_hash": "f50eff2f41f8eeced454294fedc5047d"
   },
   "G:\\DGameAI\\workspace\\_foreground_sampler.py": {
     "mtime": 1785325825.9762344,

@@ -41,7 +41,7 @@ import webview
 import win32gui
 import win32con
 import win32api
-from toolbox_config import load_config, save_config, _ensure_frozen_config
+from toolbox_config import load_config, save_config, config_lock, _ensure_frozen_config
 
 WINDOW_W = 1100
 WINDOW_H = 700
@@ -240,6 +240,7 @@ class EdgeDocker:
         self._animating_seq = 0
         self._last_docked_edge = None
         self._had_focus_while_expanded = False
+        self._dialog_active = False
         self._stop = threading.Event()
         self._thread = None
         self._prev_fg = 0
@@ -383,6 +384,8 @@ class EdgeDocker:
     def _tick(self):
         if time.perf_counter() < self._busy_until:
             return
+        if self._dialog_active:
+            return  # 原生文件对话框打开期间冻结贴边操作（不收缩/不吸附/不脱离）
         hwnd = self._resolve_hwnd()
         if not hwnd or not win32gui.IsWindow(hwnd):
             return
@@ -840,12 +843,16 @@ class ResizeApi:
                 else:
                     file_types = ('All Files (*.*)',)
                     directory = filter
-                result = w.create_file_dialog(
-                    webview.OPEN_DIALOG,
-                    directory=directory,
-                    allow_multiple=False,
-                    file_types=file_types,
-                )
+                _docker._dialog_active = True  # 原生对话框期间冻结贴边收缩
+                try:
+                    result = w.create_file_dialog(
+                        webview.OPEN_DIALOG,
+                        directory=directory,
+                        allow_multiple=False,
+                        file_types=file_types,
+                    )
+                finally:
+                    _docker._dialog_active = False
                 if result:
                     return result[0]
         except Exception as e:
@@ -856,10 +863,14 @@ class ResizeApi:
         try:
             w = webview.windows[0]
             if w:
-                result = w.create_file_dialog(
-                    webview.FOLDER_DIALOG,
-                    directory=directory,
-                )
+                _docker._dialog_active = True  # 原生对话框期间冻结贴边收缩
+                try:
+                    result = w.create_file_dialog(
+                        webview.FOLDER_DIALOG,
+                        directory=directory,
+                    )
+                finally:
+                    _docker._dialog_active = False
                 if result:
                     return result[0]
         except Exception as e:
@@ -1089,10 +1100,11 @@ def _save_window_rect():
         w = rect.right - rect.left
         h_ = rect.bottom - rect.top
         if w >= 400 and h_ >= 300:
-            config = load_config()
-            config["window_w"] = w
-            config["window_h"] = h_
-            save_config(config)
+            with config_lock:
+                config = load_config()
+                config["window_w"] = w
+                config["window_h"] = h_
+                save_config(config)
     except Exception:
         pass
 

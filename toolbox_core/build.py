@@ -54,6 +54,7 @@ CORE_SCRIPTS = [
     "xlsm_zipper.py",
     "export_error_code.py",
     "update_version.py",
+    "toolbox_xlsx_merge.py",
     "lang_map.txt",
 ]
 
@@ -63,6 +64,8 @@ WORKER_SCRIPTS = [
     "_merge_analyzer.py",
     "_merge_analyze_worker.py",
     "_export_error_code_erl.py",
+    "_text_check_worker.py",
+    "_xlsx_apply_worker.py",
 ]
 
 # ── Flask 模板/静态文件 ──

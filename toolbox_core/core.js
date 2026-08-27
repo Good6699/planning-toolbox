@@ -18,8 +18,6 @@ const nav = [
 
   {key:"merge",label:"语义合并"},
 
-  {key:"upload",label:"复制合并"},
-
   {key:"textcheck",label:"文字检测"},
 
   {key:"workflow",label:"工作流"},
@@ -92,8 +90,6 @@ const tabMeta = {
 
   merge:{title:"语义合并",sub:"精准文件级SVN版本合并 — 无需还原、无需清空本地修改"},
 
-  upload:{title:"复制合并",sub:"批量文件复制上传到 SVN 工作目录"},
-
   workflow:{title:"工作流",sub:"自动化 SVN 操作编排"},
 
   translate:{title:"翻译",sub:"Excel 多语言批量翻译工作台"},
@@ -134,12 +130,6 @@ function switchTab(key) {
 
     buildTab(key);
 
-  } else if (key === "upload") {
-
-    const src = document.getElementById("upload_src");
-
-    if (src && src.value.trim()) refreshFiles();
-
   } else if (key === "svn" || key === "merge") {
 
     const now = new Date();
@@ -163,6 +153,9 @@ function switchTab(key) {
   // 切换页签时把日志区域滚动到底部
   requestAnimationFrame(scrollLogToBottom);
 
+  // 每次切换左侧页签检测一次更新（已有更新提示则不重复请求）
+  triggerUpdateCheck();
+
 }
 
 function buildTab(key) {
@@ -175,7 +168,6 @@ function buildTab(key) {
 
   var tabScripts = {
     merge: "tab-merge.js",
-    upload: "tab-upload.js",
     workflow: "tab-workflow.js",
     translate: "tab-translate.js",
     textcheck: "tab-textcheck.js",
@@ -183,7 +175,7 @@ function buildTab(key) {
     assist: "tab-assist.js",
   };
 
-  var tabBuildFn = {svn:"buildSvnTab", merge:"buildMergeTab", upload:"buildUploadTab", workflow:"buildWorkflowTab", translate:"buildTranslateTab", textcheck:"buildTextCheckTab", prefab:"buildPrefabTab", assist:"buildAssistTab"};
+  var tabBuildFn = {svn:"buildSvnTab", merge:"buildMergeTab", workflow:"buildWorkflowTab", translate:"buildTranslateTab", textcheck:"buildTextCheckTab", prefab:"buildPrefabTab", assist:"buildAssistTab"};
   var buildFn = tabBuildFn[key];
   if (typeof window[buildFn] === "function") {
     window[buildFn](panel);

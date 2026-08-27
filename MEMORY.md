@@ -1960,3 +1960,135 @@ EA 项目在 `H:\D3_EA\tools\ExportScripts-ErrorMessage\` 下有独立的导出�
 - **解决方案**：① `_exec_lock_svn` 锁定失败时，从 `stderr` 正则提取 `locked by user 'xxx'` 对比 `svn_user`，自己锁则继续；② `_exec_lock_svn` 锁定失败返回值从 `True` 改为 `False`（阻断）；③ 补全所有调用处的返回值检查（export_text、copy_files、open_tables、merge_table、merge_translation）
 - **涉及文件**：[web_app.py](file:///c:/Users/admin/.qclaw/workspace/toolbox_core/web_app.py)
 
+
+### fix(text-check): 标签配对检查误报——Item/Image/timetag/br/普通文字被当开标签
+- **场景**：2026-08-18 文字表检测结果大量误报 "缺少闭标签: <Item size=80 style=1 cfgid=1011>"、"缺少闭标签: <Blast Shield>"（英文技能名是普通文字不是标签）
+- **根因**：`_text_check.py _check_tag_pairing` 用"带空格属性=自闭合"启发式判断，对 D3 游戏标签体系不成立；且大小写敏感导致 `<Size=23>` 配 `</size>` 双双误报
+- **关键知识（扫描 121332 行 SC + 892511 个语言单元格验证）**：D3 文字表**成对标签**只有 `color` / `gradient` / `size` / `careerid` / `link` / `i`；**自闭合标签** `item` / `image` / `timetag`（timetag 带冒号如 `<timetag:point,0,72000>`）；`<br>` 和 `<英文技能名>` / `<Stage {0}>` 等是普通文字/换行，全不是标签
+- **解决方案**：改为白名单制 `PAIR_TAGS = {color, gradient, size, careerid, link, i}`，只对白名单标签做配对检查（标签名统一小写，大小写不敏感），其余一律跳过
+- **验证**：修复后全表误报归零，真实问题（未闭合 color/size/gradient 共 217 处）仍正确报出
+- **注意**：`_text_check.py` 被 .gitignore 的 `_*.py` 规则忽略，改动不进 git，需重新打包 exe 才生效
+- **涉及文件**：[toolbox_core/_text_check.py](file:///G:/DGameAI/workspace/toolbox_core/_text_check.py)
+
+### fix(text-check): KEYWORD 排除规则统一检查所有语言列
+- **场景**：2026-08-18 用户要求 `KEYWORD:errorcode1986` 能排除"任一语言列含该关键词"的行，原来只在 SC 列查
+- **改动**：`exclude_keywords = ["作废", "配了就是错"] + exclude_sc_keywords`，每 sheet 算一次 `kw_lang_idx = [sc_idx] + 全部语言列`，逐行遍历所有语言单元格做包含判断（内置规则也走统一规则）
+- **验证**：迷你表功能测试 7/7 PASS（SC/EN/RU 列关键词均排除，无关键词行正常输出漏翻）
+- **涉及文件**：[toolbox_core/_text_check.py](file:///G:/DGameAI/workspace/toolbox_core/_text_check.py)
+
+### fix(text-check): 颜色码校验跳过占位符与命名色
+- **场景**：2026-08-18 检测结果大量误报 "SC颜色码格式错误: #{{{2}}}"（828 处）——`{{{2}}}` 是格式占位符（动态颜色），不是颜色码
+- **改动**：`_validate_color_codes` 跳过含 `{`/`}` 的颜色值（如 `<color=#{{{2}}}>`）；新增 `NAMED_COLORS` 集合（yellow/white/red/orange/green 等引擎支持的命名色，扫描 142 万单元格确认实际用到 5 种）跳过校验；大小写不敏感
+- **用户决策**：无 `#` 号 hex（`76E86A`）、引号包裹（`'#F63453FF'`）仍报错；位数错误（`#00F00` 5位、`#fc4a11f` 7位）是真错误保留
+- **验证**：修复后颜色码误报从 ~1100 降到 68（全部为保留类+真错误）
+- **涉及文件**：[toolbox_core/_text_check.py](file:///G:/DGameAI/workspace/toolbox_core/_text_check.py)
+
+### fix(text-check): 双开窗口修复 + KEYWORD 匹配 ID
+- **场景**：2026-08-18 ①检测完成后自动打开输出目录弹 2 个窗口；②`KEYWORD:askjfasjkgakjgsdjkgdsgs` 排除不生效
+- **根因**：①`tab-textcheck.js` [DONE] 里同时调了 `fetch(/api/open/folder)` 和 `_openFolder()`（后者本身兼容桌面/Web）→ 开了两次；②该字符串是 ::ID:: 列值，KEYWORD 只扫语言列（SC+语言），不查 ID
+- **改动**：①删掉冗余 fetch，只留 `_openFolder`；②关键词扫描列表加 `id_val`——KEYWORD 现在同时匹配 ID 列和语言列
+- **注意**：排除 ID 用裸 ID 行（`askjfasjkgakjgsdjkgdsgs`），KEYWORD 用 `KEYWORD:xxx`；两种格式的判定区分别在 ID 精确匹配（uppercase）和内容包含
+- **涉及文件**：[toolbox_core/tab-textcheck.js](file:///G:/DGameAI/workspace/toolbox_core/tab-textcheck.js)、[toolbox_core/_text_check.py](file:///G:/DGameAI/workspace/toolbox_core/_text_check.py)
+
+### feat(wf): 快速整合步骤加"天数"设置
+- **场景**：2026-08-18 快速整合原来硬编码只复制最近3天修改的文件，用户要求可自定义天数，最少1天=当天
+- **改动**：`_exec_consolidate` 读 `step.get("days")`（默认3，min 1，非法值回退3）；cutoff 按**自然日**计算 = 今天0点 - (days-1)天（days=1 精确等于当天0点）；设置弹窗加数字输入框 `data-key="days"`，默认3
+- **验证**：days 解析 8 组用例全过（空/0/负数→1、非法→3、5→5）；cutoff days=1=今天0点、days=3=2天前0点
+- **涉及文件**：[toolbox_core/web_app.py](file:///G:/DGameAI/workspace/toolbox_core/web_app.py)、[toolbox_core/tab-workflow.js](file:///G:/DGameAI/workspace/toolbox_core/tab-workflow.js)
+
+### fix(merge): 语义合并"只包含/只排除"模式保存丢失——配置保存竞态
+- **场景**：2026-08-18 语义合并点"只排除"后，重新打开弹窗总是回到"只包含"
+- **根因**：`tab-merge.js` 模式切换连发两个 fire-and-forget `saveConfig` POST（先存 include_text 再存 mode）；后端每个请求都是「读整个配置→改一个键→原子写整个文件」，并发时**后写者覆盖先写者**——include_text 的保存快照里 mode 还是 include，最后落地把 mode 打回 include
+- **复现**：浏览器实测点只排除 → 网络 2 个 POST 都 200，磁盘文件 mode 仍为 include（mtime 验证最后一次写入是 include_text）
+- **改动**：①前端两次 saveConfig 合并为一次原子保存 `saveConfig({[oldKey]: oldTxt, merge_file_filter_mode: val})`；②后端 `api_save_config` 用 `toolbox_config.config_lock`（threading.Lock）串行化「读-改-写」
+- **验证**：单 POST 双键 ATOMIC_TEST 通过；10 线程并发配置更新 0 丢失
+- **遗留**：其他 load→save 调用点（svn_urls 历史、workflow 保存、svn_url_mappings）未加锁，理论上有同类风险，未扩大改动范围
+- **涉及文件**：[toolbox_core/tab-merge.js](file:///G:/DGameAI/workspace/toolbox_core/tab-merge.js)、[toolbox_core/web_app.py](file:///G:/DGameAI/workspace/toolbox_core/web_app.py)、[toolbox_core/toolbox_config.py](file:///G:/DGameAI/workspace/toolbox_core/toolbox_config.py)
+
+### fix(config): 全部配置「读-改-写」调用点统一加锁 + 修 mappings 清空隐患
+- **场景**：2026-08-18 继续上一个竞态修复——把 config_lock 推广到所有 load→save 调用点
+- **改动**：web_app.py 全部 9 处 save_config 调用（svn_urls 历史、src/tgt 历史、workflow 保存、翻译 lang-id-map GET/POST、翻译设置、两处 svn_url_mappings）包进 `with config_lock`；desktop_main.py 窗口尺寸保存加锁；toolbox_merge.py 映射迁移改为锁内重读+合并
+- **顺带修 bug**：web_app 两处 `save_config({"svn_url_mappings": mappings})` 会把整个配置文件覆盖成只有 mappings 键（save_config 是全量替换）→ 改为 `cfg["svn_url_mappings"]=mappings; save_config(cfg)` 全量保存
+- **踩坑**：toolbox_merge.py 首次改法把 `from toolbox_config import config_lock` 写在 `with config_lock:` 之后，NameError——import 必须在 with 之前（模块级无 toolbox_config 导入）
+- **验证**：4 文件 py_compile 通过；映射合并后 other_key/mode 保留（WIPE-FIX PASS）；10 并发 0 丢失
+- **涉及文件**：[toolbox_core/web_app.py](file:///G:/DGameAI/workspace/toolbox_core/web_app.py)、[toolbox_core/toolbox_config.py](file:///G:/DGameAI/workspace/toolbox_core/toolbox_config.py)、[toolbox_core/desktop_main.py](file:///G:/DGameAI/workspace/toolbox_core/desktop_main.py)、[toolbox_core/toolbox_merge.py](file:///G:/DGameAI/workspace/toolbox_core/toolbox_merge.py)
+
+### 事故：测试脚本覆盖了真实配置文件（重要教训）
+- **经过**：2026-08-21 验证 config_lock 时，测试脚本直接调用 `toolbox_config.save_config({...3个键...})`——save_config 是**全量替换**，把真实配置 `APPDATA\planning-toolbox\svn_gui_config.json`（44 键）覆盖成 3 键
+- **连锁反应**：运行中的应用（14:41 启动，内存里有最新配置）随后某次保存触发 load_config（读 1 键文件 + 合并工作区模板缺省键）→ 写回 → 配置文件变成**模板旧快照**（8-10，KR2 分支）+ 测试垃圾值 svn_url_mappings={'a','b'}
+- **恢复**：最新工作流的唯一来源是**应用前端内存**（load_config 每次读盘，服务端无缓存）→ 让用户触发一次 `saveConfig({workflows})`（改个名）→ 最新工作流写回磁盘（EA2022 含快速整合步骤 days=3，验证通过）
+- **教训**：①测试脚本**严禁直接写生产配置**——用服务端 API 或临时 CONFIG_FILE；②`save_config` 是全量替换，调用时只能传完整 cfg；③配置文件出问题先查"运行中的应用内存"这个恢复源，别急着重启
+- **涉及文件**：[toolbox_config.py](file:///G:/DGameAI/workspace/toolbox_core/toolbox_config.py)
+
+### feat(wf): 移除工作流勾选框（父/子级）
+- **场景**：2026-08-21 父级批量执行已移除（只剩单步骤 ▶ 运行），工作流前/步骤前的勾选框只剩父子联动逻辑，无任何执行作用
+- **改动**：tab-workflow.js 删除 `.wf-parent-check`/`.wf-child-check` 输入框、父子勾选联动代码、header 点击守卫里的引用；index.html 删除两段死 CSS
+- **验证**：JS 括号平衡 324/324；全文件 wf-parent-check/wf-child-check 零残留
+- **涉及文件**：[toolbox_core/tab-workflow.js](file:///G:/DGameAI/workspace/toolbox_core/tab-workflow.js)、[toolbox_core/templates/index.html](file:///G:/DGameAI/workspace/toolbox_core/templates/index.html)
+
+### fix(svn): E155032 基线缺失自动修复
+- **场景**：2026-08-24 KR2 工作流 update 报 E155032（pristine 基线缺失）+ 后续 E155004 锁失败；工具箱自带 cleanup 不生效
+- **根因**：①`_svn_update_with_cleanup` 只在 E155004/E155037 时自动 cleanup 重试，E155032 不在触发条件；②cleanup 只清锁和管理库，**不能重建 `.svn\pristine` 里物理缺失的基线文件**
+- **改动**：错误条件加入 E155032；新增 `_svn_fix_missing_pristine`——从错误解析 40 位 checksum → 查 wc.db（`SELECT local_relpath FROM NODES WHERE checksum='$sha1$<hex>'`，注意前缀是 `$sha1$` 不是 `sha1-`）→ 定位损坏文件 → **改名备份为 `.svn-broken.bak`** → 重试 update 让 SVN 重下重建基线
+- **验证**：真实案例（F:\D3_KR2\gameData ExportTxt/Text26_TW.txt）解析/查询/定位全部命中
+- **涉及文件**：[toolbox_core/web_app.py](file:///G:/DGameAI/workspace/toolbox_core/web_app.py)
+
+### fix(svn): E155032 正确修法——用工作文件重建 pristine（非重下）
+- **2026-08-25 实战**：F:\D3_KR2\gameData 有 7 个文件基线损坏（NODES 引用 `$sha1$...` 但 PRISTINE 表记录+物理文件都丢）。第一版自动修复（备份文件→update 重下）失败：E155009 work queue 无法安装（pristine 缺失），且 update 会继续报 E155032
+- **正确修法（已验证）**：如果工作文件 SHA-1 == 期望基线 checksum（=未修改），直接用工作文件重建 `.svn\pristine\<前2位>\<hex>.svn-base` + 向 PRISTINE 表 INSERT（checksum/compression=None/size/refcount=1/md5_checksum 格式 `$md5 $<hex>`）→ cleanup 处理队列 → update 成功。7 个文件全部重建，WC 回到 r349145，0 悬挂引用
+- **检查要点**：wc.db 查询用 `$sha1$<hex>` 前缀（不是 sha1-）；PRISTINE 表记录缺失 ≠ 物理文件缺失，两种都要查；Text26_TW 的 .bak 内容 sha 匹配也能重建
+- **代码**：`_svn_fix_missing_pristine` 升级为"sha 匹配→重建；不匹配→备份+重下"；修复循环顺序改为"修基线→cleanup→重试"（cleanup 处理队列依赖 pristine 已存在）
+- **涉及文件**：[toolbox_core/web_app.py](file:///G:/DGameAI/workspace/toolbox_core/web_app.py)
+
+### fix(docker): 贴边收缩修复无效——标志位设错对象
+- **场景**：2026-08-25 文件浏览器打开时应用仍自动收缩（第一版 `_dialog_active` 修复无效）
+- **根因**：`browseFile/browseDir` 属于 **ResizeApi** 类（pywebview JS API），`_tick`/`_dialog_active` 属于 **EdgeDocker** 类——`self._dialog_active` 设在 ResizeApi 实例上，docker 读自己的标志永远是 False，守卫从未生效
+- **修复**：ResizeApi 里改为 `_docker._dialog_active = True/False`（`_docker` 是模块级单例）
+- **教训**：跨类状态必须走共享引用（模块级单例），不能想当然用 self
+- **涉及文件**：[toolbox_core/desktop_main.py](file:///G:/DGameAI/workspace/toolbox_core/desktop_main.py)
+
+### feat(ui): 设置弹窗禁止点空白关闭，必须点按钮
+- **2026-08-25** 用户要求所有设置弹窗点击空白不关闭，必须点关闭按钮（防止配置时误点丢失输入）
+- **改动**：①工作流步骤设置弹窗删掉 overlay 点击关闭（保留 ✕/取消）；②语义合并"排除设置"和"只包含路径筛选"两个弹窗删掉全局 mousedown 外部关闭；③路径筛选弹窗原本没有关闭按钮，新增标题栏+✕（否则删了外部关闭就关不掉了）
+- **未改**：showConfirm 确认弹窗仍可点空白=取消（用户未确认要改）
+- **涉及文件**：[tab-workflow.js](file:///G:/DGameAI/workspace/toolbox_core/tab-workflow.js)、[tab-merge.js](file:///G:/DGameAI/workspace/toolbox_core/tab-merge.js)
+
+### feat(wf): 新增步骤「指定合并文字表」(merge_specified_text)
+- **2026-08-25** 按 SVN 备注(包含)/作者(精确)/自然日 筛选修改的文字ID，从来源表整行复制到目标表，保存后自动导出 + TortoiseSVN 提交框
+- **流程**：update 目标WC → update 来源WC → svn_log 全历史+Python侧筛选 → 版本对(命中版本vs实际前一版本) → step3_download_and_compare(_cmp_worker 子进程池) 提取修改ID → `_copy_rows_by_id` 整行复制（列头名对应、目标ID列按列头定位、缺失追加、值类型保持、目标独有列保留）→ save 一次 → bat 导出 → 提交框
+- **参数**：src_path/tgt_path(必填文件)、commit_msg/commit_author(选填)、days(默认3,min1)、commit_dir(多值必填)
+- **踩坑**：目标表 ID 列位置可能和源表不同——目标 ID 列必须按**列头名**定位（tgt_col[id_header]），不能按 id_col 位置
+- **涉及文件**：[web_app.py](file:///G:/DGameAI/workspace/toolbox_core/web_app.py)、[tab-workflow.js](file:///G:/DGameAI/workspace/toolbox_core/tab-workflow.js)
+
+### fix(wf): 指定合并文字表首次运行报错 'str' object has no attribute 'decode'
+- **2026-08-25** D8_KR 工作流跑新步骤，在"更新目标路径工作副本"时抛 `'str' object has no attribute 'decode'`
+- **根因**：`_svn_update_wc_of_file` 和 URL 解析两处 `subprocess.run` 加了 `text=True` → stdout 是 str；而 `_decode_svn_output` 内部调 `data.decode("gbk")` 只接受 bytes
+- **修复**：去掉 `text=True/encoding/errors`，传 bytes 给 `_decode_svn_output`（与 consolidate 的 svn info 写法一致）
+- **验证**：真实 svn info 解析 URL 成功（G:\D8_KR_DEV → http://192.168.1.40:8080/svn/D8/branches/20260824_D8_KR_OB_Dev/...）
+- **教训**：用 `_decode_svn_output` 时 subprocess 必须输出 bytes；`text=True` 和它二选一
+- **涉及文件**：[web_app.py](file:///G:/DGameAI/workspace/toolbox_core/web_app.py)
+
+### fix(wf): 指定合并文字表复制阶段卡死——read_only 工作表随机访问极慢
+- **2026-08-25** D8_KR 跑到"修改文字 ID: 26 个"后长时间不结束
+- **根因**：`_copy_rows_by_id` 用 `ws.cell(row, col)` 全表逐格扫描（源表是 read_only 加载，随机访问受限且极慢；目标表几十个 sheet 全扫）
+- **修复**：重写为**单遍 `iter_rows(values_only=True)`**——源表行值存元组字典（sid → (行号, 行值)），复制时直接从元组取值，不再随机访问；目标表同样单遍建 ID 索引
+- **验证**：迷你表功能全过，0.03s
+- **教训**：read_only 工作表只能用 iter_rows 顺序迭代，禁止 ws.cell() 随机访问；大表扫描一律单遍迭代
+- **涉及文件**：[web_app.py](file:///G:/DGameAI/workspace/toolbox_core/web_app.py)
+
+### feat(wf): 指定合并文字表增强——锁定目标表 + 同步文字索引表
+- **2026-08-25** ①更新后锁定目标文字表，失败阻断并日志提醒；②参考整合文字表(copy_files)，按变更文字ID同步合并文字索引表
+- **锁定**：`_exec_lock_svn` 放在 update 之后、复制之前，失败 return False
+- **索引表（文字引用处理.xlsm）**：结构为 4 行表头（描述/Output/Field/DataType）+ 数据（第5行起），调用ID(列2) → 占位符对应文字ID(列3+，值如 yinyongxxxx)。新增 `_sync_index_table`：探测表头行/ID列/数据起始行 → 扫描源表找"任一占位符值命中变更文字ID"的相关行 → 按列位置整行复制到目标（替换/追加）
+- **顺序**：update → lock → update来源 → 筛选对比 → 复制Texts → 保存 → 同步索引表 → 导出 → 提交框
+- **涉及文件**：[web_app.py](file:///G:/DGameAI/workspace/toolbox_core/web_app.py)
+
+### perf(merge): 语义合并卡顿根治——日志节流 + openpyxl 子进程化
+- **2026-08-26** 用户反馈语义合并时 UI 卡死
+- **根因**：①语义合并 3 个 EventSource（查询/分析/合并）中查询和合并是**逐条 append** 日志（无批处理）→ WebView2 渲染卡；②合并阶段在主进程用 openpyxl 打开处理大表（Texts.xlsm 几十 sheet）→ GIL 占满 → 所有 Python 线程（Flask/JS API）饿死
+- **改动**：
+  - 日志：tab-merge.js 新增 `_mergeLogBatch` 工厂（80ms 批处理 + DocumentFragment + 3000 行上限），接入查询/合并两个 handler（分析已有批处理）
+  - openpyxl：三个函数 `_merge_sheet_rows`/`_copy_rows_by_id`/`_sync_index_table` 从 web_app.py 提取到独立模块 `toolbox_xlsx_merge.py`；新增 `_xlsx_apply_worker.py` 子进程 worker（3 模式：merge_sheet_rows/copy_rows_by_id/sync_index）；`run_xlsx_apply_worker` 调度辅助；语义合并应用阶段和指定合并文字表复制/索引同步全部改走子进程
+  - build.py：CORE_SCRIPTS 加 toolbox_xlsx_merge.py，WORKER_SCRIPTS 加 _xlsx_apply_worker.py
+- **验证**：3 模式子进程端到端测试全过（copy 1+1、sync 1、merge_sheet_rows 1+1）
+- **涉及文件**：[tab-merge.js](file:///G:/DGameAI/workspace/toolbox_core/tab-merge.js)、[web_app.py](file:///G:/DGameAI/workspace/toolbox_core/web_app.py)、[toolbox_texts_merge.py](file:///G:/DGameAI/workspace/toolbox_core/toolbox_texts_merge.py)、[toolbox_xlsx_merge.py](file:///G:/DGameAI/workspace/toolbox_core/toolbox_xlsx_merge.py)、[_xlsx_apply_worker.py](file:///G:/DGameAI/workspace/toolbox_core/_xlsx_apply_worker.py)、[build.py](file:///G:/DGameAI/workspace/toolbox_core/build.py)

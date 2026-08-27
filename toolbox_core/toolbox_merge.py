@@ -458,87 +458,49 @@ def _build_merge_c_args(revisions):
 
 def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
                           auth_args, _log, global_max_rev=None):
-    """执行 svn merge，失败时直接源版本覆盖
+    """将文件直接覆盖为源仓库最新版本（HEAD），不再逐版本合并
 
-    global_max_rev: 所有选中版本的最大值，用于 force overwrite 时取最新内容
+    global_max_rev: 源仓库 HEAD 版本号（svn_merge 传入），用于 export 时取最新内容
     返回 (merged, conflict, skip, conflict_files_added)
     """
-    _log(f"  → 合并: {file_path}", "info")
-    latest_rev = max(revisions)
-    rev_args = _build_merge_c_args(revisions)
-
-    # 检查文件是否有内容变更，跳过纯属性变更（如 mime-type）
+    head_rev = global_max_rev or (max(revisions) if revisions else None)
+    if head_rev is None:
+        _log(f"  ❌ 无法确定最新版本号: {file_path}", "error")
+        return 0, 0, 1, []
+    _log(f"  → 覆盖为最新版(r{head_rev}): {file_path}", "info")
     file_url = source_url.rstrip("/") + "/" + file_path
+
+    # 最新版与本地无内容差异 → 跳过（纯属性/无变化）
     try:
         dr = subprocess.run(
-            [svn_exe, "diff", "--summarize"] + rev_args + [file_url] + auth_args,
+            [svn_exe, "diff", "--summarize", file_url + "@HEAD", local_file] + auth_args,
             capture_output=True, timeout=30, **_get_subprocess_kwargs())
         if dr.returncode == 0:
             diff_out = dr.stdout.decode("utf-8", errors="replace") if dr.stdout else ""
             if not diff_out.strip():
-                _log(f"  ℹ 跳过纯属性变更: {file_path}", "info")
+                _log(f"  ℹ 最新版与本地无差异，跳过: {file_path}", "info")
                 return 1, 0, 0, []
     except Exception:
         pass
 
-    cmd = [
-        svn_exe, "merge", "--ignore-ancestry", "--accept", "theirs-full",
-    ] + rev_args + [source_url, local_file] + auth_args
-    status, out_text = _svn_merge_single_file(svn_exe, cmd, _log)
-    if status == "ok":
-        _log(f"  ✅ 合并成功: {file_path}", "ok")
+    ok, msg = _svn_try_export(svn_exe, file_url, head_rev, local_file, auth_args)
+    if ok:
+        _log(f"  ✅ 已覆盖为最新版: {file_path}", "ok")
         return 1, 0, 0, []
-    if status == "conflict":
-        _log(f"  ⚠ 已用源版本覆盖(冲突消解): {file_path}", "warn")
-        try:
-            subprocess.run(
-                [svn_exe, "resolve", "--accept", "working", local_file] + auth_args,
-                capture_output=True, timeout=30,
-                **_get_subprocess_kwargs()
-            )
-        except Exception:
-            pass
-        return 1, 1, 0, [file_path]
-    if status == "e155010":
-        _log(f"  → 文件未跟踪，转为新增: {file_path}", "info")
-        ok = _svn_export_add(svn_exe, source_url, latest_rev,
-                             file_path, local_file, auth_args, _log)
-        if ok:
-            _log(f"  ✅ 新增文件: {file_path}", "ok")
-            return 1, 0, 0, []
-        return 0, 1, 0, [file_path]
-    if status == "tree_working":
-        if out_text:
-            detail = out_text.strip()
-            if len(detail) > 1200:
-                detail = detail[:1200] + "..."
-            _log(f"  ⚠ tree conflict 不接受 working，改用来源版本覆盖:\n{detail}", "warn")
-        _svn_resolve_conflict(svn_exe, source_url, latest_rev, file_path, local_file, auth_args, global_max_rev, log_callback=_log)
-        _log(f"  ⚠ 已用来源版本覆盖 tree conflict: {file_path}", "warn")
-        return 0, 1, 0, [file_path]
-    if status == "timeout":
-        _log(f"  ❌ 超时: {file_path}", "error")
-        return 0, 0, 1, []
-    if out_text:
-        detail = out_text.strip()
-        if len(detail) > 1200:
-            detail = detail[:1200] + "..."
-        _log(f"  ❌ svn merge 失败详情:\n{detail}", "error")
-    _log(f"  ⚠ 合并失败，直接源版本覆盖: {file_path}", "warn")
-    _svn_resolve_conflict(svn_exe, source_url, latest_rev, file_path, local_file, auth_args, global_max_rev, log_callback=_log)
+    _log(f"  ⚠ 覆盖失败: {msg}", "warn")
     return 0, 1, 0, [file_path]
 
 
 def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
                         action, auth_args, _log, global_max_rev=None):
-    """处理单个文件的 add/del/mod merge（多版本合并）
+    """处理单个文件的 add/del/mod（整文件覆盖为源仓库最新版本 HEAD）
 
-    目录新增/删除也走 svn merge 让 SVN 递归处理整个目录树。
+    目录新增/删除也走 export/add 让 SVN 递归处理整个目录树。
     目录属性修改（mergeinfo 等）直接跳过。
     返回 (merged, conflict, skip, conflict_files_added)
     """
     is_dir = _is_dir_path(file_path)
-    latest_rev = max(revisions)
+    head_rev = global_max_rev or (max(revisions) if revisions else None)
 
     # 目录属性修改 → 跳过（mergeinfo 等噪声）
     if is_dir and action == "mod":
@@ -549,7 +511,7 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
     if is_dir and action == "add":
         _log(f"  → 新增目录: {file_path}", "info")
         file_url = source_url.rstrip("/") + "/" + file_path
-        ok, msg = _svn_try_export(svn_exe, file_url, latest_rev, local_file, auth_args)
+        ok, msg = _svn_try_export(svn_exe, file_url, head_rev, local_file, auth_args)
         if not ok:
             _log(msg, "warn")
             return 0, 1, 0, [file_path]
@@ -571,7 +533,7 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
     # 文件新增 → export + add（用最新版本）
     if action == "add" and not is_dir:
         _log(f"  → 新增: {file_path}", "info")
-        ok = _svn_export_add(svn_exe, source_url, latest_rev,
+        ok = _svn_export_add(svn_exe, source_url, head_rev,
                              file_path, local_file, auth_args, _log)
         if ok:
             _log(f"  ✅ 新增文件: {file_path}", "ok")
@@ -607,7 +569,7 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
     # 本地不存在时改按新增处理，直接 export + add
     if action not in ("add", "del") and not os.path.exists(local_file):
         _log(f"  → 本地不存在，改按新增: {file_path}", "info")
-        ok = _svn_export_add(svn_exe, source_url, latest_rev,
+        ok = _svn_export_add(svn_exe, source_url, head_rev,
                              file_path, local_file, auth_args, _log)
         if ok:
             _log(f"  ✅ 新增文件: {file_path}", "ok")
@@ -669,6 +631,22 @@ def svn_merge(source_url, target_wc, revisions, files,
     skip_count = 0
     conflict_files = []
 
+    # 2026-08-27: 合并改为取源仓库最新版本（HEAD），不按勾选版本号逐版本合并
+    head_rev = global_max_rev
+    if not head_rev:
+        try:
+            _r = subprocess.run(
+                [svn_exe, "info", "--show-item", "revision", source_url] + auth_args,
+                capture_output=True, timeout=30, **_get_subprocess_kwargs())
+            _txt = _r.stdout.decode("utf-8", errors="replace").strip()
+            head_rev = int(_txt) if _txt.isdigit() else None
+        except Exception:
+            head_rev = None
+    if not head_rev and revisions:
+        head_rev = max(revisions)
+    if head_rev:
+        _log(f"  使用源仓库最新版本: r{head_rev}（不按勾选版本号合并）", "info")
+
     for f in files:
         file_path = f.get("path", "")
         action = f.get("action", "mod")
@@ -678,7 +656,7 @@ def svn_merge(source_url, target_wc, revisions, files,
         local_file = os.path.join(target_wc, file_path)
         m, c, s, cf = _svn_merge_one_file(
             svn_exe, source_url, revisions, file_path, local_file,
-            action, auth_args, _log, global_max_rev)
+            action, auth_args, _log, head_rev)
         merged_count += m
         conflict_count += c
         skip_count += s
@@ -924,11 +902,15 @@ def migrate_old_svn_mappings(cfg):
         except Exception:
             pass
     if len(mappings) > before:
-        cfg["svn_url_mappings"] = mappings
-        try:
-            from toolbox_config import save_config
-            save_config(cfg)
-        except Exception:
-            pass
+        from toolbox_config import load_config, save_config, config_lock
+        with config_lock:
+            fresh = load_config()
+            merged = fresh.get("svn_url_mappings", {}) or {}
+            merged.update(mappings)
+            fresh["svn_url_mappings"] = merged
+            try:
+                save_config(fresh)
+            except Exception:
+                pass
         return True
     return False

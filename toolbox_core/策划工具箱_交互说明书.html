@@ -58,9 +58,8 @@ code{padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.3);color:#c8d8ff;f
           <tr class="dashed"><td style="white-space:nowrap" rowspan="3">SVN 记录</td><td>修改摘要</td><td>统计指定日期范围内各版本的修改文件和提交信息</td></tr>
           <tr class="dashed"><td>对比 Excel</td><td>逐版本对比 Excel 文件差异，输出变更行报告</td></tr>
           <tr><td>导出文件</td><td>导出指定日期范围内修改过的文件到本地目录</td></tr>
-          <tr class="dashed"><td style="white-space:nowrap" rowspan="2">语义合并</td><td>版本合并</td><td>从源分支筛选版本和变更文件，支持排除路径、文件过滤，合并到目标工作副本</td></tr>
+          <tr class="dashed"><td style="white-space:nowrap" rowspan="2">语义合并</td><td>版本合并</td><td>从源分支筛选版本和变更文件，支持排除路径、文件过滤，把文件覆盖为源仓库最新版本并合并到目标工作副本</td></tr>
           <tr><td>Texts.xlsm 合并</td><td>对 Texts.xlsm 做单元格级逐版本合并，不整文件替换</td></tr>
-          <tr><td style="white-space:nowrap">复制合并</td><td>文件复制</td><td>从源目录选文件复制到 SVN 目标目录并辅助提交</td></tr>
           <tr><td style="white-space:nowrap">翻译</td><td>AI 翻译</td><td>调用 AI API 批量翻译 Excel 多语言列，支持参考文件和自定义 Prompt</td></tr>
           <tr><td style="white-space:nowrap">文字检测</td><td>质量检查</td><td>检查 Texts.xlsm 的空值、漏翻、占位符不一致、标签丢失、重复 ID</td></tr>
           <tr class="dashed"><td style="white-space:nowrap" rowspan="3">修改预制</td><td>一键清理文字</td><td>批量清理 .prefab 文件中的文字引用</td></tr>
@@ -76,7 +75,7 @@ code{padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.3);color:#c8d8ff;f
           <tr class="dashed"><td>打开表格</td><td>逐个打开 Excel 文件，支持锁定或不锁定两种模式</td></tr>
           <tr class="dashed"><td>整合文字表</td><td>从源目录选文件复制到目标目录</td></tr>
           <tr class="dashed"><td>整合错误码</td><td>从源提取错误码合入目标，语言代码留空自动识别</td></tr>
-          <tr class="dashed"><td>快速整合</td><td>按来源3天内修改的文件自动覆盖到目标 SVN 目录，支持多来源/多提交路径，自动对齐目录结构</td></tr>
+          <tr class="dashed"><td>快速整合</td><td>按来源最近 N 天修改的文件自动覆盖到目标 SVN 目录（天数可设置，默认3，1=当天），支持多来源/多提交路径，自动对齐目录结构</td></tr>
           <tr class="dashed"><td>录入错误码</td><td>从翻译文件读取错误码翻译，自动匹配语言目录写入 ErrorMessage.xlsm，录入后自动按设置语言导出并上传 SVN</td></tr>
           <tr><td>上传 SVN</td><td>把本地目录复制到 SVN 工作副本</td></tr>
         </tbody>
@@ -162,26 +161,7 @@ code{padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.3);color:#c8d8ff;f
           <tr><td>变更文件列表</td><td>顶部下拉可按路径前缀过滤，全选/反选/清空只影响当前筛选结果</td></tr>
           <tr><td>拖入本地副本到源地址</td><td>自动检测并填入 SVN URL</td></tr>
           <tr><td>变更文件最终动作</td><td>最新是删除→删除；曾新增→新增；否则→修改</td></tr>
-          <tr><td>开始合并</td><td>直接改目标工作副本；可能弹出 TortoiseSVN 提交窗口（需手动确认）</td></tr>
-        </tbody>
-      </table>
-    </section>
-
-    <!-- 复制合并 -->
-    <section>
-      <h2>复制合并</h2>
-      <div class="flow">
-        <span class="step">选源目录</span>
-        <span class="step">勾选文件</span>
-        <span class="step">填目标 SVN 目录</span>
-        <span class="step">执行</span>
-      </div>
-      <table>
-        <thead><tr><th>操作</th><th>结果</th></tr></thead>
-        <tbody>
-          <tr><td>源目录变化</td><td>延迟刷新文件列表；点刷新按钮可立即刷新</td></tr>
-          <tr><td>点文件行</td><td>切换勾选（不必点复选框）</td></tr>
-          <tr><td>清理 changelist</td><td>清理目标 SVN 目录的遗留 changelist</td></tr>
+          <tr><td>开始合并</td><td>把勾选文件直接覆盖为源仓库最新版本（HEAD），不按勾选版本号逐版本合并；可能弹出 TortoiseSVN 提交窗口（需手动确认）</td></tr>
         </tbody>
       </table>
     </section>
@@ -231,7 +211,7 @@ code{padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.3);color:#c8d8ff;f
         <thead><tr><th>操作</th><th>结果</th></tr></thead>
         <tbody>
           <tr><td>检测完成</td><td>如果日志捕获到输出路径，自动打开输出文件所在目录</td></tr>
-          <tr><td>排除ID配置</td><td>一行一个 ID，<code>#</code> 开头为注释</td></tr>
+          <tr><td>排除ID配置</td><td>一行一个 ID 或 <code>KEYWORD:关键词</code>（ID 或任一语言列含该关键词则整行排除），<code>#</code> 开头为注释</td></tr>
         </tbody>
       </table>
     </section>

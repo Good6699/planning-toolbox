@@ -1,4 +1,7 @@
-import os, sys, argparse, json, hashlib, base64
+import os, sys, argparse, json, hashlib, base64, threading
+
+# 配置「读-改-写」原子锁：防止并发保存互相覆盖（丢失更新）
+config_lock = threading.Lock()
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir", type=str, default=None,

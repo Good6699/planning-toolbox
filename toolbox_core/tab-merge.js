@@ -1,3 +1,41 @@
+// 语义合并日志批量追加：80ms 批处理 + DocumentFragment + 行数上限，避免逐条 append 拖慢渲染
+function _mergeLogBatch(logEl, maxLines) {
+  const buf = [];
+  let timer = null;
+  function flush() {
+    if (!buf.length) return;
+    const lines = buf.splice(0);
+    const frag = document.createDocumentFragment();
+    for (const raw of lines) {
+      if (!raw.trim()) continue;
+      const div = document.createElement("div");
+      div.textContent = raw;
+      frag.appendChild(div);
+      if (/\[error\]/.test(raw)) _focusAppOnError("merge", logEl);
+    }
+    _logAppend(logEl, frag);
+    while (logEl.children.length - 1 > (maxLines || 3000)) {
+      const first = logEl.firstElementChild;
+      if (!first || first.classList.contains("log-anchor")) break;
+      first.remove();
+    }
+  }
+  function push(raw) {
+    buf.push(raw);
+    if (!timer) {
+      timer = setInterval(() => {
+        flush();
+        if (!buf.length && timer) { clearInterval(timer); timer = null; }
+      }, 80);
+    }
+  }
+  function stop() {
+    if (timer) { clearInterval(timer); timer = null; }
+    flush();
+  }
+  return { push, stop };
+}
+
 function _getCheckedVersionFiles() {
   const allActions = {};
   const allFiles = {};
@@ -159,6 +197,20 @@ function buildMergeTab(panel) {
       width:"480px", maxWidth:"90vw",
       left:"50%", top:"50%", transform:"translate(-50%,-50%)"
     });
+    // 标题栏 + 关闭按钮（设置弹窗不点空白关闭，必须点按钮）
+    const headRow = document.createElement("div");
+    Object.assign(headRow.style, {display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px"});
+    const title = document.createElement("span");
+    title.textContent = "只包含路径筛选";
+    Object.assign(title.style, {fontWeight:"600", fontSize:"13px"});
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = "✕";
+    closeBtn.title = "关闭";
+    Object.assign(closeBtn.style, {background:"none", border:"none", color:"var(--dim)", fontSize:"15px", cursor:"pointer", lineHeight:"1", padding:"0"});
+    closeBtn.addEventListener("click", (ev) => { ev.stopPropagation(); popup.remove(); });
+    headRow.appendChild(title);
+    headRow.appendChild(closeBtn);
+    popup.appendChild(headRow);
     const mode = config.merge_file_filter_mode || "include";
     const modeBar = document.createElement("div");
     Object.assign(modeBar.style, {display:"flex", gap:"4px", marginBottom:"8px"});
@@ -179,9 +231,9 @@ function buildMergeTab(panel) {
         if (oldMode === val) return;
         const oldKey = "merge_file_filter_" + oldMode + "_text";
         const oldTxt = ta.value.split("\n").map(s => s.trim()).filter(Boolean).join(",");
-        saveConfig({[oldKey]: oldTxt});
+        // 一次原子保存两个键，避免两个并发 POST 互相覆盖（丢失 mode）
+        saveConfig({[oldKey]: oldTxt, merge_file_filter_mode: val});
         config[oldKey] = oldTxt;
-        saveConfig({merge_file_filter_mode: val});
         config.merge_file_filter_mode = val;
         modeBar.querySelectorAll("button").forEach(bb => {
           const v = bb.dataset.modeVal;
@@ -226,16 +278,7 @@ function buildMergeTab(panel) {
     document.body.appendChild(popup);
     setTimeout(() => ta.focus(), 50);
   });
-  document.addEventListener("mousedown", (e) => {
-    const popup = document.getElementById("merge_file_filter_popup");
-    if (popup && !e.target.closest("#merge_file_filter_popup") && !e.target.closest("[data-action='merge-file-filter-toggle']")) {
-      popup.remove();
-    }
-    const excludePopup = document.getElementById("merge_revert_exclude_popup");
-    if (excludePopup && !e.target.closest("#merge_revert_exclude_popup") && !e.target.closest("[data-action='merge-revert-exclude-toggle']")) {
-      excludePopup.remove();
-    }
-  });
+  // 设置弹窗不点空白关闭，必须点按钮（✕/保存/关闭）
   document.querySelector("[data-action='merge-revert-exclude-toggle']").addEventListener("click", (e) => {
     e.stopPropagation();
     const existing = document.getElementById("merge_revert_exclude_popup");
@@ -572,6 +615,7 @@ async function runMergeQuery() {
     btn.innerHTML = _WF_ICONS.stop;
     btn.classList.add("stop");
     if (window._esMergeQ) window._esMergeQ.close();
+    const _qLog = _mergeLogBatch(logEl);
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
     window._esMergeQ = evtSrc;
     let resultData = null;
@@ -585,6 +629,7 @@ async function runMergeQuery() {
     };
     evtSrc.onmessage = (e) => {
       if (e.data === "[DONE]") {
+        _qLog.stop();
         evtSrc.close();
         _mergeDone();
         if (resultData) {
@@ -614,15 +659,10 @@ async function runMergeQuery() {
         try { resultData = JSON.parse(e.data.slice(8)); } catch(_) {}
         return;
       }
-      for (const raw of e.data.split("\n")) {
-        if (!raw.trim()) continue;
-        const div = document.createElement("div");
-        div.textContent = raw;
-        _logAppend(logEl, div);
-        if (/\[error\]/.test(raw)) _focusAppOnError("merge", logEl);
-      }
+      _qLog.push(e.data);
     };
     evtSrc.onerror = () => {
+      _qLog.stop();
       evtSrc.close();
       if (window._esMergeQ === evtSrc) window._esMergeQ = null;
       _mergeDone();
@@ -814,23 +854,19 @@ async function runMergeRun() {
     if (window._esMergeRun) window._esMergeRun.close();
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
     window._esMergeRun = evtSrc;
+    const _runLog = _mergeLogBatch(logEl);
     evtSrc.onmessage = (e) => {
       if (e.data === "[DONE]") {
+        _runLog.stop();
         evtSrc.close();
         window._esMergeRun = null;
         _mergeRunDone();
         return;
       }
-      const lines = e.data.split("\n");
-      for (const raw of lines) {
-        if (!raw.trim()) continue;
-        const div = document.createElement("div");
-        div.textContent = raw;
-        _logAppend(logEl, div);
-        if (/\[error\]/.test(raw)) _focusAppOnError("merge", logEl);
-      }
+      _runLog.push(e.data);
     };
     evtSrc.onerror = () => {
+      _runLog.stop();
       evtSrc.close();
       window._esMergeRun = null;
       _mergeRunDone();

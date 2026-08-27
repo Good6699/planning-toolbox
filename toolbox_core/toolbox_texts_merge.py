@@ -105,93 +105,26 @@ def merge_texts_xlsm(source_url, target_path, file_path, file_revs,
         put("  无差异\n")
         return 0, 0
 
-    # ── Step 3: 直接用差异数据合并到目标 ──
+    # ── Step 3: 子进程合并到目标（openpyxl 重活放子进程，避免占主进程 GIL）──
     # results 结构: {文件名: [行dict, ...]}，每个行dict含 ID、sheet、各列值
-    # 按 sheet 分组，提取行号列表，调用 _merge_sheet_rows
+    # header_data 结构: {文件名: {sheet名: {行号: {列字母: 表头值}}}}
     put(f"  合并到目标: {local_file}\n")
 
-    try:
-        wb_tgt = openpyxl.load_workbook(local_file)
-    except Exception as e:
-        put(f"  无法打开目标文件: {e}\n")
-        return 0, 0
+    from toolbox_xlsx_merge import run_xlsx_apply_worker
+    wr = run_xlsx_apply_worker({
+        "mode": "merge_sheet_rows",
+        "target_path": local_file,
+        "title_rows": title_rows,
+        "id_col": id_col,
+        "diff_data": results,
+        "header_data": header_data.get(next(iter(results)), {}) if header_data and results else {},
+    }, put)
 
-    total_added = 0
-    total_updated = 0
+    if not wr or not wr.get("ok"):
+        put("  合并到目标失败（子进程）\n")
+        return 0, 1
 
-    for fname, rows in results.items():
-        if not rows:
-            continue
-
-        # 按 sheet 分组
-        by_sheet = {}
-        for row_data in rows:
-            sheet_name = row_data.get("sheet", "")
-            if not sheet_name:
-                continue
-            by_sheet.setdefault(sheet_name, []).append(row_data)
-
-        # header_data 结构: {文件名: {sheet名: {行号: {列字母: 表头值}}}}
-        file_hd = header_data.get(fname, {}) if header_data else {}
-
-        for sheet_name, sheet_rows in by_sheet.items():
-            ws_tgt = wb_tgt[sheet_name] if sheet_name in wb_tgt.sheetnames else None
-            if not ws_tgt:
-                pass
-                continue
-
-            # 构建临时 worksheet
-            wb_tmp = openpyxl.Workbook()
-            ws_tmp = wb_tmp.active
-            ws_tmp.title = sheet_name
-
-            # 写入表头
-            sheet_hd = file_hd.get(sheet_name, {})
-            for row_num, cols in sheet_hd.items():
-                for letter, val in cols.items():
-                    col_num = openpyxl.utils.column_index_from_string(letter)
-                    ws_tmp.cell(row=row_num, column=col_num, value=val)
-
-            # 构建列名 → 列号映射
-            col_name_map = {}
-            if title_rows in sheet_hd:
-                for letter, hdr_val in sheet_hd[title_rows].items():
-                    col_num = openpyxl.utils.column_index_from_string(letter)
-                    col_name_map[hdr_val] = col_num
-
-            put(f"  {sheet_name}: {len(sheet_rows)} 行差异\n")
-
-            # 写入差异行数据
-            skip_keys = {"操作", "当前版本", "上一版本", "前一版本", "sheet",
-                         "_id_changed", "前一版本_ID", "前一版本_SC", "前一版本_sub"}
-            inp_rows = []
-            for i, row_data in enumerate(sheet_rows):
-                # 跳过删除行——源版本中被删除的行不应写入目标
-                if row_data.get("操作") == "删除":
-                    continue
-                r = title_rows + 1 + len(inp_rows)
-                inp_rows.append(r)
-                for col_name, val in row_data.items():
-                    if col_name in skip_keys:
-                        continue
-                    col_num = col_name_map.get(col_name)
-                    if col_num:
-                        ws_tmp.cell(row=r, column=col_num, value=val)
-
-            if inp_rows:
-                a, u, _ = merge_sheet_rows_fn(ws_tmp, ws_tgt, inp_rows, title_rows, id_col, set(), put)
-                total_added += a
-                total_updated += u
-                put(f"  {sheet_name}: {u} 修改, {a} 新增\n")
-
-            wb_tmp.close()
-
-    try:
-        wb_tgt.save(local_file)
-        wb_tgt.close()
-    except Exception as e:
-        put(f"  保存失败: {e}\n")
-        return 0, 0
-
+    total_added = wr.get("added", 0)
+    total_updated = wr.get("updated", 0)
     put(f"[Texts.xlsm] 合并完成: {total_updated} 行修改, {total_added} 行新增\n")
     return total_added + total_updated, 0

@@ -13,7 +13,8 @@ import shutil
 import stat
 import tempfile
 import concurrent.futures
-from datetime import datetime
+from datetime import datetime, timedelta
+import xml.etree.ElementTree as ET
 import locale
 import re
 import secrets
@@ -52,7 +53,7 @@ from webview.dom import _dnd_state
 
 from toolbox_config import (  # noqa: E402
     SCRIPT_DIR, MAIN_SCRIPT, DEFAULT_OUTPUT_DIR,
-    load_config, save_config,
+    load_config, save_config, config_lock,
 )
 from toolbox_platform import _get_subprocess_kwargs, _get_bat_subprocess_kwargs, _get_svn_path, _check_office_lock, _diagnose_svn_missing, _auto_install_svn_cli  # noqa: E402
 from xlsm_zipper import apply_via_excel  # noqa: E402
@@ -252,6 +253,7 @@ def api_get_config():
         "cmp_global_id_col": cfg.get("cmp_global_id_col", ""),
         "cmp_output_cols": cfg.get("cmp_output_cols", ""),
         "workflows": cfg.get("workflows", []),
+        "tc_path": cfg.get("tc_path", ""),
         "tr_api_key": cfg.get("tr_api_key", ""),
         "_wf_history_paths": cfg.get("_wf_history_paths", []),
         "_wf_history_texts": cfg.get("_wf_history_texts", []),
@@ -265,19 +267,21 @@ def api_get_config():
 
 @app.route("/api/config", methods=["POST"])
 def api_save_config():
-    cfg = load_config()
-    data = request.get_json(force=True)
-    for k, v in data.items():
-        if k == "api_key" and v:
-            cfg["tr_api_key"] = v
-        elif k == "svn_pass" and v:
-            from toolbox_config import encrypt_key
-            cfg["svn_pass"] = encrypt_key(v)
-        elif k in ("api_key", "svn_pass"):
-            pass
-        else:
-            cfg[k] = v
-    save_config(cfg)
+    # 加锁串行化「读-改-写」，防止并发保存互相覆盖（如模式切换连发两个请求丢失 mode）
+    with config_lock:
+        cfg = load_config()
+        data = request.get_json(force=True)
+        for k, v in data.items():
+            if k == "api_key" and v:
+                cfg["tr_api_key"] = v
+            elif k == "svn_pass" and v:
+                from toolbox_config import encrypt_key
+                cfg["svn_pass"] = encrypt_key(v)
+            elif k in ("api_key", "svn_pass"):
+                pass
+            else:
+                cfg[k] = v
+        save_config(cfg)
     return jsonify({"ok": True})
 
 # ═══════════════════════════════════════════════════════════
@@ -366,13 +370,14 @@ def api_svn_run():
     if not svn_url:
         return jsonify({"error": "请输入 SVN URL"}), 400
 
-    cfg = load_config()
-    urls = cfg.get("svn_urls", [])
-    if svn_url in urls:
-        urls.remove(svn_url)
-    urls.insert(0, svn_url)
-    cfg["svn_urls"] = urls[:20]
-    save_config(cfg)
+    with config_lock:
+        cfg = load_config()
+        urls = cfg.get("svn_urls", [])
+        if svn_url in urls:
+            urls.remove(svn_url)
+        urls.insert(0, svn_url)
+        cfg["svn_urls"] = urls[:20]
+        save_config(cfg)
 
     is_export_like = mode in ("export", "summary")
     if not output or not os.path.isdir(output):
@@ -778,14 +783,15 @@ def api_upload_run():
     if not files:
         return jsonify({"error": "请选择文件"}), 400
 
-    cfg = load_config()
-    for k, v in [("src_dir_history", src), ("tgt_dir_history", tgt)]:
-        hist = cfg.get(k, [])
-        if v in hist:
-            hist.remove(v)
-        hist.insert(0, v)
-        cfg[k] = hist[:20]
-    save_config(cfg)
+    with config_lock:
+        cfg = load_config()
+        for k, v in [("src_dir_history", src), ("tgt_dir_history", tgt)]:
+            hist = cfg.get(k, [])
+            if v in hist:
+                hist.remove(v)
+            hist.insert(0, v)
+            cfg[k] = hist[:20]
+        save_config(cfg)
 
     task_id = _get_next_task_id()
     q = queue.Queue()
@@ -1536,9 +1542,10 @@ def api_workflow_list():
 @app.route("/api/workflow/save", methods=["POST"])
 def api_workflow_save():
     data = request.get_json(force=True)
-    cfg = load_config()
-    cfg["workflows"] = data.get("workflows", [])
-    save_config(cfg)
+    with config_lock:
+        cfg = load_config()
+        cfg["workflows"] = data.get("workflows", [])
+        save_config(cfg)
     return jsonify({"ok": True})
 
 
@@ -1676,6 +1683,8 @@ def _run_wf_task(q, wf, steps, task_id, skip_lock=False):
                 ok = _exec_merge_error_code(step, _put, task_id)
             elif stype == "consolidate":
                 ok = _exec_consolidate(step, _put, task_id)
+            elif stype == "merge_specified_text":
+                ok = _exec_merge_specified_text(step, _put, task_id)
             elif stype == "error_code_entry":
                 ok = _exec_error_code_entry(step, _put, task_id)
             else:
@@ -2293,49 +2302,58 @@ def _svn_update_with_cleanup(svn, d, put, task_id, accept_mine=False):  # noqa: 
                 put(f"更新完成: {d}\n")
                 return True
             err = stderr.strip()
-            if "E155004" in err or "E155037" in err:
-                put("检测到 SVN 锁，正在执行 cleanup（串行等待完成）...\n")
-                if not _svn_cleanup_wait(svn, d, put, task_id):
-                    put("  cleanup 未能在限定时间内完成，尝试强制回退本地修改...\n")
-                    revert_proc = subprocess.Popen(
-                        [svn, "revert", "-R", d],
+            if "E155004" in err or "E155037" in err or "E155032" in err:
+                put("检测到 SVN 工作副本锁/损坏，正在自动修复...\n")
+                for attempt in range(1, 4):  # 最多 3 轮：修基线 → cleanup → 重试（可能多个文件连续损坏）
+                    # E155032：.svn 基线缺失，优先重建 pristine（cleanup 处理队列需要它）
+                    if "E155032" in err:
+                        _svn_fix_missing_pristine(d, err, put)
+                    if not _svn_cleanup_wait(svn, d, put, task_id):
+                        put("  cleanup 未能在限定时间内完成，尝试强制回退本地修改...\n")
+                        revert_proc = subprocess.Popen(
+                            [svn, "revert", "-R", d],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            **_get_subprocess_kwargs())
+                        _register_proc(revert_proc, task_id)
+                        try:
+                            revert_proc.communicate(timeout=60)
+                        finally:
+                            _unregister_proc(revert_proc, task_id)
+                        put("  本地回退完成，重试更新...\n")
+                    put(f"修复完成（第 {attempt} 轮），重试更新...\n")
+                    retry_proc = subprocess.Popen(
+                        [svn, "update", "--accept", accept_flag, d],
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                         **_get_subprocess_kwargs())
-                    _register_proc(revert_proc, task_id)
+                    _register_proc(retry_proc, task_id)
                     try:
-                        revert_proc.communicate(timeout=60)
+                        retry_out, retry_err = retry_proc.communicate(timeout=120)
+                        retry_stdout = _svn_decode_output(retry_out)
+                        retry_stderr = _svn_decode_output(retry_err)
+                        if retry_proc.returncode == 0:
+                            for line in retry_stdout.strip().splitlines():
+                                line = line.strip()
+                                if line:
+                                    put(f"  {line}\n")
+                            if accept_mine:
+                                cfiles = [l[2:].strip() for l in retry_stdout.splitlines()
+                                          if l.strip().startswith("C ") and not l.strip().startswith(("C Summary","C Text","C Property"))]
+                                cfiles = [f for f in cfiles if f]
+                                if cfiles:
+                                    put(f"  ⚠ 以下 {len(cfiles)} 个文件存在冲突，已自动保留本地版本:\n")
+                                    for cf in cfiles:
+                                        put(f"    - {cf}\n")
+                            put(f"更新完成: {d}\n")
+                            return True
+                        retry_err = retry_stderr.strip()
+                        if not any(e in retry_err for e in ("E155004", "E155037", "E155032")):
+                            put(f"更新失败: {d} - {retry_err[-200:]}\n")
+                            return False
+                        err = retry_err  # 仍可修复的错误，进入下一轮
                     finally:
-                        _unregister_proc(revert_proc, task_id)
-                    put("  本地回退完成，重试更新...\n")
-                put("cleanup 完成，重试更新...\n")
-                retry_proc = subprocess.Popen(
-                    [svn, "update", "--accept", accept_flag, d],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    **_get_subprocess_kwargs())
-                _register_proc(retry_proc, task_id)
-                try:
-                    retry_out, retry_err = retry_proc.communicate(timeout=120)
-                    retry_stdout = _svn_decode_output(retry_out)
-                    retry_stderr = _svn_decode_output(retry_err)
-                    if retry_proc.returncode == 0:
-                        for line in retry_stdout.strip().splitlines():
-                            line = line.strip()
-                            if line:
-                                put(f"  {line}\n")
-                        if accept_mine:
-                            cfiles = [l[2:].strip() for l in retry_stdout.splitlines()
-                                      if l.strip().startswith("C ") and not l.strip().startswith(("C Summary","C Text","C Property"))]
-                            cfiles = [f for f in cfiles if f]
-                            if cfiles:
-                                put(f"  ⚠ 以下 {len(cfiles)} 个文件存在冲突，已自动保留本地版本:\n")
-                                for cf in cfiles:
-                                    put(f"    - {cf}\n")
-                        put(f"更新完成: {d}\n")
-                        return True
-                    put(f"cleanup 后更新仍失败: {d} - {retry_stderr[-200:]}\n")
-                    return False
-                finally:
-                    _unregister_proc(retry_proc, task_id)
+                        _unregister_proc(retry_proc, task_id)
+                put(f"多次修复后更新仍失败: {d} - {retry_stderr[-200:]}\n")
+                return False
             else:
                 put(f"更新失败: {d} - {err[-200:]}\n")
                 return False
@@ -2356,6 +2374,88 @@ def _svn_update_with_cleanup(svn, d, put, task_id, accept_mine=False):  # noqa: 
             ok, msg = _auto_install_svn_cli(put=lambda m: put("     " + m))
             put(f"  → {msg}\n")
         return False
+
+
+def _svn_fix_missing_pristine(wc_path, err, put):
+    """E155032：.svn 基线（pristine）缺失。
+    优先用未修改的工作文件重建 pristine（无数据损失）；工作文件与基线不一致时改名备份，
+    让 update 重新下载重建。返回是否处理了文件；查不到/解析失败时安全跳过。"""
+    m = re.search(r"checksum '([0-9a-fA-F]{40})'", err)
+    if not m:
+        put("  无法从错误信息解析 checksum，跳过自动修复\n")
+        return False
+    sha = m.group(1).lower()
+    # 向上定位 wc.db（目标目录可能是工作副本的子目录）
+    wc_db = None
+    cur = wc_path
+    while cur and len(cur) > 3:
+        cand = os.path.join(cur, ".svn", "wc.db")
+        if os.path.isfile(cand):
+            wc_db = cand
+            break
+        cur = os.path.dirname(cur)
+    if not wc_db:
+        put("  未找到 wc.db，跳过自动修复\n")
+        return False
+    try:
+        import sqlite3
+        con = sqlite3.connect("file:" + wc_db + "?mode=ro", uri=True)
+        try:
+            rows = con.execute(
+                "SELECT local_relpath, checksum FROM NODES WHERE checksum = ? AND presence = 'normal' AND kind = 'file'",
+                ("$sha1$" + sha,),
+            ).fetchall()
+        finally:
+            con.close()
+    except Exception as e:
+        put(f"  查询 wc.db 失败: {e}，跳过自动修复\n")
+        return False
+    if not rows:
+        put("  wc.db 中未找到对应文件，跳过自动修复\n")
+        return False
+    import hashlib
+    wc_root = os.path.dirname(wc_db)
+    handled = False
+    for (rel, cs) in rows:
+        fp = os.path.join(wc_root, rel.replace("/", os.sep))
+        if not os.path.isfile(fp):
+            continue
+        try:
+            data = open(fp, "rb").read()
+        except Exception as e:
+            put(f"  读取失败 {rel}: {e}\n")
+            continue
+        try:
+            if hashlib.sha1(data).hexdigest() == sha:
+                # 工作文件未被修改 = 基线内容，直接重建 pristine
+                pdir = os.path.join(wc_root, ".svn", "pristine", sha[:2])
+                os.makedirs(pdir, exist_ok=True)
+                ppath = os.path.join(pdir, sha + ".svn-base")
+                if not os.path.isfile(ppath):
+                    with open(ppath, "wb") as f:
+                        f.write(data)
+                wcon = sqlite3.connect(wc_db)
+                try:
+                    wcon.execute(
+                        "INSERT OR IGNORE INTO PRISTINE (checksum, compression, size, refcount, md5_checksum) VALUES (?,?,?,?,?)",
+                        (cs, None, len(data), 1, "$md5 $" + hashlib.md5(data).hexdigest()),
+                    )
+                    wcon.commit()
+                finally:
+                    wcon.close()
+                put(f"  已用工作文件重建基线: {rel}\n")
+                handled = True
+            else:
+                # 有本地改动，无法重建：备份后由 update 重下（改动留在 .bak）
+                bak = fp + ".svn-broken.bak"
+                if os.path.exists(bak):
+                    os.remove(bak)
+                os.rename(fp, bak)
+                put(f"  文件有本地改动，已备份为 {rel}.svn-broken.bak，update 将重新下载\n")
+                handled = True
+        except Exception as e:
+            put(f"  修复失败 {rel}: {e}\n")
+    return handled
 
 
 def _get_svn_cached_user():
@@ -2489,6 +2589,46 @@ def _exec_merge_error_code(step, put, task_id=None):
     return export_ok
 
 
+def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put):
+    """返回 src_dir 下 cutoff_date 当天起有 SVN 提交的文件相对路径集合；不可用时返回 None"""
+    try:
+        r = subprocess.run(
+            [svn_exe, "log", "-v", "--xml", "-r", "{%s}:HEAD" % cutoff_date, src_dir],
+            capture_output=True, timeout=60, **_get_subprocess_kwargs()
+        )
+        u = subprocess.run(
+            [svn_exe, "info", "--show-item", "relative-url", src_dir],
+            capture_output=True, timeout=15, **_get_subprocess_kwargs()
+        )
+    except Exception:
+        return None
+    if r.returncode != 0 or u.returncode != 0:
+        return None
+    base_rel = _decode_svn_output(u.stdout).strip()
+    if base_rel.startswith("^/"):
+        base_rel = base_rel[1:]
+    base_rel = base_rel.rstrip("/")
+    try:
+        root_el = ET.fromstring(_decode_svn_output(r.stdout))
+    except Exception:
+        return None
+    files = set()
+    for logentry in root_el.iter("logentry"):
+        for p in logentry.iter("path"):
+            if p.get("action") == "D":
+                continue
+            path = (p.text or "").strip()
+            if not path or not base_rel:
+                continue
+            if path.startswith(base_rel):
+                rel = path[len(base_rel):].lstrip("/")
+                if rel:
+                    files.add(rel.replace("/", os.sep))
+    if files:
+        put(f"  SVN 识别: {cutoff_date} 起 {len(files)} 个文件有提交\n")
+    return files
+
+
 def _exec_consolidate(step, put, task_id=None):
     """快速整合：按时间戳复制来源目录文件到目标 SVN 工作副本，弹 TortoiseSVN 提交"""
     raw_src = step.get("src_dir", "")
@@ -2512,10 +2652,20 @@ def _exec_consolidate(step, put, task_id=None):
     if not commit_dirs:
         put("未指定提交路径\n"); return False
 
+    # 天数设置：默认3天，至少1天=当天（自然日，从今天0点起往前 (days-1) 天）
+    days = 3
+    raw_days = str(step.get("days") or "").strip()
+    if raw_days:
+        try:
+            days = max(1, int(raw_days))
+        except ValueError:
+            days = 3
+
     put(f"{'='*50}\n")
     put("快速整合\n")
     put(f"来源: {', '.join(src_dirs)}\n")
     put(f"目标: {tgt_dir}\n")
+    put(f"天数: {days}（今天起 {days} 个自然日）\n")
     put(f"提交: {', '.join(commit_dirs)}\n\n")
 
     os.makedirs(tgt_dir, exist_ok=True)
@@ -2538,10 +2688,14 @@ def _exec_consolidate(step, put, task_id=None):
     else:
         put("⚠️ 目标目录没有 SVN 链接，跳过更新\n")
 
-    # 遍历所有来源，按时间戳过滤（只复制最近3天修改过的文件）
-    cutoff = time.time() - 3 * 86400
+    # 遍历所有来源：按最近 days 天内的 SVN 提交识别修改文件（回退：本地文件修改时间）
+    today = datetime.now()
+    cutoff_date = (today - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+    today_mid = today.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    cutoff = today_mid - (days - 1) * 86400
     total = old = copied_count = 0
     copied_files = []
+    svn_mode_ok = True
     tgt_parts = os.path.normpath(tgt_dir).split(os.sep)
     for src_dir in src_dirs:
         put(f"\n扫描来源: {src_dir}\n")
@@ -2563,15 +2717,25 @@ def _exec_consolidate(step, put, task_id=None):
             put(f"  路径对齐: +{extra_prefix}\n")
         else:
             put("  路径对齐: 直接覆盖（无公共路径段）\n")
+        changed = _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put)
+        if changed is None:
+            svn_mode_ok = False
+            put(f"  ⚠ svn log 不可用，回退为按本地文件修改时间（{cutoff_date} 起）\n")
         for root, dirs, files in os.walk(src_dir):
             for fn in files:
                 total += 1
                 src_file = os.path.join(root, fn)
-                # 跳过最近3天未修改的文件
-                if os.path.getmtime(src_file) < cutoff:
-                    old += 1
-                    continue
                 rel = os.path.relpath(src_file, src_dir)
+                if changed is not None:
+                    # 按 SVN 提交识别：只复制 cutoff_date 起有提交记录的文件
+                    if rel not in changed:
+                        old += 1
+                        continue
+                else:
+                    # 回退：按本地文件修改时间过滤
+                    if os.path.getmtime(src_file) < cutoff:
+                        old += 1
+                        continue
                 if extra_prefix:
                     tgt_file = os.path.join(tgt_dir, extra_prefix, rel)
                 else:
@@ -2584,7 +2748,10 @@ def _exec_consolidate(step, put, task_id=None):
                 except Exception as e:
                     put(f"  ✗ {rel}: {e}\n")
 
-    put(f"扫描 {total} 个文件，复制 {copied_count} 个，跳过 {old} 个（超过3天未修改）\n")
+    if svn_mode_ok:
+        put(f"扫描 {total} 个文件，复制 {copied_count} 个，跳过 {old} 个（{cutoff_date} 起无 SVN 提交）\n")
+    else:
+        put(f"扫描 {total} 个文件，复制 {copied_count} 个，跳过 {old} 个（{cutoff_date} 前未修改）\n")
 
     if not copied_files:
         put("没有需要整合的文件\n")
@@ -2620,6 +2787,335 @@ def _exec_consolidate(step, put, task_id=None):
     else:
         put("⚠ 未找到 TortoiseSVN\n")
     _notify_task_done("快速整合")
+    return True
+
+
+def _run_bat_tools_in_parallel(tools, put, task_id):
+    """并行执行一批 bat 工具（导出用），逐行转发输出到日志"""
+    def _run_one(tool_path):
+        put(f"  正在执行: {os.path.basename(tool_path)}\n")
+        proc = subprocess.Popen(
+            ["cmd.exe", "/c", tool_path],
+            cwd=os.path.dirname(tool_path) if os.path.isdir(os.path.dirname(tool_path)) else None,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
+            **_get_bat_subprocess_kwargs())
+        _register_proc(proc, task_id)
+        try:
+            _stderr_lines = []
+            def _read_stderr():
+                for err_line in iter(proc.stderr.readline, b""):
+                    _stderr_lines.append(err_line)
+                proc.stderr.close()
+            stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+            stderr_thread.start()
+            for line in iter(proc.stdout.readline, b""):
+                try:
+                    raw = line.rstrip()
+                    try:
+                        text = raw.decode("utf-8")
+                    except UnicodeDecodeError:
+                        text = raw.decode("gbk", errors="replace")
+                    put(f"    {text}\n")
+                except Exception:
+                    pass
+            proc.wait(timeout=3600)
+            stderr_thread.join(timeout=5)
+            if _stderr_lines:
+                put("  --- stderr 输出 ---\n")
+                for err_line in _stderr_lines:
+                    try:
+                        raw = err_line.rstrip()
+                        try:
+                            text = raw.decode("utf-8")
+                        except UnicodeDecodeError:
+                            text = raw.decode("gbk", errors="replace")
+                        put(f"  [stderr] {text}\n")
+                    except Exception:
+                        pass
+            if proc.returncode == 0:
+                put(f"  {os.path.basename(tool_path)} 已完成\n")
+            else:
+                put(f"  {os.path.basename(tool_path)} 退出代码: {proc.returncode}\n")
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+                proc.communicate(timeout=5)
+            except Exception:
+                pass
+            put(f"  {os.path.basename(tool_path)} 超时\n")
+        except Exception as e:
+            put(f"  {os.path.basename(tool_path)} 错误: {e}\n")
+        finally:
+            _unregister_proc(proc, task_id)
+
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(tools)) as executor:
+        futures = [executor.submit(_run_one, t) for t in tools]
+        concurrent.futures.wait(futures)
+
+
+def _svn_update_wc_of_file(svn, file_path, put, task_id):
+    """svn update 文件所在工作副本的根目录"""
+    r = subprocess.run(
+        [svn, "info", "--show-item", "wc-root", file_path],
+        capture_output=True, timeout=30, **_get_subprocess_kwargs())
+    wc_root = _decode_svn_output(r.stdout).strip() if r.returncode == 0 else ""
+    if not wc_root:
+        put(f"  {os.path.basename(file_path)} 不在 SVN 工作副本中，跳过更新\n")
+        return
+    put(f"  更新: {wc_root}\n")
+    _svn_update_with_cleanup(svn, wc_root, put, task_id)
+
+
+
+
+
+
+def _exec_merge_specified_text(step, put, task_id=None):
+    """指定合并文字表：按 SVN 备注(包含)/作者(精确)/自然日 筛选修改的文字ID，
+    从来源表整行复制到目标表，保存一次后自动导出，再弹 SVN 提交框"""
+    import openpyxl
+    from toolbox_config import load_config
+    from datetime import datetime as _dt, timedelta as _td
+    cfg = load_config()
+
+    src_path = (step.get("src_path") or "").strip()
+    tgt_path = (step.get("tgt_path") or "").strip()
+    commit_msg = (step.get("commit_msg") or "").strip()
+    commit_author = (step.get("commit_author") or "").strip()
+    days = 3
+    raw_days = str(step.get("days") or "").strip()
+    if raw_days:
+        try:
+            days = max(1, int(raw_days))
+        except ValueError:
+            days = 3
+    raw_commit = step.get("commit_dir", "")
+    if isinstance(raw_commit, list):
+        commit_dirs = [s.strip() for s in raw_commit if s.strip()]
+    else:
+        commit_dirs = [s.strip() for s in str(raw_commit).split(",") if s.strip()]
+
+    if not src_path or not os.path.isfile(src_path):
+        put(f"来源文字表无效: {src_path}\n")
+        return False
+    if not tgt_path or not os.path.isfile(tgt_path):
+        put(f"目标文字表无效: {tgt_path}\n")
+        return False
+    if not commit_dirs:
+        put("未指定提交路径\n")
+        return False
+
+    title_rows = int(step.get("title_rows") or cfg.get("cmp_title_rows") or "1")
+    id_col = int(step.get("id_col") or cfg.get("cmp_id_col") or "1")
+
+    put(f"{'='*50}\n")
+    put("指定合并文字表\n")
+    put(f"来源: {src_path}\n")
+    put(f"目标: {tgt_path}\n")
+    put(f"筛选: 备注含「{commit_msg or '不限'}」 作者「{commit_author or '不限'}」 {days} 个自然日\n")
+    put(f"提交: {', '.join(commit_dirs)}\n\n")
+
+    svn = _get_svn_path()
+
+    # 1. 先更新目标路径所在工作副本
+    put("正在更新目标路径工作副本...\n")
+    _svn_update_wc_of_file(svn, tgt_path, put, task_id)
+
+    # 1b. 锁定目标文字表，失败则阻断后续步骤
+    put("正在锁定目标文字表...\n")
+    if not _exec_lock_svn({"target_path": tgt_path, "lock_msg": "指定合并文字表前锁定", "update_dirs": []}, put, task_id):
+        put("✗ 目标文字表锁定失败，阻断后续步骤（可能被他人锁定，或需要先 svn cleanup）\n")
+        return False
+
+    # 2. 更新来源表所在工作副本
+    put("正在更新来源表工作副本...\n")
+    _svn_update_wc_of_file(svn, src_path, put, task_id)
+
+    # 3. 解析来源表 SVN URL
+    r = subprocess.run(
+        [svn, "info", "--show-item", "url", src_path],
+        capture_output=True, timeout=30, **_get_subprocess_kwargs())
+    file_url = _decode_svn_output(r.stdout).strip() if r.returncode == 0 else ""
+    if not file_url:
+        put("来源表不在 SVN 工作副本中，无法查询版本\n")
+        return False
+    dir_url = file_url.rsplit("/", 1)[0]
+    fname = os.path.basename(src_path)
+    put(f"来源表 URL: {file_url}\n")
+
+    # 4. 自然日范围
+    today = _dt.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    start = (today - _td(days=days - 1)).strftime("%Y-%m-%d")
+    end = today.strftime("%Y-%m-%d")
+
+    # 5. 查全历史版本，Python 侧筛选（作者精确 + 备注包含 + 日期范围）
+    from toolbox_merge import svn_log
+    try:
+        all_versions = svn_log(file_url, "2000-01-01", end,
+                               svn_user=cfg.get("svn_user") or "", svn_pass=cfg.get("svn_pass") or "")
+    except Exception as e:
+        put(f"版本查询失败: {e}\n")
+        return False
+    selected = []
+    for v in all_versions:
+        if not isinstance(v.get("rev"), int):
+            continue
+        if commit_author and (v.get("author") or "") != commit_author:
+            continue
+        if commit_msg and commit_msg not in (v.get("msg") or ""):
+            continue
+        if (v.get("date") or "")[:10] < start:
+            continue
+        selected.append(v["rev"])
+    if not selected:
+        put("没有符合条件的 SVN 提交，跳过\n")
+        return True
+    put(f"命中 {len(selected)} 个版本: {sorted(selected)}\n")
+
+    # 6. 版本对：每个命中版本 vs 其实际前一版本
+    all_revs = sorted(set(v["rev"] for v in all_versions if isinstance(v.get("rev"), int)), reverse=True)
+    rev_to_idx = {r: i for i, r in enumerate(all_revs)}
+    pairs = []
+    for cur in sorted(selected, reverse=True):
+        idx = rev_to_idx.get(cur)
+        if idx is not None and idx + 1 < len(all_revs):
+            pairs.append((cur, all_revs[idx + 1]))
+    if not pairs:
+        put("无有效版本对，跳过\n")
+        return True
+    put(f"版本对: {len(pairs)} 对\n")
+
+    # 7. 版本对对比（走现有 _cmp_worker 子进程池 worker 机制）
+    from svn_oneclick_compare import step3_download_and_compare
+    import svn_oneclick_compare as _cmp_mod
+    _orig_log = _cmp_mod._log
+    def _redirect_log(*a, **kw):
+        try:
+            put(" ".join(str(x) for x in a) + "\n")
+        except Exception:
+            pass
+    _cmp_mod._log = _redirect_log
+    try:
+        results, header_data, sheet_order = step3_download_and_compare(
+            dir_url, file_pairs={fname: pairs},
+            svn_user=cfg.get("svn_user") or "", svn_pass=cfg.get("svn_pass") or "")
+    except Exception as e:
+        put(f"对比失败: {e}\n")
+        return False
+    finally:
+        _cmp_mod._log = _orig_log
+
+    if not results or not results.get(fname):
+        put("无差异\n")
+        return True
+
+    # 8. 读来源表，提取 ID 列头
+    try:
+        wb_src = openpyxl.load_workbook(src_path, read_only=True, data_only=True)
+    except Exception as e:
+        put(f"读取来源表失败: {e}\n")
+        return False
+    id_header = None
+    for sn in wb_src.sheetnames:
+        ws = wb_src[sn]
+        if ws.max_row >= title_rows:
+            v = ws.cell(row=title_rows, column=id_col).value
+            if v:
+                id_header = str(v).strip()
+                break
+    if not id_header:
+        put("来源表未找到 ID 列头\n")
+        wb_src.close()
+        return False
+
+    # 9. 从对比结果提取修改 ID（按 sheet 分组）
+    id_by_sheet = {}
+    for row_data in results.get(fname, []):
+        sheet_name = row_data.get("sheet", "")
+        idv = row_data.get(id_header)
+        if sheet_name and idv is not None:
+            id_by_sheet.setdefault(sheet_name, set()).add(str(idv).strip())
+    if not id_by_sheet:
+        put("未提取到修改的文字 ID\n")
+        wb_src.close()
+        return True
+    total_ids = sum(len(v) for v in id_by_sheet.values())
+    put(f"修改文字 ID: {total_ids} 个\n")
+    wb_src.close()  # 复制改由子进程完成，先释放来源表
+
+    # 10-11. 子进程整行复制 + 保存（openpyxl 重活放子进程，避免占主进程 GIL）
+    from toolbox_xlsx_merge import run_xlsx_apply_worker
+    put("正在复制文字ID行到目标表...\n")
+    wr = run_xlsx_apply_worker({
+        "mode": "copy_rows_by_id",
+        "src_path": src_path,
+        "tgt_path": tgt_path,
+        "id_by_sheet": id_by_sheet,
+        "title_rows": title_rows,
+        "id_col": id_col,
+    }, put, task_id)
+    if not wr or not wr.get("ok"):
+        put("复制/保存目标表失败（子进程）\n")
+        return False
+    added = wr.get("added", 0)
+    updated = wr.get("updated", 0)
+    if added + updated == 0:
+        put("目标表无需修改\n")
+        return True
+    put(f"已保存目标表: {os.path.basename(tgt_path)}\n")
+    put(f"合并完成: {updated} 行替换, {added} 行新增\n")
+
+    # 11b. 同步合并文字索引表（文字引用处理.xlsm）：只处理与变更文字ID相关的行
+    all_changed_ids = set()
+    for _ids in id_by_sheet.values():
+        all_changed_ids.update(_ids)
+    src_idx = os.path.join(os.path.dirname(src_path), "文字引用处理.xlsm")
+    tgt_idx = os.path.join(os.path.dirname(tgt_path), "文字引用处理.xlsm")
+    if os.path.isfile(src_idx) or os.path.isfile(tgt_idx):
+        put("正在同步文字索引表...\n")
+        wr2 = run_xlsx_apply_worker({
+            "mode": "sync_index",
+            "src_idx": src_idx,
+            "tgt_idx": tgt_idx,
+            "changed_ids": list(all_changed_ids),
+        }, put, task_id)
+        if wr2 and wr2.get("ok"):
+            put(f"索引表同步完成: {wr2.get('updated', 0)} 行替换, {wr2.get('added', 0)} 行新增\n")
+        else:
+            put("索引表同步失败（子进程）\n")
+    else:
+        put("未找到文字索引表（文字引用处理.xlsm），跳过同步\n")
+
+    # 12. 自动导出（跑目标表目录的导出 bat 工具）
+    bat_dir = os.path.dirname(tgt_path)
+    bat_names = ["服务器文字表导出_替换文本引用.bat", "客户端文字表导出_替换文本引用.bat"]
+    found_tools = []
+    for name in bat_names:
+        p = os.path.join(bat_dir, name)
+        if os.path.isfile(p):
+            found_tools.append(p)
+            put(f"  发现导出工具: {name}\n")
+        else:
+            put(f"  未找到: {name}\n")
+    if found_tools:
+        put(f"使用 {len(found_tools)} 个导出工具并行执行...\n")
+        _run_bat_tools_in_parallel(found_tools, put, task_id)
+    else:
+        put("没有可执行的导出工具\n")
+
+    # 13. 弹 TortoiseSVN 提交框
+    tortoise = _get_tortoise_proc_path()
+    if tortoise:
+        for cp in commit_dirs:
+            subprocess.Popen([tortoise, "/command:commit", f"/path:{cp}"])
+        put(f"✓ TortoiseSVN 提交对话框已打开 ({len(commit_dirs)} 个路径)\n")
+    else:
+        put("⚠ 未找到 TortoiseSVN\n")
+    _notify_task_done("指定合并文字表")
     return True
 
 
@@ -2752,7 +3248,7 @@ def _exec_error_code_entry(step, put, task_id=None):
 
         put(f"[{lang_name}] 正在录入 {xlsm_path}\n")
         try:
-            ec_wb = openpyxl.load_workbook(xlsm_path)
+            ec_wb = openpyxl.load_workbook(xlsm_path, keep_vba=True)
             ec_ws = ec_wb.active
 
             # 建立 ID→行号 映射（遍历整张表，不受 END 位置限制）
@@ -3861,9 +4357,9 @@ def _exec_merge_table(step, put, task_id=None):
             failed += 1
             continue
 
-        # 打开目标文件（可写模式，保留 xlsm 结构）
+        # 打开目标文件（可写模式，保留 xlsm 结构；keep_vba 保持 macroEnabled 声明，否则 Office 打不开）
         try:
-            wb_tgt = openpyxl.load_workbook(target_path)
+            wb_tgt = openpyxl.load_workbook(target_path, keep_vba=True)
         except Exception as e:
             put(f"✗ 打开目标文件失败: {e}\n")
             failed += 1
@@ -3998,143 +4494,6 @@ def _exec_merge_table(step, put, task_id=None):
     return failed == 0
 
 
-def _merge_sheet_rows(ws_in, ws_tgt, inp_rows, title_rows, id_col, dup_ids, put):
-    """按 ID 合并 sheet：更新现有行、追加新增行。返回 (added, updated, source_ids)
-    
-    对齐 Tkinter 旧版逻辑：
-    - ID 列按列头文字匹配
-    - 数据列按 (列头, 出现次数) 元匹配（支持重复列头）
-    - 连续数据区识别，END 标记处理：
-      有 END 时旧 END 行变 "0"，新行插在 END 后，最后一行变 "END"
-    - dup_ids: 跨 sheet 重复的 ID 集合，用于日志标注 """
-    id_col_num = id_col
-    if id_col_num > ws_tgt.max_column:
-        return 0, 0, set()
-
-    tgt_id_header = str(ws_tgt.cell(row=title_rows, column=id_col_num).value or "").strip()
-    if not tgt_id_header:
-        return 0, 0, set()
-
-    inp_id_col = None
-    for col in range(1, ws_in.max_column + 1):
-        h = ws_in.cell(row=title_rows, column=col).value
-        if h and str(h).strip() == tgt_id_header:
-            inp_id_col = col
-            break
-    if inp_id_col is None:
-        return 0, 0, set()
-
-    # ── 查找连续数据区 ──
-    last_continuous_id_row = title_rows
-    for r in range(title_rows + 1, ws_tgt.max_row + 1):
-        val = ws_tgt.cell(row=r, column=id_col_num).value
-        if val is not None and str(val).strip():
-            last_continuous_id_row = r
-        else:
-            break
-
-    # ── 查找 END 标记 ──
-    has_end = False
-    end_row_at = None
-    if last_continuous_id_row >= title_rows + 1:
-        for r in range(last_continuous_id_row, ws_tgt.max_row + 1):
-            val = ws_tgt.cell(row=r, column=1).value
-            if val is not None and str(val).strip().lower() == "end":
-                has_end = True
-                end_row_at = r
-                break
-
-    # ── 构建目标 ID → 行号 映射（连续数据区内） ──
-    tgt_id_map = {}
-    for r in range(title_rows + 1, last_continuous_id_row + 1):
-        val = ws_tgt.cell(row=r, column=id_col_num).value
-        if val is not None:
-            key = str(val).strip()
-            if key:
-                tgt_id_map[key] = r
-
-    updated = 0
-    source_ids = set()
-    new_rows_data = []  # 待插入行的 (inp_id, col_data) 列表
-
-    for inp_r in inp_rows:
-        inp_id_val = ws_in.cell(row=inp_r, column=inp_id_col).value
-        if inp_id_val is None:
-            continue
-        inp_id = str(inp_id_val).strip()
-        if not inp_id or inp_id in ("::ID::", "ID"):
-            continue
-        source_ids.add(inp_id)
-
-        # 读取输入行数据，按 (列头, 出现次数) 为 key（从列 2 开始，列 1 为 ID）
-        inp_hdr_count = {}
-        row_data = {}
-        for col in range(2, ws_in.max_column + 1):
-            h = ws_in.cell(row=title_rows, column=col).value
-            if h is not None:
-                h_str = str(h).strip()
-                occ = inp_hdr_count.get(h_str, 0)
-                inp_hdr_count[h_str] = occ + 1
-                val = ws_in.cell(row=inp_r, column=col).value
-                row_data[(h_str, occ)] = val
-
-        if inp_id in tgt_id_map:
-            # ── 更新：按目标列头匹配写入 ──
-            tgt_r = tgt_id_map[inp_id]
-            tgt_hdr_count = {}
-            for col in range(1, ws_tgt.max_column + 1):
-                h = ws_tgt.cell(row=title_rows, column=col).value
-                if h is not None:
-                    h_str = str(h).strip()
-                    occ = tgt_hdr_count.get(h_str, 0)
-                    tgt_hdr_count[h_str] = occ + 1
-                    if h_str != tgt_id_header and col != 1:
-                        key = (h_str, occ)
-                        if key in row_data:
-                            ws_tgt.cell(row=tgt_r, column=col).value = row_data[key]
-            updated += 1
-        else:
-            # ── 插入：按目标列头匹配收集数据（跳过列 1） ──
-            tgt_hdr_count = {}
-            col_data = {}
-            for col in range(1, ws_tgt.max_column + 1):
-                h = ws_tgt.cell(row=title_rows, column=col).value
-                if h is not None:
-                    h_str = str(h).strip()
-                    occ = tgt_hdr_count.get(h_str, 0)
-                    tgt_hdr_count[h_str] = occ + 1
-                    if col == 1:
-                        continue
-                    key = (h_str, occ)
-                    if key in row_data:
-                        col_data[col] = row_data[key]
-            new_rows_data.append((inp_id, col_data))
-
-    # ── 批量写入插入行 ──
-    added = len(new_rows_data)
-    if new_rows_data:
-        if has_end:
-            # END → "0"，新行插在 END 后，最后一行变 "END"
-            ws_tgt.cell(row=end_row_at, column=1).value = "0"
-            for col, val in new_rows_data[0][1].items():
-                ws_tgt.cell(row=end_row_at, column=col).value = val
-            for i in range(1, len(new_rows_data)):
-                inp_id, col_data = new_rows_data[i]
-                tgt_r = end_row_at + i
-                col_data[1] = "0" if i < len(new_rows_data) - 1 else "END"
-                for col, val in col_data.items():
-                    ws_tgt.cell(row=tgt_r, column=col).value = val
-        else:
-            after_row = last_continuous_id_row
-            for i, (inp_id, col_data) in enumerate(new_rows_data):
-                col_data[1] = inp_id
-                tgt_r = after_row + 1 + i
-                for col, val in col_data.items():
-                    ws_tgt.cell(row=tgt_r, column=col).value = val
-
-    if added > 0 or updated > 0:
-        put(f"    {ws_in.title}: 新增 {added} 行, 更新 {updated} 行\n")
-    return added, updated, source_ids
 
 
 # ═══════════════════════════════════════════════════════════
@@ -4171,19 +4530,21 @@ def _import_lang_map_txt_to_json():
 @app.route("/api/translate/lang-id-map", methods=["GET", "POST"])
 def api_translate_lang_id_map():
     if request.method == "GET":
-        cfg = load_config()
-        data = cfg.get("tr_lang_id_map", {})
-        if not data:
-            data = _import_lang_map_txt_to_json()
-            if data:
-                cfg["tr_lang_id_map"] = data
-                save_config(cfg)
+        with config_lock:
+            cfg = load_config()
+            data = cfg.get("tr_lang_id_map", {})
+            if not data:
+                data = _import_lang_map_txt_to_json()
+                if data:
+                    cfg["tr_lang_id_map"] = data
+                    save_config(cfg)
         return jsonify({"data": data})
     data = request.get_json(force=True)
     lang_id_map = data.get("lang_id_map", {})
-    cfg = load_config()
-    cfg["tr_lang_id_map"] = lang_id_map
-    save_config(cfg)
+    with config_lock:
+        cfg = load_config()
+        cfg["tr_lang_id_map"] = lang_id_map
+        save_config(cfg)
     return jsonify({"ok": True})
 
 # ═══════════════════════════════════════════════════════════
@@ -4215,19 +4576,20 @@ def api_translate_run():  # noqa: C901
     os.makedirs(out_dir, exist_ok=True)
 
     # 保存配置
-    cfg = load_config()
-    for k, v in [("tr_src_history", src_path), ("tr_ref_history", ref_path),
-                 ("tr_api_url", api_url), ("tr_model", model),
-                 ("tr_src_lang", src_lang), ("tr_out_dir", out_dir),
-                 ("tr_prompt", prompt_template), ("tr_batch_size", batch_size)]:
-        if k.endswith("_history"):
-            hist = cfg.get(k, [])
-            if v and v not in hist:
-                hist.insert(0, v)
-                cfg[k] = hist[:20]
-        elif v or isinstance(v, int):
-            cfg[k] = v
-    save_config(cfg)
+    with config_lock:
+        cfg = load_config()
+        for k, v in [("tr_src_history", src_path), ("tr_ref_history", ref_path),
+                     ("tr_api_url", api_url), ("tr_model", model),
+                     ("tr_src_lang", src_lang), ("tr_out_dir", out_dir),
+                     ("tr_prompt", prompt_template), ("tr_batch_size", batch_size)]:
+            if k.endswith("_history"):
+                hist = cfg.get(k, [])
+                if v and v not in hist:
+                    hist.insert(0, v)
+                    cfg[k] = hist[:20]
+            elif v or isinstance(v, int):
+                cfg[k] = v
+        save_config(cfg)
 
     task_id = _get_next_task_id()
     q = queue.Queue()
@@ -4880,15 +5242,15 @@ def api_svn_resolve_url():
     url = data.get("url", "").strip()
     if not url:
         return jsonify({"ok": False, "error": "URL 为空"}), 400
-    cfg = load_config()
-    local_path = resolve_svn_url_to_local(url, cfg=cfg)
-    if local_path and os.path.isdir(local_path):
-        mappings = cfg.get("svn_url_mappings", {})
-        if not mappings:
-            mappings = {}
-        mappings[url.rstrip("/")] = os.path.normpath(local_path)
-        save_config({"svn_url_mappings": mappings})
-        return jsonify({"ok": True, "path": os.path.normpath(local_path)})
+    with config_lock:
+        cfg = load_config()
+        local_path = resolve_svn_url_to_local(url, cfg=cfg)
+        if local_path and os.path.isdir(local_path):
+            mappings = cfg.get("svn_url_mappings", {}) or {}
+            mappings[url.rstrip("/")] = os.path.normpath(local_path)
+            cfg["svn_url_mappings"] = mappings
+            save_config(cfg)
+            return jsonify({"ok": True, "path": os.path.normpath(local_path)})
     return jsonify({"ok": False, "error": "未找到对应的本地工作副本路径（可尝试先填写目标路径建立映射）"}), 200
 
 
@@ -4921,15 +5283,15 @@ def api_svn_save_mapping():
             **_get_subprocess_kwargs()
         )
         wc_root = r2.stdout.strip() if r2.returncode == 0 else path
-        cfg = load_config()
-        mappings = cfg.get("svn_url_mappings", {})
-        if not mappings:
-            mappings = {}
-        new_key = clean_url
-        new_val = os.path.normpath(wc_root)
-        if mappings.get(new_key) != new_val:
-            mappings[new_key] = new_val
-            save_config({"svn_url_mappings": mappings})
+        with config_lock:
+            cfg = load_config()
+            mappings = cfg.get("svn_url_mappings", {}) or {}
+            new_key = clean_url
+            new_val = os.path.normpath(wc_root)
+            if mappings.get(new_key) != new_val:
+                mappings[new_key] = new_val
+                cfg["svn_url_mappings"] = mappings
+                save_config(cfg)
         return jsonify({"ok": True, "path": new_val, "url": new_key})
     except FileNotFoundError:
         return jsonify({"ok": False, "error": "SVN 命令不可用"}), 200
@@ -5059,52 +5421,67 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
             if svn_pass:
                 _auth_args += ["--password", svn_pass, "--no-auth-cache"]
             _log("正在过滤纯属性变更文件...")
-            content_files = set()
             _svn = _get_svn_path()
 
+            # svn diff --summarize 一次只接受单个 -c/-r，多个 -c 会报 E205000
+            # 改为并发逐个版本检查内容变更
             # svn diff --summarize 输出用正斜杠，source_url 可能是反斜杠，统一比较
             norm_url = source_url.replace("\\", "/").rstrip("/")
-            for i in range(0, len(filtered_revs), 50):
-                batch = filtered_revs[i:i + 50]
-                rev_args = []
-                for r in batch:
-                    rev_args += ["-c", str(r)]
+
+            def _content_files_for_rev(rev):
                 try:
                     _r = subprocess.run(
-                        [_svn, "diff", "--summarize"] + rev_args + [source_url] + _auth_args,
-                        capture_output=True, timeout=60, **_get_subprocess_kwargs()
+                        [_svn, "diff", "--summarize", "-c", str(rev), source_url] + _auth_args,
+                        capture_output=True, timeout=30, **_get_subprocess_kwargs()
                     )
+                    if _r.returncode != 0:
+                        return rev, None
                     out = _r.stdout.decode("utf-8", errors="replace") if _r.stdout else ""
+                    s = set()
                     for line in out.strip().splitlines():
                         parts = line.strip().split(None, 1)
                         if len(parts) >= 2:
                             path = parts[1].replace("\\", "/")
                             if path.startswith(norm_url):
-                                path = path[len(norm_url):].lstrip("/")
-                                content_files.add(path)
+                                s.add(path[len(norm_url):].lstrip("/"))
+                    return rev, s
                 except Exception:
-                    pass
+                    return rev, None
 
-            if content_files:
-                # content_files 是相对路径（如 Assets/foo.xlsx）
-                # svn_log 路径是仓库绝对路径（如 /D3_EA/trunk/Client/Assets/foo.xlsx）
-                # 统一用 endswith 匹配相对路径的尾部
-                _cf_lower = {p.lower() for p in content_files}
-                removed = 0
-                for v in versions:
-                    orig = v.get("files", [])
-                    v["files"] = []
-                    for f in orig:
-                        _fp = f.get("path", "").replace("\\", "/")
-                        _fp_lower = _fp.lower()
-                        # 直接相等 或 以 /{相对路径} 结尾 或 {相对路径} 是路径尾
-                        if _fp_lower in _cf_lower or any(
-                            _fp_lower.endswith("/" + cf) or _fp_lower == cf
-                            for cf in _cf_lower
-                        ):
-                            v["files"].append(f)
-                    removed += len(orig) - len(v.get("files", []))
-                if removed:
+            rev_content = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
+                futs = [ex.submit(_content_files_for_rev, r) for r in filtered_revs]
+                done = 0
+                for fut in concurrent.futures.as_completed(futs):
+                    rev, s = fut.result()
+                    if s is not None:
+                        rev_content[rev] = s
+                    done += 1
+                    if done % 25 == 0:
+                        _log(f"  内容变更检查: {done}/{len(filtered_revs)}")
+
+            # 用每个版本自己的内容变更集合过滤纯属性变更；diff 失败的版本保留原文件
+            removed = 0
+            for v in versions:
+                cf_set = rev_content.get(v.get("rev"))
+                if cf_set is None:
+                    continue
+                # svn_log 路径是仓库绝对路径（如 /branches/.../Client/Assets/foo.xlsx）
+                # content_files 是相对路径（如 Assets/foo.xlsx），用 endswith 匹配尾部
+                _cf_lower = {p.lower() for p in cf_set}
+                orig = v.get("files", [])
+                v["files"] = []
+                for f in orig:
+                    _fp = f.get("path", "").replace("\\", "/")
+                    _fp_lower = _fp.lower()
+                    # 直接相等 或 以 /{相对路径} 结尾 或 {相对路径} 是路径尾
+                    if _fp_lower in _cf_lower or any(
+                        _fp_lower.endswith("/" + cf) or _fp_lower == cf
+                        for cf in _cf_lower
+                    ):
+                        v["files"].append(f)
+                removed += len(orig) - len(v.get("files", []))
+            if removed:
                     _log(f"  已过滤 {removed} 个纯属性变更文件")
 
         if filter_str_verbose:
@@ -5140,6 +5517,7 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
 
 
 from toolbox_texts_merge import merge_texts_xlsm
+from toolbox_xlsx_merge import _merge_sheet_rows, _copy_rows_by_id, _sync_index_table  # noqa: E402
 
 
 def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, files,
@@ -5260,8 +5638,7 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
                     result = svn_merge(
                         source_url, target_path, file_revs, [f],
                         svn_user=svn_user, svn_pass=svn_pass,
-                        log_callback=_log,
-                        global_max_rev=max(revisions) if revisions else None
+                        log_callback=_log
                     )
                     total_merged += result["merged"]
                     total_conflict += result["conflict"]
@@ -5729,7 +6106,6 @@ def api_text_check_run():
         q.put("开始文字表检测\n")
         q.put(f"文件: {file_path}\n\n")
         try:
-            from _text_check import detect
             _lang_id_map = load_config().get("tr_lang_id_map", {})
             # 排除ID文件路径：本地不存在时自动从默认创建
             _local_exclude = os.path.join(os.environ.get('APPDATA', ''), 'planning-toolbox', 'text_check_exclude_ids.txt')
@@ -5740,20 +6116,36 @@ def api_text_check_run():
                     os.makedirs(os.path.dirname(_local_exclude), exist_ok=True)
                     shutil.copy2(_default_exclude, _local_exclude)
             _exclude_path = _local_exclude if os.path.isfile(_local_exclude) else _default_exclude
-            out_path, issues = detect(file_path,
-                progress_callback=lambda msg: q.put(msg),
-                target_langs=target_langs if target_langs else None,
-                lang_id_map=_lang_id_map,
-                exclude_ids_path=_exclude_path)
-            if out_path:
-                q.put(f"\n✅ 检测完成！发现问题: {issues} 行\n")
-                q.put(f"[输出路径] {out_path}\n")
-            else:
-                q.put(f"\n❌ {issues}\n")
+
+            # 子进程跑检测，避免占用主进程 GIL 导致界面卡顿
+            args = {
+                "file_path": file_path,
+                "target_langs": target_langs,
+                "lang_id_map": _lang_id_map,
+                "exclude_ids_path": _exclude_path,
+            }
+            fd, arg_path = tempfile.mkstemp(suffix=".json", prefix="tc_arg_")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(args, f, ensure_ascii=False)
+            worker_script = os.path.join(_script_dir, "_text_check_worker.py")
+            proc = subprocess.Popen(
+                [sys.executable, worker_script, arg_path],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                encoding="utf-8", errors="replace",
+                bufsize=1, **_get_subprocess_kwargs())
+            _register_proc(proc, task_id)
+            try:
+                for line in iter(proc.stdout.readline, ""):
+                    q.put(line)
+                proc.wait()
+            finally:
+                _unregister_proc(proc, task_id)
+                try:
+                    os.unlink(arg_path)
+                except Exception:
+                    pass
         except Exception as e:
-            import traceback
-            q.put(f"\n❌ 检测失败: {e}\n")
-            q.put(traceback.format_exc() + "\n")
+            q.put(f"❌ 启动检测进程失败: {e}\n")
         _notify_task_done("文字表检测")
         q.put(None)
 

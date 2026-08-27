@@ -1,7 +1,7 @@
 function buildWorkflowTab(panel) {
   const wfs = config.workflows || [];
-  const typeCn = {export_text:"导出文字表",export_modified_config:"导出修改配置表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表",merge_error_code:"整合错误码",consolidate:"快速整合",error_code_entry:"录入错误码"};
-  const typeIcon = {export_text:"📄",export_modified_config:"📝",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📦",merge_error_code:"🧩",consolidate:"⚡",error_code_entry:"📥"};
+  const typeCn = {export_text:"导出文字表",export_modified_config:"导出修改配置表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表",merge_error_code:"整合错误码",consolidate:"快速整合",merge_specified_text:"指定合并文字表",error_code_entry:"录入错误码"};
+  const typeIcon = {export_text:"📄",export_modified_config:"📝",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📦",merge_error_code:"🧩",consolidate:"⚡",merge_specified_text:"📑",error_code_entry:"📥"};
   const isEmpty = !wfs.length;
   panel.innerHTML = `
     <div class="wf-layout">
@@ -13,7 +13,6 @@ function buildWorkflowTab(panel) {
             <div class="wf-parent" data-idx="${i}">
               <div class="wf-parent-header">
                 <span class="wf-arrow">▶</span>
-                <input type="checkbox" class="wf-parent-check">
                 <span class="wf-parent-name">${escapeHtml(wf.name)}<span class="wf-edit-icon"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5L10.5 3.5"/><path d="M2 10L3.5 6.5L8.5 1.5L10.5 3.5L5.5 8.5L2 10Z"/></svg></span></span>
                 <span class="wf-status-dot" data-idx="${i}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green,#4caf50);margin:0 4px"></span></span>
                 <button class="wf-update-btn" title="更新SVN工作副本"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7a5 5 0 019.9-1"/><path d="M12 7a5 5 0 01-9.9 1"/><path d="M12 2v4h-4"/><path d="M2 12V8h4"/></svg></button>
@@ -23,7 +22,6 @@ function buildWorkflowTab(panel) {
               <div class="wf-children">
                 ${(wf.steps||[]).filter(Boolean).map((s, j) => `
                   <div class="wf-child" data-step="${j}">
-                    <input type="checkbox" class="wf-child-check">
                     <span class="wf-child-type ${s.type}">${typeIcon[s.type]||''} ${typeCn[s.type]||s.type}</span>
                     <span class="wf-child-name" title="双击修改名称">${escapeHtml(!s.custom_name && _wfAutoName(s) || s.name)}</span>
                     ${s.type === 'open_tables' ? '<button class="wf-step-open-btn" title="打开（不锁定SVN）">' + _WF_ICONS.open + '</button>' : ''}
@@ -75,7 +73,7 @@ function buildWorkflowTab(panel) {
   parents.forEach((el, i) => {
     const header = el.querySelector(".wf-parent-header");
     header.addEventListener("click", (e) => {
-      if (e.target.closest(".wf-parent-check,.wf-copy-btn,.wf-update-btn")) return;
+      if (e.target.closest(".wf-copy-btn,.wf-update-btn")) return;
       if (expandedIdx === i) {
         el.classList.remove("expanded");
         expandedIdx = -1;
@@ -89,19 +87,6 @@ function buildWorkflowTab(panel) {
           });
         });
       }
-    });
-    const parentCheck = el.querySelector(".wf-parent-check");
-    const childChecks = el.querySelectorAll(".wf-child-check");
-    parentCheck.addEventListener("change", () => {
-      childChecks.forEach(c => c.checked = parentCheck.checked);
-    });
-    childChecks.forEach(c => {
-      c.addEventListener("change", () => {
-        const allChecked = [...childChecks].every(cc => cc.checked);
-        const noneChecked = [...childChecks].every(cc => !cc.checked);
-        parentCheck.checked = allChecked;
-        parentCheck.indeterminate = !allChecked && !noneChecked;
-      });
     });
     // 父级批量执行已移除，请使用每个步骤独立的 ▶ 按钮
     const copyBtn = el.querySelector(".wf-copy-btn");
@@ -311,6 +296,7 @@ function buildWorkflowTab(panel) {
       copy_files:["src_dir","tgt_dir"],
       merge_error_code:["src_path","tgt_path"],
       consolidate:["src_dir","tgt_dir","commit_dir"],
+      merge_specified_text:["src_path","tgt_path","commit_dir"],
       error_code_entry:["translation_file","target_path"]
     };
     const labels = {
@@ -461,7 +447,15 @@ function buildWorkflowTab(panel) {
       consolidate: `
         ${_fb("来源路径（逗号分隔）","src_dir","wf_m_co_src","dir",true,"输入文件来源目录，多个用逗号分隔")}
         ${_fb("目标路径","tgt_dir","wf_m_co_tgt","dir",false,"输入 SVN 工作副本目标目录")}
-        ${_fb("提交路径（逗号分隔）","commit_dir","wf_m_co_commit","dir",true,"输入 TortoiseSVN 提交的根路径，多个用逗号分隔")}`,
+        ${_fb("提交路径（逗号分隔）","commit_dir","wf_m_co_commit","dir",true,"输入 TortoiseSVN 提交的根路径，多个用逗号分隔")}
+        <div class="form-group"><label>天数</label><input type="number" class="wf-modal-input" id="wf_m_co_days" data-key="days" min="1" value="${v("days") || 3}" placeholder="合并最近几天修改的文件（1=当天）"></div>`,
+      merge_specified_text: `
+        ${_fb("文字表来源路径","src_path","wf_m_mst_src","file",false,"输入来源文字表（SVN工作副本内的 Texts.xlsm 文件路径）")}
+        ${_fb("目标文字表路径","tgt_path","wf_m_mst_tgt","file",false,"输入要合并到的目标文字表文件路径")}
+        <div class="form-group"><label>SVN提交备注（包含匹配）</label><input type="text" class="wf-modal-input" id="wf_m_mst_msg" data-key="commit_msg" value="${v("commit_msg")}" placeholder="输入提交信息关键词，留空不限"></div>
+        <div class="form-group"><label>SVN提交作者</label><input type="text" class="wf-modal-input" id="wf_m_mst_author" data-key="commit_author" value="${v("commit_author")}" placeholder="输入 SVN 提交者账户名，留空不限"></div>
+        <div class="form-group"><label>自然日</label><input type="number" class="wf-modal-input" id="wf_m_mst_days" data-key="days" min="1" value="${v("days") || 3}" placeholder="合并距今几天内的提交（1=当天）"></div>
+        ${_fb("提交路径（逗号分隔）","commit_dir","wf_m_mst_commit","dir",true,"输入 TortoiseSVN 提交的根路径，多个用逗号分隔")}`,
       error_code_entry: `
         ${_fb("翻译文件","translation_file","wf_m_ece_input","file",false,"输入包含错误码翻译的 Excel 文件路径")}
         ${_fb("目标路径","target_path","wf_m_ece_target","dir",false,"输入 gameData 所在目录（自动找 Language 子目录）")}
@@ -619,7 +613,6 @@ function buildWorkflowTab(panel) {
 
   document.getElementById("wf_modal_close").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } });
   document.getElementById("wf_modal_cancel").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } });
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } } });
   document.getElementById("wf_modal_save").addEventListener("click", _wfModalDoSave);
 
   panel.querySelectorAll("button,input").forEach(el => {
@@ -1029,6 +1022,11 @@ function _wfAutoName(step) {
   }
   if (t === "consolidate") {
     return step.tgt_dir || "";
+  }
+  if (t === "merge_specified_text") {
+    const p = (step.tgt_path || "").replace(/[\\/]$/, "");
+    const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
+    return i >= 0 ? p.substring(i + 1) : p;
   }
   if (t === "error_code_entry") {
     return step.target_path || "";

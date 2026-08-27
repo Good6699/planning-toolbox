@@ -49,6 +49,7 @@ _*.py
 !_merge_analyzer.py
 !_merge_analyze_worker.py
 !_export_error_code_erl.py
+!_xlsx_apply_worker.py
 _*.ps1
 _install_log.txt
 _push_result.txt

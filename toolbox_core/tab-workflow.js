@@ -903,6 +903,16 @@ function _wfDetectPrefixes(steps) {
 }
 function _wfReplacePrefixes(obj, oldP, newP) {
   if (typeof obj === "string") {
+    if (obj.includes(",")) {
+      // 逗号分隔的多值路径字段（如 src_dir/tgt_dir）：逐段替换，保留前导空格
+      return obj.split(",").map(part => {
+        const lead = part.match(/^\s*/)[0];
+        const s = part.trim();
+        if (!s) return part;
+        const r = (s === oldP || s.startsWith(oldP + "\\")) ? newP + s.substring(oldP.length) : s;
+        return lead + r;
+      }).join(",");
+    }
     if (obj === oldP || obj.startsWith(oldP + "\\")) return newP + obj.substring(oldP.length);
     return obj;
   }

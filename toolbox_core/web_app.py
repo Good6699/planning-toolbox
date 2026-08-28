@@ -5657,12 +5657,27 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
             if removed:
                 q.put(f"  已清理 {removed} 个空文件夹\n")
 
-        q.put("🔄 正在唤起SVN提交弹窗...\n")
-        opened = open_commit_dialog(target_path)
-        if opened:
-            q.put("✅ 已打开TortoiseSVN提交弹窗，请手动确认提交\n")
+        # 检查目标是否有实际变更，无变更不弹提交窗
+        _has_changes = False
+        try:
+            _sr = subprocess.run([svn, "status", target_path],
+                                 capture_output=True, timeout=60, **_get_subprocess_kwargs())
+            _sout = _decode_svn_output(_sr.stdout)
+            for _line in _sout.splitlines():
+                if _line.strip() and not _line.startswith("?"):
+                    _has_changes = True
+                    break
+        except Exception:
+            _has_changes = True
+        if not _has_changes:
+            q.put("没有实际变更，跳过 SVN 提交\n")
         else:
-            q.put("⚠ 未找到TortoiseSVN，请手动执行 svn commit\n")
+            q.put("🔄 正在唤起SVN提交弹窗...\n")
+            opened = open_commit_dialog(target_path)
+            if opened:
+                q.put("✅ 已打开TortoiseSVN提交弹窗，请手动确认提交\n")
+            else:
+                q.put("⚠ 未找到TortoiseSVN，请手动执行 svn commit\n")
         q.put("🎉 合并流程结束\n")
     except Exception as e:
         q.put(f"\n❌ 合并任务异常终止: {e}\n")

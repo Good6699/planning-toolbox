@@ -470,16 +470,27 @@ def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
     _log(f"  → 覆盖为最新版(r{head_rev}): {file_path}", "info")
     file_url = source_url.rstrip("/") + "/" + file_path
 
-    # 最新版与本地无内容差异 → 跳过（纯属性/无变化）
+    # 1) summarize 快速检查：无任何差异（内容+属性）直接跳过
     try:
         dr = subprocess.run(
             [svn_exe, "diff", "--summarize", file_url + "@HEAD", local_file] + auth_args,
             capture_output=True, timeout=30, **_get_subprocess_kwargs())
-        if dr.returncode == 0:
-            diff_out = dr.stdout.decode("utf-8", errors="replace") if dr.stdout else ""
-            if not diff_out.strip():
-                _log(f"  ℹ 最新版与本地无差异，跳过: {file_path}", "info")
-                return 1, 0, 0, []
+        if dr.returncode == 0 and not (dr.stdout or b"").strip():
+            _log(f"  ℹ 最新版与本地无差异，跳过: {file_path}", "info")
+            return 1, 0, 0, []
+    except Exception:
+        pass
+    # 2) summarize 有差异（可能只是属性差异）→ 内容级比较：svn cat vs 本地字节
+    try:
+        cat_r = subprocess.run(
+            [svn_exe, "cat", file_url + "@HEAD"] + auth_args,
+            capture_output=True, timeout=180, **_get_subprocess_kwargs())
+        if cat_r.returncode == 0:
+            with open(local_file, "rb") as _f:
+                _local = _f.read()
+            if cat_r.stdout == _local:
+                _log(f"  ℹ 仅属性差异（内容相同），跳过: {file_path}", "info")
+                return 0, 0, 1, []
     except Exception:
         pass
 
@@ -505,7 +516,7 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
     # 目录属性修改 → 跳过（mergeinfo 等噪声）
     if is_dir and action == "mod":
         _log(f"  ℹ 跳过目录属性变更: {file_path}", "info")
-        return 1, 0, 0, []
+        return 0, 0, 1, []
 
     # 目录新增 → svn export 递归下载整个目录 + svn add 纳入跟踪
     if is_dir and action == "add":

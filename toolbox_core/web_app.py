@@ -2778,6 +2778,29 @@ def _exec_consolidate(step, put, task_id=None):
         except Exception:
             pass
 
+    # 检查提交路径是否有实际变更，无变更则不弹提交窗
+    has_changes = False
+    for cp in commit_dirs:
+        try:
+            st = subprocess.run(
+                [svn_exe, "status", cp],
+                capture_output=True, timeout=30, **_get_subprocess_kwargs()
+            )
+            out = st.stdout.decode("utf-8", errors="replace") if st.stdout else ""
+            for line in out.strip().splitlines():
+                if line.strip() and not line.startswith("?"):
+                    has_changes = True
+                    break
+        except Exception:
+            has_changes = True  # 检查失败时保守弹窗
+            break
+        if has_changes:
+            break
+    if not has_changes:
+        put("没有实际变更，跳过 SVN 提交\n")
+        _notify_task_done("快速整合")
+        return True
+
     # 直接弹出 TortoiseSVN 提交对话框
     tortoise = _get_tortoise_proc_path()
     if tortoise:

@@ -502,6 +502,58 @@ def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
     return 0, 1, 0, [file_path]
 
 
+def _sync_add_meta(svn_exe, source_url, file_path, local_file, auth_args, _log):
+    """新增文件时联动同路径 .meta：源存在则保证目标 .meta 内容与源一致
+
+    目标 .meta 缺失 → 写入并 svn add；存在但 GUID 不一致 → 用源覆盖（变 M）。
+    """
+    if file_path.lower().endswith(".meta"):
+        return
+    file_url = source_url.rstrip("/") + "/" + file_path
+    meta_url = file_url + ".meta"
+    meta_local = local_file + ".meta"
+    meta_rel = file_path + ".meta"
+    import re as _re
+    try:
+        r = subprocess.run(
+            [svn_exe, "cat", meta_url] + auth_args,
+            capture_output=True, timeout=60, **_get_subprocess_kwargs())
+    except Exception:
+        return
+    if r.returncode != 0:
+        return  # 源仓库没有该 .meta，跳过
+    src_meta = r.stdout
+    m = _re.search(rb'guid:\s*([0-9a-f]+)', src_meta)
+    src_guid = m.group(1).decode() if m else ""
+    if os.path.exists(meta_local):
+        try:
+            with open(meta_local, "rb") as f:
+                mb = _re.search(rb'guid:\s*([0-9a-f]+)', f.read())
+        except Exception:
+            return
+        tgt_guid = mb.group(1).decode() if mb else ""
+        if tgt_guid == src_guid:
+            return  # 内容一致，跳过
+        try:
+            with open(meta_local, "wb") as f:
+                f.write(src_meta)
+        except Exception as e:
+            _log(f"  ⚠ .meta 覆盖失败: {meta_rel} → {e}", "warn")
+            return
+        _log(f"  ⚠ 已同步 .meta（GUID 不一致）: {meta_rel}", "warn")
+    else:
+        try:
+            os.makedirs(os.path.dirname(meta_local), exist_ok=True)
+            with open(meta_local, "wb") as f:
+                f.write(src_meta)
+            subprocess.run(
+                [svn_exe, "add", "--parents", "--force", "--quiet", meta_local] + auth_args,
+                capture_output=True, timeout=30, **_get_subprocess_kwargs())
+            _log(f"  ⚠ 已联动新增 .meta: {meta_rel}", "warn")
+        except Exception as e:
+            _log(f"  ⚠ .meta 写入失败: {meta_rel} → {e}", "warn")
+
+
 def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
                         action, auth_args, _log, global_max_rev=None):
     """处理单个文件的 add/del/mod（整文件覆盖为源仓库最新版本 HEAD）
@@ -541,12 +593,13 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
         _log(f"  ✅ 新增目录: {file_path}", "ok")
         return 1, 0, 0, []
 
-    # 文件新增 → export + add（用最新版本）
+    # 文件新增 → export + add（用最新版本），并联动同路径 .meta
     if action == "add" and not is_dir:
         _log(f"  → 新增: {file_path}", "info")
         ok = _svn_export_add(svn_exe, source_url, head_rev,
                              file_path, local_file, auth_args, _log)
         if ok:
+            _sync_add_meta(svn_exe, source_url, file_path, local_file, auth_args, _log)
             _log(f"  ✅ 新增文件: {file_path}", "ok")
             return 1, 0, 0, []
         return 0, 1, 0, [file_path]
@@ -577,12 +630,13 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
         _log(f"  ⚠ 删除目录失败: {msg}", "warn")
         return 0, 1, 0, [file_path]
 
-    # 本地不存在时改按新增处理，直接 export + add
+    # 本地不存在时改按新增处理，直接 export + add，并联动同路径 .meta
     if action not in ("add", "del") and not os.path.exists(local_file):
         _log(f"  → 本地不存在，改按新增: {file_path}", "info")
         ok = _svn_export_add(svn_exe, source_url, head_rev,
                              file_path, local_file, auth_args, _log)
         if ok:
+            _sync_add_meta(svn_exe, source_url, file_path, local_file, auth_args, _log)
             _log(f"  ✅ 新增文件: {file_path}", "ok")
             return 1, 0, 0, []
         return 0, 1, 0, [file_path]

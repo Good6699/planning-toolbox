@@ -5435,77 +5435,9 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
         if before != len(versions):
             _log(f"日期过滤: 剔除 {before - len(versions)} 个超出范围的版本")
 
-        # 用 svn diff --summarize 过滤纯属性变更（只保留有内容变更的文件）
-        filtered_revs = [v["rev"] for v in versions if isinstance(v.get("rev"), int) and v.get("files")]
-        if filtered_revs:
-            _auth_args = []
-            if svn_user:
-                _auth_args += ["--username", svn_user]
-            if svn_pass:
-                _auth_args += ["--password", svn_pass, "--no-auth-cache"]
-            _log("正在过滤纯属性变更文件...")
-            _svn = _get_svn_path()
-
-            # svn diff --summarize 一次只接受单个 -c/-r，多个 -c 会报 E205000
-            # 改为并发逐个版本检查内容变更
-            # svn diff --summarize 输出用正斜杠，source_url 可能是反斜杠，统一比较
-            norm_url = source_url.replace("\\", "/").rstrip("/")
-
-            def _content_files_for_rev(rev):
-                try:
-                    _r = subprocess.run(
-                        [_svn, "diff", "--summarize", "-c", str(rev), source_url] + _auth_args,
-                        capture_output=True, timeout=30, **_get_subprocess_kwargs()
-                    )
-                    if _r.returncode != 0:
-                        return rev, None
-                    out = _r.stdout.decode("utf-8", errors="replace") if _r.stdout else ""
-                    s = set()
-                    for line in out.strip().splitlines():
-                        parts = line.strip().split(None, 1)
-                        if len(parts) >= 2:
-                            path = parts[1].replace("\\", "/")
-                            if path.startswith(norm_url):
-                                s.add(path[len(norm_url):].lstrip("/"))
-                    return rev, s
-                except Exception:
-                    return rev, None
-
-            rev_content = {}
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
-                futs = [ex.submit(_content_files_for_rev, r) for r in filtered_revs]
-                done = 0
-                for fut in concurrent.futures.as_completed(futs):
-                    rev, s = fut.result()
-                    if s is not None:
-                        rev_content[rev] = s
-                    done += 1
-                    if done % 25 == 0:
-                        _log(f"  内容变更检查: {done}/{len(filtered_revs)}")
-
-            # 用每个版本自己的内容变更集合过滤纯属性变更；diff 失败的版本保留原文件
-            removed = 0
-            for v in versions:
-                cf_set = rev_content.get(v.get("rev"))
-                if cf_set is None:
-                    continue
-                # svn_log 路径是仓库绝对路径（如 /branches/.../Client/Assets/foo.xlsx）
-                # content_files 是相对路径（如 Assets/foo.xlsx），用 endswith 匹配尾部
-                _cf_lower = {p.lower() for p in cf_set}
-                orig = v.get("files", [])
-                v["files"] = []
-                for f in orig:
-                    _fp = f.get("path", "").replace("\\", "/")
-                    _fp_lower = _fp.lower()
-                    # 直接相等 或 以 /{相对路径} 结尾 或 {相对路径} 是路径尾
-                    if _fp_lower in _cf_lower or any(
-                        _fp_lower.endswith("/" + cf) or _fp_lower == cf
-                        for cf in _cf_lower
-                    ):
-                        v["files"].append(f)
-                removed += len(orig) - len(v.get("files", []))
-            if removed:
-                    _log(f"  已过滤 {removed} 个纯属性变更文件")
+        # 不再做纯属性变更过滤：
+        # svn diff --summarize 对 replace(R)/目录内变更文件不输出，会把真实变更误删
+        # 纯属性变更由执行端兜底（目录属性跳过 + 最新版与本地无差异跳过）
 
         if filter_str_verbose:
             for v in versions:

@@ -1,0 +1,7 @@
+{
+  "output_dir": "G:\\DGameAI\\workspace\\输出\\工作日志",
+  "sample_start": "00:00",
+  "sample_end": "23:59",
+  "interval_seconds": 1.0,
+  "task_name": "DGameAI-DailyWorklogSampler"
+}

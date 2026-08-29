@@ -107,6 +107,18 @@ sessions/
 # Memory
 memory/
 
+# Local app config / build artifacts
+.dgameai/
+_internal/
+PrefabContrastToolNew.zip
+
+# Scratch debug output
+_batch_out*.txt
+_debug_context.txt
+_disasm.txt
+_line_map.txt
+_update_debug.txt
+
 # Secrets
 *.token
 _git_*

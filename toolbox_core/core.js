@@ -460,9 +460,9 @@ function buildSvnTab(panel) {
 
   });
 
-  initSuggest("svn_keyword", config.svn_keyword_history||[]);
+  initSuggest("svn_keyword", config.svn_keyword_history||[], true);
 
-  initSuggest("svn_author", config.svn_author_history||[]);
+  initSuggest("svn_author", config.svn_author_history||[], true);
 
   ["svn_keyword","svn_author"].forEach(id => {
 
@@ -576,9 +576,9 @@ async function runSvn() {
 
   initSuggest("svn_url", config.svn_urls);
 
-  initSuggest("svn_keyword", config.svn_keyword_history||[]);
+  initSuggest("svn_keyword", config.svn_keyword_history||[], true);
 
-  initSuggest("svn_author", config.svn_author_history||[]);
+  initSuggest("svn_author", config.svn_author_history||[], true);
 
   runTask("/api/svn/run", body, document.querySelector("[data-action='run-svn']"), "svn_log");
 
@@ -2602,20 +2602,25 @@ function _getPortal() {
 
 }
 
-function initSuggest(inputId, items) {
+function initSuggest(inputId, items, noSort) {
 
-  // 统一按显示文本字母排序（支持字符串项和 {val,label} 对象项）
+  // 默认按显示文本字母排序（支持字符串项和 {val,label} 对象项）；
+  // noSort=true 时保持传入顺序（历史记录按最新使用在前）
   const _arr = (items || []).slice();
 
-  _arr.sort((_a, _b) => {
+  if (!noSort) {
 
-    const _ka = (_a && typeof _a === "object") ? String(_a.label || _a.val || "") : String(_a || "");
+    _arr.sort((_a, _b) => {
 
-    const _kb = (_b && typeof _b === "object") ? String(_b.label || _b.val || "") : String(_b || "");
+      const _ka = (_a && typeof _a === "object") ? String(_a.label || _a.val || "") : String(_a || "");
 
-    return _ka.localeCompare(_kb);
+      const _kb = (_b && typeof _b === "object") ? String(_b.label || _b.val || "") : String(_b || "");
 
-  });
+      return _ka.localeCompare(_kb);
+
+    });
+
+  }
 
   _suggests[inputId] = { items: _arr };
 

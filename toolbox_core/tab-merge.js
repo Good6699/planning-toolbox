@@ -221,8 +221,8 @@ function buildMergeTab(panel) {
   if (savedTarget) document.getElementById("merge_target").value = savedTarget;
   initSuggest("merge_target", config.merge_target_history||[]);
   enablePathDrop("merge_target", {mode:"path"});
-  initSuggest("merge_author", config.svn_author_history||[]);
-  initSuggest("merge_keyword", config.svn_keyword_history||[]);
+  initSuggest("merge_author", config.svn_author_history||[], true);
+  initSuggest("merge_keyword", config.svn_keyword_history||[], true);
   document.querySelector("[data-action='merge-file-filter-toggle']").addEventListener("click", (e) => {
     e.stopPropagation();
     const existing = document.getElementById("merge_file_filter_popup");
@@ -426,16 +426,16 @@ function buildMergeTab(panel) {
     const val = document.getElementById("merge_author").value.trim();
     if (val && !(config.svn_author_history||[]).includes(val)) {
       saveConfig({svn_author_history:[val, ...(config.svn_author_history||[])].slice(0,20)});
-      initSuggest("merge_author", config.svn_author_history);
-      initSuggest("svn_author", config.svn_author_history);
+      initSuggest("merge_author", config.svn_author_history, true);
+      initSuggest("svn_author", config.svn_author_history, true);
     }
   });
   document.getElementById("merge_keyword").addEventListener("blur", ()=>{
     const val = document.getElementById("merge_keyword").value.trim();
     if (val && !(config.svn_keyword_history||[]).includes(val)) {
       saveConfig({svn_keyword_history:[val, ...(config.svn_keyword_history||[])].slice(0,20)});
-      initSuggest("merge_keyword", config.svn_keyword_history);
-      initSuggest("svn_keyword", config.svn_keyword_history);
+      initSuggest("merge_keyword", config.svn_keyword_history, true);
+      initSuggest("svn_keyword", config.svn_keyword_history, true);
     }
   });
 

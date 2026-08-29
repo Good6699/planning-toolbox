@@ -198,8 +198,8 @@ function buildSvnTab(panel) {
       initSuggest("svn_output", config.output_dir_history);
     }
   });
-  initSuggest("svn_keyword", config.svn_keyword_history||[]);
-  initSuggest("svn_author", config.svn_author_history||[]);
+  initSuggest("svn_keyword", config.svn_keyword_history||[], true);
+  initSuggest("svn_author", config.svn_author_history||[], true);
   ["svn_keyword","svn_author"].forEach(id => {
     document.getElementById(id).addEventListener("blur", ()=>{
       const val = document.getElementById(id).value.trim();
@@ -240,8 +240,8 @@ function runSvn() {
   if (kw && !(config.svn_keyword_history||[]).includes(kw)) config.svn_keyword_history = [kw, ...(config.svn_keyword_history||[])].slice(0,20);
   if (au && !(config.svn_author_history||[]).includes(au)) config.svn_author_history = [au, ...(config.svn_author_history||[])].slice(0,20);
   initSuggest("svn_url", config.svn_urls);
-  initSuggest("svn_keyword", config.svn_keyword_history||[]);
-  initSuggest("svn_author", config.svn_author_history||[]);
+  initSuggest("svn_keyword", config.svn_keyword_history||[], true);
+  initSuggest("svn_author", config.svn_author_history||[], true);
   runTask("/api/svn/run", body, document.querySelector("[data-action='run-svn']"), "svn_log");
 }
 function buildUploadTab(panel) {
@@ -2350,8 +2350,8 @@ function buildMergeTab(panel) {
   if (savedTarget) document.getElementById("merge_target").value = savedTarget;
   initSuggest("merge_target", config.merge_target_history||[]);
   enablePathDrop("merge_target", {mode:"path"});
-  initSuggest("merge_author", config.svn_author_history||[]);
-  initSuggest("merge_keyword", config.svn_keyword_history||[]);
+  initSuggest("merge_author", config.svn_author_history||[], true);
+  initSuggest("merge_keyword", config.svn_keyword_history||[], true);
   document.querySelector("[data-action='merge-file-filter-toggle']").addEventListener("click", (e) => {
     e.stopPropagation();
     const existing = document.getElementById("merge_file_filter_popup");
@@ -2538,16 +2538,16 @@ function buildMergeTab(panel) {
     const val = document.getElementById("merge_author").value.trim();
     if (val && !(config.svn_author_history||[]).includes(val)) {
       saveConfig({svn_author_history:[val, ...(config.svn_author_history||[])].slice(0,20)});
-      initSuggest("merge_author", config.svn_author_history);
-      initSuggest("svn_author", config.svn_author_history);
+      initSuggest("merge_author", config.svn_author_history, true);
+      initSuggest("svn_author", config.svn_author_history, true);
     }
   });
   document.getElementById("merge_keyword").addEventListener("blur", ()=>{
     const val = document.getElementById("merge_keyword").value.trim();
     if (val && !(config.svn_keyword_history||[]).includes(val)) {
       saveConfig({svn_keyword_history:[val, ...(config.svn_keyword_history||[])].slice(0,20)});
-      initSuggest("merge_keyword", config.svn_keyword_history);
-      initSuggest("svn_keyword", config.svn_keyword_history);
+      initSuggest("merge_keyword", config.svn_keyword_history, true);
+      initSuggest("svn_keyword", config.svn_keyword_history, true);
     }
   });
 

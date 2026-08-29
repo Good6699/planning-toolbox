@@ -5492,7 +5492,11 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
                     v["files"] = [f for f in v.get("files", []) if repo_relative in f.get("path", "") or f.get("path", "").endswith("/" + filter_str_verbose)]
                 else:
                     prefix = filter_str_verbose.rstrip("/") + "/"
-                    # 目录过滤；merge 来源版本的路径在来源分支，映射到查询分支（去分支名拼查询分支根）
+                    # 只保留归属于当前查询路径的文件：
+                    # - 本分支提交的文件（path 以查询前缀开头）直接保留
+                    # - merge 来源（copyfrom）文件：去掉来源分支名后仍属于查询路径（如 Client）→ 映射到查询分支保留；
+                    #   属于其他目录（如 gameData）→ 排除，不合并
+                    _rel_prefix = "/" + "/".join(filter_str_verbose.strip("/").split("/")[2:])  # 如 /Client
                     _branch_root = "/" + "/".join(filter_str_verbose.strip("/").split("/")[:2])  # 如 /branches/20240606_KR2
                     _new_files = []
                     for _f in v.get("files", []):
@@ -5501,7 +5505,7 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
                             _new_files.append(_f)
                             continue
                         _m = re.match(r"^/branches/[^/]+(/.*)$", _p)
-                        if _m:
+                        if _m and (_m.group(1) == _rel_prefix or _m.group(1).startswith(_rel_prefix + "/")):
                             _f2 = dict(_f)
                             _f2["path"] = _branch_root + _m.group(1)
                             _new_files.append(_f2)

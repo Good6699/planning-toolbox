@@ -77,6 +77,23 @@ function _getMergeSourceUrl() {
   const v = el.value.trim();
   return isSvnUrl(v) ? v : "";
 }
+async function _ensureMergeSourceUrl() {
+  /* 查询/合并前确保拿到 URL：本地路径未反查时先调 detect */
+  let url = _getMergeSourceUrl();
+  if (url) return url;
+  const v = document.getElementById("merge_source")?.value.trim() || "";
+  if (!v) return "";
+  if (isSvnUrl(v)) return v;
+  try {
+    const r = await fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path: v})});
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById("merge_source").dataset.url = d.url;
+      return d.url;
+    }
+  } catch(_) {}
+  return "";
+}
 function _showLocalForMergeSource(url) {
   /* 把输入框值换成 URL 对应的本地路径（仅显示），失败则保持 URL */
   if (!url || !isSvnUrl(url)) return;
@@ -204,12 +221,22 @@ function buildMergeTab(panel) {
     _ms.dataset.url = savedSource;
     _showLocalForMergeSource(savedSource); // 输入框显示本地路径
   }
-  initSuggest("merge_source", svnUrlHistory);
+  initSuggest("merge_source", svnUrlHistory); // 兜底：URL 历史
+  // 下拉选项显示本地工作副本路径，选中后用本地路径反查 SVN 链接
+  fetch("/api/svn/working-copies")
+    .then(r=>r.json()).then(d => { if (d.ok && d.paths && d.paths.length) initSuggest("merge_source", d.paths); })
+    .catch(()=>{});
   document.getElementById("merge_source").addEventListener("change", () => {
     const v = document.getElementById("merge_source").value.trim();
-    if (v && isSvnUrl(v)) {
+    if (!v) return;
+    if (isSvnUrl(v)) {
       document.getElementById("merge_source").dataset.url = v;
       _showLocalForMergeSource(v);
+    } else {
+      // 本地路径 → 反查 SVN 链接
+      fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path: v})})
+        .then(r=>r.json()).then(d => { if (d.ok) document.getElementById("merge_source").dataset.url = d.url; })
+        .catch(()=>{});
     }
   });
   const savedTarget = config.merge_target_history?.[0] || "";
@@ -378,7 +405,15 @@ function buildMergeTab(panel) {
   document.getElementById("merge_source").addEventListener("blur", async ()=>{
     const val = document.getElementById("merge_source").value.trim();
     if (!val) return;
-    if (!isSvnUrl(val)) return; // 本地路径（已转换显示），保留不动
+    if (!isSvnUrl(val)) {
+      // 本地路径 → 反查 SVN 链接（手输/粘贴本地路径也支持）
+      try {
+        const r = await fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path: val})});
+        const d = await r.json();
+        if (d.ok) document.getElementById("merge_source").dataset.url = d.url;
+      } catch(_) {}
+      return;
+    }
     // URL 输入：保存历史 + 输入框转本地路径显示
     saveSvnUrlValue("merge_source", val);
     document.getElementById("merge_source").dataset.url = val;
@@ -616,7 +651,7 @@ function _selectAllMergeFiles(select) {
   _updateMergeFileCount();
 }
 async function runMergeQuery() {
-  const sourceUrl = _getMergeSourceUrl();
+  const sourceUrl = await _ensureMergeSourceUrl();
   const targetPath = document.getElementById("merge_target").value.trim();
   const startDate = document.getElementById("merge_start").value;
   const endDate = document.getElementById("merge_end").value;
@@ -713,7 +748,7 @@ async function runMergeQuery() {
 }
 async function runMergeAnalysis() {
   triggerUpdateCheck();
-  const sourceUrl = _getMergeSourceUrl();
+  const sourceUrl = await _ensureMergeSourceUrl();
   const targetPath = document.getElementById("merge_target").value.trim();
   if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
   if (!isSvnUrl(sourceUrl)) { _showToast("请输入有效的 SVN 链接"); document.getElementById("merge_source").focus(); return; }
@@ -824,7 +859,7 @@ async function runMergeAnalysis() {
 }
 async function runMergeRun() {
   triggerUpdateCheck();
-  const sourceUrl = _getMergeSourceUrl();
+  const sourceUrl = await _ensureMergeSourceUrl();
   const targetPath = document.getElementById("merge_target").value.trim();
   if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
   if (!isSvnUrl(sourceUrl)) { _showToast("请输入有效的 SVN 链接"); document.getElementById("merge_source").focus(); return; }

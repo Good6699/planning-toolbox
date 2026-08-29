@@ -82,10 +82,13 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
     end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
     cmd = ["log", source_url, "--xml", "-r",
            f"{{{start_date}}}:{{{end_dt.strftime('%Y-%m-%d')}}}"]
-    if author:
-        cmd += ["--search", author]
+    author_list = [a.strip() for a in str(author or "").split(",") if a.strip()]
+    if author_list:
+        # 多个 --search 是或关系（svn >= 1.9），配合 Python 端过滤精确匹配
+        for a in author_list:
+            cmd += ["--search", a]
     keywords_list = [k.strip() for k in keyword.split(",")] if keyword else []
-    if len(keywords_list) == 1 and not author:
+    if len(keywords_list) == 1 and not author_list:
         cmd += ["--search", keywords_list[0]]
     # author + keyword must be AND; SVN --search is OR, so keyword is filtered Python-side when author exists
     if verbose:
@@ -119,7 +122,11 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
             versions.append(v)
     except ET.ParseError:
         pass
-    if len(keywords_list) > 1 or (author and keywords_list):
+    # 作者过滤：逗号分隔多选，包含匹配，或关系
+    if author_list:
+        versions = [v for v in versions if any(a in (v.get("author") or "") for a in author_list)]
+    # 关键词过滤：逗号分隔多选，包含匹配，或关系
+    if len(keywords_list) > 1 or (author_list and keywords_list):
         versions = [v for v in versions if any(kw in v.get("msg", "") for kw in keywords_list)]
     return versions
 
@@ -917,6 +924,83 @@ def _scan_drives_for_svn_wc(url, svn_exe=None):
         except (PermissionError, OSError):
             pass
     return None
+
+
+_wc_map_cache = {"t": 0.0, "map": {}}
+
+
+def collect_svn_working_copies():
+    """遍历各盘（C盘最后）前3级目录，收集所有 SVN 工作副本 URL→本地路径 映射
+
+    一次遍历供批量匹配多个 URL，避免逐个 URL 全盘搜索；结果缓存 5 分钟。
+    返回: {url: 本地路径}
+    """
+    import time as _time
+    if _time.time() - _wc_map_cache["t"] < 300:
+        return _wc_map_cache["map"]
+    wc_map = {}
+    svn_exe = _get_svn_path()
+    drives = [f"{c}:\\" for c in "DEFGHIJKLMNOPQRSTUVWXYZ" if os.path.exists(f"{c}:\\")]
+    drives.append("C:\\")
+    for root in drives:
+        try:
+            for entry in os.listdir(root):
+                first = os.path.join(root, entry)
+                if not os.path.isdir(first):
+                    continue
+                if first.startswith("C:\\") and entry.lower() in (
+                        "windows", "program files", "program files (x86)",
+                        "programdata", "users", "$recycle.bin", "system volume information"):
+                    continue
+                if os.path.isdir(os.path.join(first, ".svn")):
+                    try:
+                        r = subprocess.run(
+                            [svn_exe, "info", "--show-item", "url", first],
+                            capture_output=True, encoding="utf-8", errors="replace", timeout=5,
+                            **_get_subprocess_kwargs())
+                        if r.returncode == 0 and r.stdout.strip():
+                            wc_map[r.stdout.strip().rstrip("/")] = os.path.normpath(first)
+                    except Exception:
+                        pass
+                try:
+                    for e2 in os.listdir(first):
+                        second = os.path.join(first, e2)
+                        if not os.path.isdir(second):
+                            continue
+                        if os.path.isdir(os.path.join(second, ".svn")):
+                            try:
+                                r = subprocess.run(
+                                    [svn_exe, "info", "--show-item", "url", second],
+                                    capture_output=True, encoding="utf-8", errors="replace", timeout=5,
+                                    **_get_subprocess_kwargs())
+                                if r.returncode == 0 and r.stdout.strip():
+                                    wc_map[r.stdout.strip().rstrip("/")] = os.path.normpath(second)
+                            except Exception:
+                                pass
+                        try:
+                            for e3 in os.listdir(second):
+                                third = os.path.join(second, e3)
+                                if not os.path.isdir(third):
+                                    continue
+                                if os.path.isdir(os.path.join(third, ".svn")):
+                                    try:
+                                        r = subprocess.run(
+                                            [svn_exe, "info", "--show-item", "url", third],
+                                            capture_output=True, encoding="utf-8", errors="replace", timeout=5,
+                                            **_get_subprocess_kwargs())
+                                        if r.returncode == 0 and r.stdout.strip():
+                                            wc_map[r.stdout.strip().rstrip("/")] = os.path.normpath(third)
+                                    except Exception:
+                                        pass
+                        except (PermissionError, OSError):
+                            pass
+                except (PermissionError, OSError):
+                    pass
+        except (PermissionError, OSError):
+            pass
+    _wc_map_cache["t"] = _time.time()
+    _wc_map_cache["map"] = wc_map
+    return wc_map
 
 
 def migrate_old_svn_mappings(cfg):

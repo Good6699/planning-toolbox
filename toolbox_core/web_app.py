@@ -57,7 +57,7 @@ from toolbox_config import (  # noqa: E402
 )
 from toolbox_platform import _get_subprocess_kwargs, _get_bat_subprocess_kwargs, _get_svn_path, _check_office_lock, _diagnose_svn_missing, _auto_install_svn_cli  # noqa: E402
 from xlsm_zipper import apply_via_excel  # noqa: E402
-from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path, resolve_svn_url_to_local, migrate_old_svn_mappings  # noqa: E402
+from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path, resolve_svn_url_to_local, migrate_old_svn_mappings, collect_svn_working_copies  # noqa: E402
 from exceltool_export import run_export  # noqa: E402
 from atlas_migration import AtlasMigrationError, AtlasMigrationService  # noqa: E402
 
@@ -2592,8 +2592,9 @@ def _exec_merge_error_code(step, put, task_id=None):
 def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None):
     """返回 src_dir 下 cutoff_date 当天起有 SVN 提交的文件相对路径集合；不可用时返回 None
 
-    author 指定时只统计该作者的提交（精确匹配），None 表示所有人
+    author 支持逗号分隔多选（或关系），None 表示所有人
     """
+    authors = {a.strip() for a in str(author or "").split(",") if a.strip()} or None
     try:
         r = subprocess.run(
             [svn_exe, "log", "-v", "--xml", "-r", "{%s}:HEAD" % cutoff_date, src_dir],
@@ -2617,9 +2618,9 @@ def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None):
         return None
     files = set()
     for logentry in root_el.iter("logentry"):
-        if author:
+        if authors:
             au = (logentry.findtext("author") or "").strip()
-            if au != author:
+            if not any(a in au for a in authors):
                 continue
         for p in logentry.iter("path"):
             if p.get("action") == "D":
@@ -2632,7 +2633,7 @@ def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None):
                 if rel:
                     files.add(rel.replace("/", os.sep))
     if files:
-        put(f"  SVN 识别: {cutoff_date} 起 {len(files)} 个文件有提交" + (f"（作者: {author}）" if author else "") + "\n")
+        put(f"  SVN 识别: {cutoff_date} 起 {len(files)} 个文件有提交" + (f"（作者: {', '.join(sorted(authors))}）" if authors else "") + "\n")
     return files
 
 
@@ -2710,6 +2711,18 @@ def _exec_consolidate(step, put, task_id=None):
     tgt_parts = os.path.normpath(tgt_dir).split(os.sep)
     for src_dir in src_dirs:
         put(f"\n扫描来源: {src_dir}\n")
+        # 先更新源工作副本，确保复制的是最新 SVN 内容（失败不阻断，回退本地文件）
+        try:
+            up = subprocess.run(
+                [svn_exe, "update", src_dir],
+                capture_output=True, timeout=300, **_get_subprocess_kwargs())
+            if up.returncode == 0:
+                put("  源已更新至最新\n")
+            else:
+                _err = _decode_svn_output(up.stderr or up.stdout).strip()
+                put(f"  ⚠ 源更新失败: {_err[:200]}\n")
+        except Exception as e:
+            put(f"  ⚠ 源更新异常: {e}\n")
         src_parts = os.path.normpath(src_dir).split(os.sep)
         # 在来源中找与目标最后一个组件匹配的位置（取最后出现的）
         # 例: 来源=[F:,D3_EA2022,Client,Assets,Resources,UI] 目标=[D:,D3_2022EA_DEV,Client]
@@ -2920,6 +2933,7 @@ def _exec_merge_specified_text(step, put, task_id=None):
     tgt_path = (step.get("tgt_path") or "").strip()
     commit_msg = (step.get("commit_msg") or "").strip()
     commit_author = (step.get("commit_author") or "").strip()
+    commit_authors = [a.strip() for a in commit_author.split(",") if a.strip()]
     days = 3
     raw_days = str(step.get("days") or "").strip()
     if raw_days:
@@ -2998,7 +3012,7 @@ def _exec_merge_specified_text(step, put, task_id=None):
     for v in all_versions:
         if not isinstance(v.get("rev"), int):
             continue
-        if commit_author and (v.get("author") or "") != commit_author:
+        if commit_authors and not any(a in (v.get("author") or "") for a in commit_authors):
             continue
         if commit_msg and commit_msg not in (v.get("msg") or ""):
             continue
@@ -5286,6 +5300,14 @@ def api_svn_resolve_url():
             save_config(cfg)
             return jsonify({"ok": True, "path": os.path.normpath(local_path)})
     return jsonify({"ok": False, "error": "未找到对应的本地工作副本路径（可尝试先填写目标路径建立映射）"}), 200
+
+
+@app.route("/api/svn/working-copies", methods=["GET"])
+def api_svn_working_copies():
+    """返回本机所有 SVN 工作副本路径列表（供语义合并源地址下拉选择）"""
+    wc_map = collect_svn_working_copies()
+    paths = sorted(set(wc_map.values()))
+    return jsonify({"ok": True, "paths": paths})
 
 
 @app.route("/api/svn/save-mapping", methods=["POST"])

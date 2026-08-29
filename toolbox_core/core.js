@@ -211,6 +211,44 @@ const cm = now.getMonth()+1;
 
 const cd = now.getDate();
 
+function _getSvnUrlInputUrl() {
+  /* SVN 地址输入框显示本地路径，真实 URL 存 dataset.url；兼容直接填 URL */
+  const el = document.getElementById("svn_url");
+  if (!el) return "";
+  const u = el.dataset.url || "";
+  if (u) return u;
+  const v = el.value.trim();
+  return isSvnUrl(v) ? v : "";
+}
+async function _ensureSvnUrlInputUrl() {
+  /* 查询前确保拿到 URL：本地路径未反查时先调 detect */
+  let url = _getSvnUrlInputUrl();
+  if (url) return url;
+  const v = document.getElementById("svn_url")?.value.trim() || "";
+  if (!v) return "";
+  if (isSvnUrl(v)) return v;
+  try {
+    const r = await fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path: v})});
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById("svn_url").dataset.url = d.url;
+      return d.url;
+    }
+  } catch(_) {}
+  return "";
+}
+function _showLocalForSvnInput(url) {
+  /* 把 SVN 地址输入框值换成 URL 对应的本地路径（仅显示），失败保持 URL */
+  if (!url || !isSvnUrl(url)) return;
+  fetch("/api/svn/resolve-url", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})})
+    .then(r=>r.json()).then(d => {
+      if (d.ok && d.path) {
+        const el = document.getElementById("svn_url");
+        if (el && el.dataset.url === url) el.value = d.path;
+      }
+    })
+    .catch(() => {});
+}
 function buildSvnTab(panel) {
 
   const today = `${cy}-${String(cm).padStart(2,"0")}-${String(cd).padStart(2,"0")}`;
@@ -365,52 +403,67 @@ function buildSvnTab(panel) {
 
   initSuggest("svn_url", svnUrlHistory);
 
+  // 下拉选项显示本地工作副本路径（值仍为 SVN URL）
+  fetch("/api/svn/working-copies")
+    .then(r=>r.json()).then(d => { if (d.ok && d.paths && d.paths.length) initSuggest("svn_url", d.paths); })
+    .catch(()=>{});
+
   enablePathDrop("svn_url", { mode: "svn" });
 
   enablePathDrop("svn_output", { mode: "path" });
 
-  document.getElementById("svn_url").value = isSvnUrl(config.svn_url_current) ? config.svn_url_current : (svnUrlHistory[0] || "");
+  const _svnUrlInput = document.getElementById("svn_url");
+  const savedUrl = isSvnUrl(config.svn_url_current) ? config.svn_url_current : (svnUrlHistory[0] || "");
+  if (savedUrl) {
+    _svnUrlInput.value = savedUrl;
+    _svnUrlInput.dataset.url = savedUrl;
+    _showLocalForSvnInput(savedUrl); // 输入框显示本地路径
+  }
 
-  document.getElementById("svn_url").addEventListener("keydown",e=>{
-
+  _svnUrlInput.addEventListener("keydown",e=>{
     if (e.key === "Enter") {
-
       const val = e.target.value.trim();
-
       if (val && isSvnUrl(val)) {
-
         saveSvnUrlValue("svn_url", val);
-
+        _svnUrlInput.dataset.url = val;
+        _showLocalForSvnInput(val);
       }
-
     }
-
   });
 
   document.getElementById("svn_output").value = config.output_dir || "";
 
   initSuggest("svn_output", config.output_dir_history||[]);
 
-  document.getElementById("svn_url").addEventListener("blur", ()=>{
+  _svnUrlInput.addEventListener("change", ()=>{
+    const val = _svnUrlInput.value.trim();
+    if (!val) return;
+    if (isSvnUrl(val)) {
+      _svnUrlInput.dataset.url = val;
+      _showLocalForSvnInput(val);
+    } else {
+      // 本地路径 → 反查 SVN 链接
+      fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path: val})})
+        .then(r=>r.json()).then(d => { if (d.ok) _svnUrlInput.dataset.url = d.url; })
+        .catch(()=>{});
+    }
+  });
 
-    const val = document.getElementById("svn_url").value.trim();
-
-    if (val && !isSvnUrl(val)) {
-
-      document.getElementById("svn_url").value = "";
-
-      _showToast("已过滤非 SVN 链接");
-
+  _svnUrlInput.addEventListener("blur", async ()=>{
+    const val = _svnUrlInput.value.trim();
+    if (!val) return;
+    if (!isSvnUrl(val)) {
+      // 本地路径 → 反查 SVN 链接
+      try {
+        const r = await fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path: val})});
+        const d = await r.json();
+        if (d.ok) _svnUrlInput.dataset.url = d.url;
+      } catch(_) {}
       return;
-
     }
-
-    if (val && isSvnUrl(val)) {
-
-      saveSvnUrlValue("svn_url", val);
-
-    }
-
+    saveSvnUrlValue("svn_url", val);
+    _svnUrlInput.dataset.url = val;
+    _showLocalForSvnInput(val);
   });
 
   document.getElementById("svn_output").addEventListener("blur", ()=>{
@@ -465,15 +518,17 @@ function buildSvnTab(panel) {
 
 }
 
-function runSvn() {
+async function runSvn() {
 
   triggerUpdateCheck();
 
   const mode = document.querySelector("#svn_mode_group .toggle-btn.active")?.dataset.v || "compare";
 
+  const svn_url = await _ensureSvnUrlInputUrl();
+
   const body = {
 
-    svn_url:document.getElementById("svn_url").value.trim(),
+    svn_url,
 
     mode,
 
@@ -2573,7 +2628,10 @@ function _showSuggest(inputId, showAll) {
 
   const val = inp.value.toLowerCase();
 
-  const visible = s.items.map((u,i) => ({val:u, idx:i})).filter(x => showAll || !val || x.val.toLowerCase().includes(val));
+  const visible = s.items.map((u,i) => {
+    const isObj = u && typeof u === 'object';
+    return {val: isObj ? u.val : u, label: isObj ? u.label : u, idx:i};
+  }).filter(x => showAll || !val || String(x.label || x.val).toLowerCase().includes(val));
 
   const portal = _getPortal();
 
@@ -2581,7 +2639,7 @@ function _showSuggest(inputId, showAll) {
 
     ? visible.map(x => {
 
-        const label = x.val || "⊙ 全局默认";
+        const label = x.label || x.val || "⊙ 全局默认";
 
         const dim = !x.val ? ' style="color:var(--dim)"' : '';
 
@@ -2867,7 +2925,10 @@ function onSvnUrlPicked() {
 
       if (d.ok) {
 
-        input.value = d.url;
+        // 输入框显示本地路径，SVN URL 存 dataset.url
+        input.dataset.url = d.url;
+
+        input.value = path;
 
         const svnHist = [d.url, ...getSvnUrlHistory().filter(u=>u!==d.url)].slice(0,20);
 

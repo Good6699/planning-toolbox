@@ -211,6 +211,33 @@ const cm = now.getMonth()+1;
 
 const cd = now.getDate();
 
+async function _migrateSvnUrlsToLocal() {
+  /* 把配置里的 SVN URL 迁移为本地工作副本路径（界面直接显示/存储本地路径），
+     查询时用本地路径反查 SVN 链接；返回 {hist, map} 或 null */
+  try {
+    const r = await fetch("/api/svn/working-copies");
+    const d = await r.json();
+    if (!d.ok || !d.map) return null;
+    const toLocal = (u) => {
+      if (!u || typeof u !== "string") return u;
+      const clean = u.replace(/\/+$/, "");
+      return d.map[clean] || u;
+    };
+    const hist = (config.svn_urls || []).map(toLocal);
+    const cur = toLocal(config.svn_url_current);
+    const curMerge = toLocal(config.merge_source_current);
+    const changed = JSON.stringify(hist) !== JSON.stringify(config.svn_urls) ||
+                    cur !== config.svn_url_current ||
+                    curMerge !== config.merge_source_current;
+    if (changed) {
+      config.svn_urls = hist;
+      config.svn_url_current = cur;
+      config.merge_source_current = curMerge;
+      saveConfig({svn_urls: hist, svn_url_current: cur, merge_source_current: curMerge});
+    }
+    return {hist, map: d.map};
+  } catch(_) { return null; }
+}
 function _getSvnUrlInputUrl() {
   /* SVN 地址输入框显示本地路径，真实 URL 存 dataset.url；兼容直接填 URL */
   const el = document.getElementById("svn_url");
@@ -416,9 +443,17 @@ function buildSvnTab(panel) {
   const savedUrl = isSvnUrl(config.svn_url_current) ? config.svn_url_current : (svnUrlHistory[0] || "");
   if (savedUrl) {
     _svnUrlInput.value = savedUrl;
-    _svnUrlInput.dataset.url = savedUrl;
-    _showLocalForSvnInput(savedUrl); // 输入框显示本地路径
+    if (isSvnUrl(savedUrl)) _svnUrlInput.dataset.url = savedUrl;
+    _showLocalForSvnInput(savedUrl); // 输入框显示本地路径（URL 时异步转）
   }
+  // 配置里的 URL 迁移为本地工作副本路径（界面直接显示本地路径，查询时反查 URL）
+  _migrateSvnUrlsToLocal().then(res => {
+    if (!res) return;
+    const cur = config.svn_url_current || res.hist[0] || "";
+    _svnUrlInput.value = cur;
+    if (!isSvnUrl(cur)) delete _svnUrlInput.dataset.url;
+    initSuggest("svn_url", res.hist);
+  });
 
   _svnUrlInput.addEventListener("keydown",e=>{
     if (e.key === "Enter") {
@@ -2574,7 +2609,7 @@ function getSvnUrlHistory() {
 
 function saveSvnUrlValue(inputId, val) {
 
-  if (!isSvnUrl(val)) return;
+  // 保存当前输入框值（本地路径或 URL 均可；下次打开页签会统一迁移为本地路径）
 
   const key = inputId === "merge_source" ? "merge_source_current" : "svn_url_current";
 
@@ -2612,7 +2647,20 @@ function _getPortal() {
 
 function initSuggest(inputId, items) {
 
-  _suggests[inputId] = { items: items || [] };
+  // 统一按显示文本字母排序（支持字符串项和 {val,label} 对象项）
+  const _arr = (items || []).slice();
+
+  _arr.sort((_a, _b) => {
+
+    const _ka = (_a && typeof _a === "object") ? String(_a.label || _a.val || "") : String(_a || "");
+
+    const _kb = (_b && typeof _b === "object") ? String(_b.label || _b.val || "") : String(_b || "");
+
+    return _ka.localeCompare(_kb);
+
+  });
+
+  _suggests[inputId] = { items: _arr };
 
 }
 
@@ -2897,54 +2945,42 @@ function enablePathDrop(inputId, opts){
 
     e.preventDefault();
 
-    e.stopPropagation();
-
     input.classList.remove("drag-over");
 
     _lastDropTargetId = inputId;
 
-    // 读取拖入的路径：优先文件路径，其次拖放文本
-    const dt = e.dataTransfer;
-
-    if (!dt) return;
-
-    let path = "";
-
-    if (dt.files && dt.files.length) {
-
-      path = dt.files[0].path || dt.files[0].webkitRelativePath || "";
-
-    }
-
-    if (!path) {
-
-      try { path = (dt.getData("text") || "").trim(); } catch(_) {}
-
-    }
-
-    if (!path) return;
-
-    const isAppend = input.dataset.append === "1";
-
-    if (isAppend) {
-
-      const oldPaths = input.value.trim().split(",").map(s=>s.trim()).filter(Boolean);
-
-      input.value = oldPaths.includes(path) ? oldPaths.join(", ") : [...oldPaths, path].join(", ");
-
-    } else {
-
-      input.value = path;
-
-    }
-
-    input.dispatchEvent(new Event("change", {bubbles:true}));
-
-    if (typeof window._wfModalAutoSave === "function") window._wfModalAutoSave();
-
+    // 实际填值由 document 捕获阶段统一处理（drop 时读当前值为原值，支持逗号追加）
   });
 
 }
+
+// 拖放统一处理：document 捕获阶段读取拖入路径（WebView2 拖入文件夹时 dataTransfer.files 为空，
+// WebView2 拖入文件/文件夹的绝对路径只有 pywebview（FilesDropped / CoreWebView2File.Path）
+// 能拿到，JS 侧拿不到（webkitGetAsEntry 仅相对路径）。因此填值交给 pywebview（_dnd_on_drop），
+// 这里只在 dragover 阶段保存原值，并在 pywebview 填值后的 change 事件里做逗号追加。
+document.addEventListener("dragover", function(e) {
+  // 优先从事件 target 找输入框（pywebview 可能阻止事件到达输入框自身，导致 _lastDropTargetId 未设置）
+  const input = (e.target && e.target.id && document.getElementById(e.target.id)) ||
+                document.getElementById(_lastDropTargetId || "");
+  if (input) {
+    _lastDropTargetId = input.id;
+    input.dataset._prev = input.value; // 保存原值供 change 追加
+  }
+}, true);
+// pywebview 填值后 dispatch change（bubbles），这里在捕获阶段先做追加，弹窗 change 保存的是追加后的值
+document.addEventListener("change", function(e) {
+  const input = (e.target && e.target.id && document.getElementById(e.target.id)) || null;
+  if (!input) return;
+  if (input.dataset._prev === undefined) return; // 非拖入（手动输入）不处理
+  const prev = input.dataset._prev;
+  delete input.dataset._prev;
+  if (input.dataset.append !== "1") return; // 非追加模式保持 pywebview 覆盖结果
+  const cur = input.value.trim();
+  if (!cur || cur === prev) return;
+  const oldPaths = prev.split(",").map(s=>s.trim()).filter(Boolean);
+  input.value = oldPaths.includes(cur) ? oldPaths.join(", ") : [...oldPaths, cur].join(", ");
+  if (typeof window._wfModalAutoSave === "function") window._wfModalAutoSave();
+}, true);
 
 document.addEventListener("dragend", ()=>{
 

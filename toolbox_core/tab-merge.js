@@ -218,14 +218,19 @@ function buildMergeTab(panel) {
   if (savedSource) {
     const _ms = document.getElementById("merge_source");
     _ms.value = savedSource;
-    _ms.dataset.url = savedSource;
-    _showLocalForMergeSource(savedSource); // 输入框显示本地路径
+    if (isSvnUrl(savedSource)) _ms.dataset.url = savedSource;
+    _showLocalForMergeSource(savedSource); // 输入框显示本地路径（URL 时异步转）
   }
   initSuggest("merge_source", svnUrlHistory); // 兜底：URL 历史
-  // 下拉选项显示本地工作副本路径，选中后用本地路径反查 SVN 链接
-  fetch("/api/svn/working-copies")
-    .then(r=>r.json()).then(d => { if (d.ok && d.paths && d.paths.length) initSuggest("merge_source", d.paths); })
-    .catch(()=>{});
+  // 配置里的 URL 迁移为本地路径 + 下拉显示本地工作副本路径（查询时反查 URL）
+  _migrateSvnUrlsToLocal().then(res => {
+    if (!res) return;
+    const cur = config.merge_source_current || res.hist[0] || "";
+    const _ms = document.getElementById("merge_source");
+    _ms.value = cur;
+    if (!isSvnUrl(cur)) delete _ms.dataset.url;
+    initSuggest("merge_source", res.hist);
+  });
   document.getElementById("merge_source").addEventListener("change", () => {
     const v = document.getElementById("merge_source").value.trim();
     if (!v) return;

@@ -5317,10 +5317,10 @@ def api_svn_resolve_url():
 
 @app.route("/api/svn/working-copies", methods=["GET"])
 def api_svn_working_copies():
-    """返回本机所有 SVN 工作副本路径列表（供语义合并源地址下拉选择）"""
+    """返回本机所有 SVN 工作副本：paths=本地路径列表，map=URL→本地路径（供地址输入框显示本地路径）"""
     wc_map = collect_svn_working_copies()
     paths = sorted(set(wc_map.values()))
-    return jsonify({"ok": True, "paths": paths})
+    return jsonify({"ok": True, "paths": paths, "map": wc_map})
 
 
 @app.route("/api/svn/save-mapping", methods=["POST"])

@@ -29,7 +29,8 @@ def _is_dir_path(path):
 
 
 def _build_svn_auth_args(svn_user, svn_pass):
-    args = []
+    # --non-interactive：凭证失效时快速失败而非交互等待（GUI 环境挂起 5 分钟）
+    args = ["--non-interactive"]
     if svn_user:
         args += ["--username", svn_user]
     if svn_pass:

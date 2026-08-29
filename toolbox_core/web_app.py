@@ -5542,11 +5542,13 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
             filter_str_verbose = "/" + "/".join(path_segments[2:])
             _log(f"检测到目录URL，仅显示 {filter_str_verbose}/ 下的文件")
 
+        _log(f"svn log 开始（{start_date}~{end_date} 全量 + --verbose，数据量大时需 1~2 分钟）...")
         versions = svn_log(source_url, start_date, end_date,
                            author=author, keyword=keyword,
                            svn_user=svn_user, svn_pass=svn_pass,
                            verbose=True, use_merge_history=True,
                            cancel_check=lambda: task_id in _cancelled_tasks)
+        _log(f"svn log 完成，共 {len(versions)} 个原始版本")
 
         # SVN 的 {date} 解析会向前回溯到最近有提交的日期，导致日期范围外的版本混入
         # 在 Python 端再做一次日期过滤
@@ -5590,35 +5592,8 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
                 for v in versions:
                     v["files"] = [f for f in v.get("files", []) if filter_str_verbose in f.get("path", "")]
 
-        # 内容预检：目标本地文件与源 HEAD 内容相同的文件排除（纯属性差异，无需合并）
-        if target_path and os.path.isdir(target_path) and not is_file_url:
-            _svn2 = _get_svn_path()
-            _prefixed = filter_str_verbose.rstrip("/") + "/" if filter_str_verbose else ""
-            _rm = 0
-            for v in versions:
-                _kept = []
-                for _f in v.get("files", []):
-                    _p = _f.get("path", "")
-                    _rel = _p[len(_prefixed):] if _prefixed and _p.startswith(_prefixed) else _p.lstrip("/")
-                    _local = os.path.join(target_path, _rel)
-                    if not os.path.isfile(_local):
-                        _kept.append(_f)
-                        continue
-                    try:
-                        _co, _ce, _cc = _svn_run_cancelable(
-                            [_svn2, "cat", source_url.rstrip("/") + "/" + _rel + "@HEAD"],
-                            task_id=task_id, timeout=60)
-                        if _cc == 0:
-                            with open(_local, "rb") as _lf:
-                                if _co == _lf.read():
-                                    _rm += 1
-                                    continue
-                    except Exception:
-                        pass
-                    _kept.append(_f)
-                v["files"] = _kept
-            if _rm:
-                _log(f"已排除 {_rm} 个内容相同文件（源 HEAD 与目标本地一致）")
+        # 2026-08-29：移除内容预检（svn cat 对比目标本地文件）——筛选只负责找出变更文件，
+        # 收益低且对大量文件场景显著拖慢查询
 
         total = len(versions)
         _log(f"查询完成，共 {total} 个版本")

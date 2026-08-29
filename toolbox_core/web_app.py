@@ -161,6 +161,33 @@ def _register_proc(proc, task_id=None):
             _active_tasks.setdefault(task_id, []).append(proc)
 
 
+def _svn_run_cancelable(cmd, task_id=None, timeout=120):
+    """执行 svn 命令（Popen），注册到 task_id 供手动终止，轮询取消标记命中即 kill"""
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        **_get_subprocess_kwargs())
+    _register_proc(proc, task_id)
+    try:
+        import time as _t
+        _start = _t.time()
+        while True:
+            try:
+                out, err = proc.communicate(timeout=0.5)
+                break
+            except subprocess.TimeoutExpired:
+                if task_id and task_id in _cancelled_tasks:
+                    proc.kill()
+                    proc.communicate()
+                    raise RuntimeError("任务已取消")
+                if _t.time() - _start > timeout:
+                    proc.kill()
+                    proc.communicate()
+                    raise RuntimeError("svn 命令超时")
+        return out, err, proc.returncode
+    finally:
+        _unregister_proc(proc, task_id)
+
+
 def _unregister_proc(proc, task_id=None):
     with _procs_lock:
         try:
@@ -624,9 +651,9 @@ def _run_svn_after_upload(q, target_dir, copied_files, commit_path=None):  # noq
         with open(targets, "w", encoding="utf-8") as f:
             for fp in copied_files:
                 f.write(os.path.abspath(fp) + "\n")
-        subprocess.run(
+        _svn_run_cancelable(
             [svn_exe, "add", "--parents", "--force", "--quiet", "--targets", targets],
-            capture_output=True, timeout=60, **_get_subprocess_kwargs()
+            task_id=task_id, timeout=60
         )
         r = subprocess.run(
             [svn_exe, "status", wc_root],
@@ -2589,7 +2616,7 @@ def _exec_merge_error_code(step, put, task_id=None):
     return export_ok
 
 
-def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None, commit_msg=None):
+def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None, commit_msg=None, task_id=None):
     """返回 src_dir 下 cutoff_date 当天起有 SVN 提交的文件相对路径集合；不可用时返回 None
 
     author 支持逗号分隔多选（或关系），commit_msg 为提交备注包含匹配；
@@ -2598,16 +2625,18 @@ def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None, c
     authors = {a.strip() for a in str(author or "").split(",") if a.strip()} or None
     msg_kws = [k.strip() for k in str(commit_msg or "").split(",") if k.strip()] or None
     try:
-        r = subprocess.run(
+        _ro, _re, _rc = _svn_run_cancelable(
             [svn_exe, "log", "-v", "--xml", "-r", "{%s}:HEAD" % cutoff_date, src_dir],
-            capture_output=True, timeout=60, **_get_subprocess_kwargs()
-        )
-        u = subprocess.run(
+            task_id=task_id, timeout=120)
+        _uo, _ue, _uc = _svn_run_cancelable(
             [svn_exe, "info", "--show-item", "relative-url", src_dir],
-            capture_output=True, timeout=15, **_get_subprocess_kwargs()
-        )
+            task_id=task_id, timeout=15)
     except Exception:
         return None
+    if _rc != 0 or _uc != 0:
+        return None
+    r = type("R", (), {"stdout": _ro, "returncode": _rc})()
+    u = type("U", (), {"stdout": _uo, "returncode": _uc})()
     if r.returncode != 0 or u.returncode != 0:
         return None
     base_rel = _decode_svn_output(u.stdout).strip()
@@ -2726,13 +2755,11 @@ def _exec_consolidate(step, put, task_id=None):
         put(f"\n扫描来源: {src_dir}\n")
         # 先更新源工作副本，确保复制的是最新 SVN 内容（失败不阻断，回退本地文件）
         try:
-            up = subprocess.run(
-                [svn_exe, "update", src_dir],
-                capture_output=True, timeout=300, **_get_subprocess_kwargs())
-            if up.returncode == 0:
+            _upo, _upe, _upc = _svn_run_cancelable([svn_exe, "update", src_dir], task_id=task_id, timeout=300)
+            if _upc == 0:
                 put("  源已更新至最新\n")
             else:
-                _err = _decode_svn_output(up.stderr or up.stdout).strip()
+                _err = _decode_svn_output(_upe or _upo).strip()
                 put(f"  ⚠ 源更新失败: {_err[:200]}\n")
         except Exception as e:
             put(f"  ⚠ 源更新异常: {e}\n")
@@ -2754,7 +2781,7 @@ def _exec_consolidate(step, put, task_id=None):
             put(f"  路径对齐: +{extra_prefix}\n")
         else:
             put("  路径对齐: 直接覆盖（无公共路径段）\n")
-        changed = _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author, commit_msg)
+        changed = _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author, commit_msg, task_id)
         if changed is None:
             svn_mode_ok = False
             put(f"  ⚠ svn log 不可用，回退为按本地文件修改时间（{cutoff_date} 起）\n")
@@ -2801,9 +2828,9 @@ def _exec_consolidate(step, put, task_id=None):
         with open(targets, "w", encoding="utf-8") as f:
             for fp in copied_files:
                 f.write(os.path.abspath(fp) + "\n")
-        subprocess.run(
+        _svn_run_cancelable(
             [svn_exe, "add", "--parents", "--force", "--quiet", "--targets", targets],
-            capture_output=True, timeout=60, **_get_subprocess_kwargs()
+            task_id=task_id, timeout=60
         )
         put(f"✓ SVN add {len(copied_files)} 个文件\n")
     except Exception as e:
@@ -2819,11 +2846,11 @@ def _exec_consolidate(step, put, task_id=None):
     has_changes = False
     for cp in commit_dirs:
         try:
-            st = subprocess.run(
+            st = _svn_run_cancelable(
                 [svn_exe, "status", cp],
-                capture_output=True, timeout=30, **_get_subprocess_kwargs()
+                task_id=task_id, timeout=30
             )
-            out = st.stdout.decode("utf-8", errors="replace") if st.stdout else ""
+            out = st[0].decode("utf-8", errors="replace") if st[0] else ""
             for line in out.strip().splitlines():
                 if line.strip() and not line.startswith("?"):
                     has_changes = True
@@ -5416,6 +5443,7 @@ def api_merge_query():
     end_date = data.get("end_date", "")
     author = data.get("author", "").strip() or None
     keyword = data.get("keyword", "").strip() or None
+    target_path = data.get("target_path", "").strip() or None
     if not source_url:
         return jsonify({"ok": False, "error": "源SVN地址不能为空"}), 400
     if not start_date or not end_date:
@@ -5429,7 +5457,7 @@ def api_merge_query():
     task_id = _get_next_task_id()
     t = threading.Thread(target=_merge_query_worker,
                          args=(task_id, source_url, start_date, end_date,
-                               author, keyword,
+                               author, keyword, target_path,
                                svn_user or None, svn_pass or None),
                          daemon=True)
     t.start()
@@ -5437,7 +5465,7 @@ def api_merge_query():
 
 
 def _merge_query_worker(task_id, source_url, start_date, end_date,
-                        author, keyword, svn_user, svn_pass):
+                        author, keyword, target_path, svn_user, svn_pass):
     """后台查询任务线程，使用svn log --verbose 一次获取版本+文件"""
     q = _log_queues.setdefault(task_id, queue.Queue())
     ts = datetime.now().strftime("%H:%M:%S")
@@ -5472,7 +5500,8 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
         versions = svn_log(source_url, start_date, end_date,
                            author=author, keyword=keyword,
                            svn_user=svn_user, svn_pass=svn_pass,
-                           verbose=True, use_merge_history=True)
+                           verbose=True, use_merge_history=True,
+                           cancel_check=lambda: task_id in _cancelled_tasks)
 
         # SVN 的 {date} 解析会向前回溯到最近有提交的日期，导致日期范围外的版本混入
         # 在 Python 端再做一次日期过滤
@@ -5515,6 +5544,37 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
                 _log(f"完整路径未匹配，尝试仅按文件名 '{filter_str_verbose}' 过滤")
                 for v in versions:
                     v["files"] = [f for f in v.get("files", []) if filter_str_verbose in f.get("path", "")]
+
+        # 内容预检：目标本地文件与源 HEAD 内容相同的文件排除（纯属性差异，无需合并）
+        if target_path and os.path.isdir(target_path) and not is_file_url:
+            _svn2 = _get_svn_path()
+            _prefixed = filter_str_verbose.rstrip("/") + "/" if filter_str_verbose else ""
+            _rm = 0
+            for v in versions:
+                _kept = []
+                for _f in v.get("files", []):
+                    _p = _f.get("path", "")
+                    _rel = _p[len(_prefixed):] if _prefixed and _p.startswith(_prefixed) else _p.lstrip("/")
+                    _local = os.path.join(target_path, _rel)
+                    if not os.path.isfile(_local):
+                        _kept.append(_f)
+                        continue
+                    try:
+                        _co, _ce, _cc = _svn_run_cancelable(
+                            [_svn2, "cat", source_url.rstrip("/") + "/" + _rel + "@HEAD"],
+                            task_id=task_id, timeout=60)
+                        if _cc == 0:
+                            with open(_local, "rb") as _lf:
+                                if _co == _lf.read():
+                                    _rm += 1
+                                    continue
+                    except Exception:
+                        pass
+                    _kept.append(_f)
+                v["files"] = _kept
+            if _rm:
+                _log(f"已排除 {_rm} 个内容相同文件（源 HEAD 与目标本地一致）")
+
         total = len(versions)
         _log(f"查询完成，共 {total} 个版本")
         if total > 0:
@@ -5656,7 +5716,8 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
                     result = svn_merge(
                         source_url, target_path, file_revs, [f],
                         svn_user=svn_user, svn_pass=svn_pass,
-                        log_callback=_log
+                        log_callback=_log,
+                        cancel_check=lambda: task_id in _cancelled_tasks
                     )
                     total_merged += result["merged"]
                     total_conflict += result["conflict"]

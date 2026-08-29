@@ -685,6 +685,7 @@ async function runMergeQuery() {
       end_date: endDate,
       author: document.getElementById("merge_author").value.trim() || "",
       keyword: document.getElementById("merge_keyword").value.trim() || "",
+      target_path: targetPath,
     };
     saveSvnUrlValue("merge_source", sourceUrl);
     const r = await fetch("/api/merge/query", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});

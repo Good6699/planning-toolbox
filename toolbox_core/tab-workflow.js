@@ -721,6 +721,15 @@ function buildWorkflowTab(panel) {
         btn.title = "执行本步骤";
         return;
       }
+      // 回退操作前弹窗确认，防止误回退丢失本地修改
+      if (step.type === "revert_svn") {
+        const paths = (Array.isArray(step.revert_paths) ? step.revert_paths : [step.revert_paths]).filter(Boolean);
+        const ok = await showConfirm({
+          title: "确认执行 SVN 回退",
+          message: "SVN 回退会清除本地修改（含未提交内容），确定执行？" + (paths.length ? "\n\n路径:\n" + paths.join("\n") : "")
+        });
+        if (!ok) return;
+      }
       const validation = _wfStepValidation(step);
       if (validation) { _showToast(validation.message); return; }
       const wfName = config.workflows[wfIdx]?.name || "工作流";

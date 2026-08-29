@@ -44,25 +44,39 @@ def _svn_decode_output(data):
         return data.decode("utf-8", errors="replace")
 
 
-def _run_svn(cmd, timeout=120):
+def _run_svn(cmd, timeout=120, cancel_check=None):
     svn_exe = _get_svn_path()
     full_cmd = [svn_exe] + cmd
-    result = subprocess.run(
+    # Popen + 轮询：cancel_check 命中（任务手动终止）或超时则 kill，避免 svn 命令继续跑
+    proc = subprocess.Popen(
         full_cmd,
-        capture_output=True,
-        timeout=timeout,
-        **_get_subprocess_kwargs()
-    )
-    if result.returncode != 0:
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        **_get_subprocess_kwargs())
+    import time as _t
+    _start = _t.time()
+    while True:
         try:
-            err = result.stderr.decode("gbk")
+            out, err = proc.communicate(timeout=0.5)
+            break
+        except subprocess.TimeoutExpired:
+            if cancel_check and cancel_check():
+                proc.kill()
+                proc.communicate()
+                raise RuntimeError("任务已取消")
+            if _t.time() - _start > timeout:
+                proc.kill()
+                proc.communicate()
+                raise RuntimeError("svn 命令超时")
+    if proc.returncode != 0:
+        try:
+            err = err.decode("gbk")
         except UnicodeDecodeError:
-            err = result.stderr.decode("utf-8", errors="replace")
-        raise RuntimeError(err.strip() or f"svn 返回码 {result.returncode}")
+            err = err.decode("utf-8", errors="replace")
+        raise RuntimeError(err.strip() or f"svn 返回码 {proc.returncode}")
     try:
-        return result.stdout.decode("gbk")
+        return out.decode("gbk")
     except UnicodeDecodeError:
-        return result.stdout.decode("utf-8", errors="replace")
+        return out.decode("utf-8", errors="replace")
 
 
 def _parse_svn_date(text):
@@ -77,9 +91,11 @@ def _parse_svn_date(text):
 
 
 def svn_log(source_url, start_date, end_date, author=None, keyword=None,
-            svn_user=None, svn_pass=None, verbose=False, use_merge_history=False):
+            svn_user=None, svn_pass=None, verbose=False, use_merge_history=False,
+            cancel_check=None):
     """查询SVN提交日志，返回版本列表。verbose=True 时返回文件列表；
-    use_merge_history=True 时追溯合并来源（merge 历史版本）"""
+    use_merge_history=True 时追溯合并来源（merge 历史版本）；
+    cancel_check 用于手动终止（命中则 kill svn 命令）"""
     end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
     cmd = ["log", source_url, "--xml", "-r",
            f"{{{start_date}}}:{{{end_dt.strftime('%Y-%m-%d')}}}"]
@@ -100,7 +116,7 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
     if use_merge_history:
         cmd += ["--use-merge-history"]
     cmd += _build_svn_auth_args(svn_user, svn_pass)
-    raw = _run_svn(cmd, timeout=300)
+    raw = _run_svn(cmd, timeout=300, cancel_check=cancel_check)
     versions = []
     try:
         root = ET.fromstring(raw)
@@ -190,7 +206,7 @@ def find_wc_root(target_path):
     return None
 
 
-def _svn_export_add(svn_exe, source_url, revision, file_path, local_file, auth_args, log_callback):
+def _svn_export_add(svn_exe, source_url, revision, file_path, local_file, auth_args, log_callback, cancel_check=None):
     """用 svn export 下载新增文件 + svn add 纳入版本控制
 
     失败时先 revert 清状态再重试一次，确保能直接用源版本覆盖本地。
@@ -201,7 +217,7 @@ def _svn_export_add(svn_exe, source_url, revision, file_path, local_file, auth_a
         os.makedirs(parent_dir, exist_ok=True)
     except Exception:
         pass
-    ok, msg = _svn_try_export(svn_exe, file_url, revision, local_file, auth_args)
+    ok, msg = _svn_try_export(svn_exe, file_url, revision, local_file, auth_args, cancel_check)
     if not ok:
         log_callback(msg, "warn")
         return False
@@ -217,11 +233,12 @@ def _svn_export_add(svn_exe, source_url, revision, file_path, local_file, auth_a
     return True
 
 
-def _svn_try_export(svn_exe, file_url, revision, local_file, auth_args):
-    """执行 svn export --force，失败时 revert 重试一次
+def _svn_try_export(svn_exe, file_url, revision, local_file, auth_args, cancel_check=None):
+    """执行 svn export --force，失败时 revert 重试一次；cancel_check 命中即中止
 
     返回 (ok, msg)
     """
+    import time as _t
     for attempt in range(2):
         export_cmd = [svn_exe, "export", "--force",
                       "-r", str(revision), file_url, local_file] + auth_args
@@ -231,7 +248,20 @@ def _svn_try_export(svn_exe, file_url, revision, local_file, auth_args):
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 bufsize=1, **_get_subprocess_kwargs()
             )
-            stdout_bytes, _ = proc.communicate(timeout=120)
+            _start = _t.time()
+            while True:
+                try:
+                    stdout_bytes, _ = proc.communicate(timeout=0.5)
+                    break
+                except subprocess.TimeoutExpired:
+                    if cancel_check and cancel_check():
+                        proc.kill()
+                        proc.communicate()
+                        return False, "任务已取消"
+                    if _t.time() - _start > 120:
+                        proc.kill()
+                        proc.communicate()
+                        return False, "export 超时"
             try:
                 out_text = stdout_bytes.decode("gbk")
             except UnicodeDecodeError:
@@ -474,7 +504,7 @@ def _build_merge_c_args(revisions):
 
 
 def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
-                          auth_args, _log, global_max_rev=None):
+                          auth_args, _log, global_max_rev=None, cancel_check=None):
     """将文件直接覆盖为源仓库最新版本（HEAD），不再逐版本合并
 
     global_max_rev: 源仓库 HEAD 版本号（svn_merge 传入），用于 export 时取最新内容
@@ -511,7 +541,7 @@ def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
     except Exception:
         pass
 
-    ok, msg = _svn_try_export(svn_exe, file_url, head_rev, local_file, auth_args)
+    ok, msg = _svn_try_export(svn_exe, file_url, head_rev, local_file, auth_args, cancel_check)
     if ok:
         _log(f"  ✅ 已覆盖为最新版: {file_path}", "ok")
         return 1, 0, 0, []
@@ -572,7 +602,7 @@ def _sync_add_meta(svn_exe, source_url, file_path, local_file, auth_args, _log):
 
 
 def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
-                        action, auth_args, _log, global_max_rev=None):
+                        action, auth_args, _log, global_max_rev=None, cancel_check=None):
     """处理单个文件的 add/del/mod（整文件覆盖为源仓库最新版本 HEAD）
 
     目录新增/删除也走 export/add 让 SVN 递归处理整个目录树。
@@ -591,7 +621,7 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
     if is_dir and action == "add":
         _log(f"  → 新增目录: {file_path}", "info")
         file_url = source_url.rstrip("/") + "/" + file_path
-        ok, msg = _svn_try_export(svn_exe, file_url, head_rev, local_file, auth_args)
+        ok, msg = _svn_try_export(svn_exe, file_url, head_rev, local_file, auth_args, cancel_check)
         if not ok:
             _log(msg, "warn")
             return 0, 1, 0, [file_path]
@@ -622,11 +652,11 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
                 if _st.returncode == 0:
                     return _svn_merge_with_retry(
                         svn_exe, source_url, revisions, file_path, local_file,
-                        auth_args, _log, global_max_rev)
+                        auth_args, _log, global_max_rev, cancel_check)
             except Exception:
                 pass
         ok = _svn_export_add(svn_exe, source_url, head_rev,
-                             file_path, local_file, auth_args, _log)
+                             file_path, local_file, auth_args, _log, cancel_check)
         if ok:
             _sync_add_meta(svn_exe, source_url, file_path, local_file, auth_args, _log)
             _log(f"  ✅ 新增文件: {file_path}", "ok")
@@ -663,7 +693,7 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
     if action not in ("add", "del") and not os.path.exists(local_file):
         _log(f"  → 本地不存在，改按新增: {file_path}", "info")
         ok = _svn_export_add(svn_exe, source_url, head_rev,
-                             file_path, local_file, auth_args, _log)
+                             file_path, local_file, auth_args, _log, cancel_check)
         if ok:
             _sync_add_meta(svn_exe, source_url, file_path, local_file, auth_args, _log)
             _log(f"  ✅ 新增文件: {file_path}", "ok")
@@ -672,7 +702,7 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
 
     return _svn_merge_with_retry(
         svn_exe, source_url, revisions, file_path, local_file,
-        auth_args, _log, global_max_rev)
+        auth_args, _log, global_max_rev, cancel_check)
 
 
 def svn_update_target(target_path, svn_user=None, svn_pass=None, log_callback=None):
@@ -712,7 +742,7 @@ def svn_update_target(target_path, svn_user=None, svn_pass=None, log_callback=No
 
 def svn_merge(source_url, target_wc, revisions, files,
               svn_user=None, svn_pass=None, log_callback=None,
-              global_max_rev=None):
+              global_max_rev=None, cancel_check=None):
     """对选中的文件执行svn merge（多版本合并），使用 --accept theirs-full"""
     def _log(msg, level="info"):
         if log_callback:
@@ -750,7 +780,7 @@ def svn_merge(source_url, target_wc, revisions, files,
         local_file = os.path.join(target_wc, file_path)
         m, c, s, cf = _svn_merge_one_file(
             svn_exe, source_url, revisions, file_path, local_file,
-            action, auth_args, _log, head_rev)
+            action, auth_args, _log, head_rev, cancel_check)
         merged_count += m
         conflict_count += c
         skip_count += s

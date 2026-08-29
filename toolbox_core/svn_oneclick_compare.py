@@ -756,6 +756,13 @@ def step1_query_file_pairs(
         cmd_file = [svn_path, "log", file_url, "--xml", "-r", _svn_log_range(start_date, end_date)]
         r_file = _svn(cmd_file, timeout=120)
         if r_file.returncode != 0:
+            # E160013 = path not found：文件已在 SVN 中删除/移走，返回 None 由调用方跳过
+            try:
+                _err = (r_file.stderr or b"").decode("gbk", errors="replace")
+            except Exception:
+                _err = (r_file.stderr or b"").decode("utf-8", errors="replace")
+            if "E160013" in _err or "path not found" in _err.lower():
+                return fname, None
             return fname, []
 
         try:
@@ -834,6 +841,9 @@ def step1_query_file_pairs(
                 _log(f"       查询文件版本: {idx}/{total_files}")
             try:
                 fname_result, pairs = _get_file_revs(fname, file_url)
+                if pairs is None:
+                    _log(f"       跳过 {fname}（已在 SVN 中删除/路径不存在）")
+                    continue
                 result[fname_result] = pairs
             except Exception as e:
                 _log(f"       查询文件版本失败 {fname}: {e}")
@@ -851,6 +861,9 @@ def step1_query_file_pairs(
                     _log(f"       查询文件版本: {idx}/{total_files}")
                 try:
                     fname_result, pairs = future.result()
+                    if pairs is None:
+                        _log(f"       跳过 {fname}（已在 SVN 中删除/路径不存在）")
+                        continue
                     result[fname_result] = pairs
                 except Exception as e:
                     _log(f"       查询文件版本失败 {fname}: {e}")
@@ -2359,7 +2372,10 @@ def step3_download_and_compare(svn_url: str,
                     if fname in full_sheet_order:
                         file_sheet_order[fname] = full_sheet_order[fname]
 
-                tr, id_col, output_cols = _get_cmp_config(fname)
+                tr, id_col, _ = _get_cmp_config(fname)
+                # 2026-08-29：解析/对比一律全列采集（output_cols 置 None），
+                # 保证数据行包含所有有表头的列、值完整；输出列筛选在 write_excel 判定
+                output_cols = None
 
                 arg_fd, arg_path = tempfile.mkstemp(suffix=".pkl", prefix="cmp_arg_")
                 res_fd, res_path = tempfile.mkstemp(suffix=".pkl", prefix="cmp_res_")
@@ -2827,6 +2843,16 @@ def write_excel(results: List[dict], output_path: str,
                   header_data: Optional[dict] = None,
                   sheet_order: Optional[List[str]] = None) -> None:
     """将结果写入 Excel 文件（openpyxl）"""
+    # 2026-08-29：output_cols 仅在配置列名与源表头精确匹配时生效（如 Texts 的 ::ID:: 表头），
+    # 否则（如 Data2 配置表头为 ID 无冒号）按源表原始表头输出，恢复早期格式
+    if output_cols and header_data:
+        _fs = next(iter(header_data), None)
+        if _fs and title_rows in header_data[_fs]:
+            _hdr_vals = set(header_data[_fs][title_rows].values())
+            if not any(c in _hdr_vals for c in output_cols):
+                output_cols = None
+        else:
+            output_cols = None
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -2889,6 +2915,9 @@ def write_excel(results: List[dict], output_path: str,
         # 写入标题行（根据 title_rows 确定标题行数）
         header_rows = title_rows
         # 构建列名→列字母映射（从 header_data 第一个 sheet 的标题行数据）
+        # 归一化 key（去 ::、大小写），兼容 ::ID:: 与 ID 两种列名写法
+        def _norm_hdr(s):
+            return str(s).strip().strip(":").strip().lower()
         col_to_letter_out = {}
         first_sheet = None
         if header_data:
@@ -2897,7 +2926,7 @@ def write_excel(results: List[dict], output_path: str,
                 break
             if first_sheet and title_rows in header_data[first_sheet]:
                 for letter, hdr_val in header_data[first_sheet][title_rows].items():
-                    col_to_letter_out[hdr_val] = letter
+                    col_to_letter_out[_norm_hdr(hdr_val)] = letter
         for row_offset in range(header_rows):
             row_num = row_offset + 1
             for col_idx, col_name in enumerate(all_cols, 1):
@@ -2905,8 +2934,8 @@ def write_excel(results: List[dict], output_path: str,
                     cell = ws.cell(row=row_num, column=col_idx, value=col_name if row_offset == 0 else "")
                 else:
                     val = ""
-                    if col_name in col_to_letter_out:
-                        letter = col_to_letter_out[col_name]
+                    letter = col_to_letter_out.get(_norm_hdr(col_name))
+                    if letter:
                         if header_data and first_sheet and row_num in header_data[first_sheet]:
                             val_orig = header_data[first_sheet][row_num].get(letter, "")
                             if val_orig:
@@ -2916,16 +2945,21 @@ def write_excel(results: List[dict], output_path: str,
                 cell.fill = header_fill
                 cell.alignment = center
                 cell.border = border
-        
+
         # 写入数据行（全部左对齐）
         for row_idx, row_data in enumerate(results, title_rows + 1):
             fill = alt_fill if (row_idx - title_rows) % 2 == 0 else None
             for col_idx, col_name in enumerate(all_cols, 1):
-                # 映射表头名称到数据字段
+                # 映射表头名称到数据字段（归一化匹配，兼容 ::ID:: 与 ID）
                 data_key = col_name
                 if col_name == "上一版本":
                     data_key = "前一版本"
-                val = row_data.get(data_key, "")
+                _nk = _norm_hdr(data_key)
+                val = ""
+                for _rk, _rv in row_data.items():
+                    if _norm_hdr(_rk) == _nk:
+                        val = _rv
+                        break
                 cell = ws.cell(row=row_idx, column=col_idx, value=val)
                 cell.border = border
                 if fill:
@@ -2981,11 +3015,6 @@ def write_excel(results: List[dict], output_path: str,
             fixed_cols = {"操作", "当前版本", "上一版本", "前一版本", "sheet",
                           "_id_changed", "前一版本_ID", "前一版本_SC", "前一版本_sub"}
             all_cols = ["操作", "当前版本", "上一版本"]
-            data_cols_set: set = set()
-            for row in sheet_results:
-                for k in row.keys():
-                    if k not in fixed_cols and k not in all_cols and k.strip():
-                        data_cols_set.add(k)
 
             # ── 构建 col_name → letter 映射（从标题行原始数据）────────────────
             col_to_letter: Dict[str, str] = {}
@@ -2998,20 +3027,32 @@ def write_excel(results: List[dict], output_path: str,
                         _seen_hdrs_w.add(hdr_val)
                         col_to_letter[safe_val] = letter
 
-            # 按原表列字母序排列数据列
+            # 数据列 = 最新源表标题行的全部列（按原表列字母序），保证表头完整不少列；
+            # 与固定列（操作/当前版本等）同名的表头不重复加入，避免数据取值冲突
             def _col_letter_to_num(letter: str) -> int:
                 n = 0
                 for ch in letter.upper():
                     n = n * 26 + (ord(ch) - ord('A') + 1)
                 return n
-            def _col_sort_key(name: str) -> tuple:
-                letter = col_to_letter.get(name, "")
-                if letter:
-                    return (0, _col_letter_to_num(letter))
-                return (1, name)
+            def _norm_hdr_inner(s: str) -> str:
+                return str(s).strip().strip(":").strip().lower()
+            _fixed_norm = {_norm_hdr_inner(n) for n in fixed_cols}
             if col_to_letter:
-                data_cols_set = {k for k in data_cols_set if k in col_to_letter}
-            all_cols.extend(sorted(data_cols_set, key=_col_sort_key))
+                data_cols = []
+                for name in sorted(col_to_letter.keys(),
+                                   key=lambda n: _col_letter_to_num(col_to_letter[n])):
+                    if _norm_hdr_inner(name) in _fixed_norm:
+                        continue
+                    data_cols.append(name)
+                all_cols.extend(data_cols)
+            else:
+                # header_data 缺失时回退到结果行键
+                data_cols_set: set = set()
+                for row in sheet_results:
+                    for k in row.keys():
+                        if k not in fixed_cols and k not in all_cols and k.strip():
+                            data_cols_set.add(k)
+                all_cols.extend(sorted(data_cols_set))
 
             # ── header_rows 行表头 ─────────────────────────────
             for row_idx in range(1, header_rows + 1):
@@ -3034,6 +3075,12 @@ def write_excel(results: List[dict], output_path: str,
                     cell.fill = header_fill
                     cell.alignment = center
                     cell.border = border
+
+            # 固定列在表头区域纵向合并（操作/当前版本/上一版本），消除多行表头下的空洞
+            if header_rows > 1:
+                for _c in (1, 2, 3):
+                    ws.merge_cells(start_row=1, start_column=_c,
+                                   end_row=header_rows, end_column=_c)
 
             # ── 数据行（从 header_rows+1 行开始）─────────────────────
             for row_idx, row_data in enumerate(sheet_results, header_rows + 1):
@@ -3428,7 +3475,11 @@ def main():
             cmd_file = [svn_path, "log", file_url, "--xml", "-r", _svn_log_range(args.start, args.end)]
             r_file = _svn(cmd_file, timeout=120, svn_user=args.svn_user, svn_pass=args.svn_pass)
             if r_file.returncode != 0:
-                _log(f"  [警告] 无法获取 {fname} 的版本历史")
+                try:
+                    _err = (r_file.stderr or b"").decode("gbk", errors="replace")
+                except Exception:
+                    _err = (r_file.stderr or b"").decode("utf-8", errors="replace")
+                _log(f"  [警告] 无法获取 {fname} 的版本历史: {_err.strip()[:200]}")
                 continue
             
             try:

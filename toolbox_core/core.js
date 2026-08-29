@@ -1753,7 +1753,15 @@ function saveAdvFilePreset() {
 
   if (name) {
 
+    // 无论是否填文件名，全局默认（cmp_title_rows/cmp_id_col/cmp_output_cols）都一并保存，
+    // 否则下次打开高级设置会回退到旧的全局默认
     const payload = {
+
+      cmp_title_rows,
+
+      cmp_id_col,
+
+      cmp_output_cols,
 
       cmp_file_presets: [...new Set([name, ...(config.cmp_file_presets || [])])],
 
@@ -1770,6 +1778,12 @@ function saveAdvFilePreset() {
       .then(r=>r.json()).then(d=>{
 
         if (d.ok) {
+
+          config.cmp_title_rows = cmp_title_rows;
+
+          config.cmp_id_col = cmp_id_col;
+
+          config.cmp_output_cols = cmp_output_cols;
 
           config.cmp_file_presets = payload.cmp_file_presets;
 

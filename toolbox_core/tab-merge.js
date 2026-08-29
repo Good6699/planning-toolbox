@@ -68,44 +68,22 @@ function _getCheckedVersionFiles() {
   });
   return Object.values(allFiles);
 }
-function _getMergeSourceUrl() {
-  /* 源SVN地址输入框显示本地路径，真实 URL 存 dataset.url；兼容直接填 URL */
+async function _ensureMergeSourceUrl() {
+  /* 查询/合并前确保拿到 URL：输入框是本地路径时每次反查（不信任 dataset.url 缓存，避免切换路径后残留错位） */
   const el = document.getElementById("merge_source");
   if (!el) return "";
-  const u = el.dataset.url || "";
-  if (u) return u;
   const v = el.value.trim();
-  return isSvnUrl(v) ? v : "";
-}
-async function _ensureMergeSourceUrl() {
-  /* 查询/合并前确保拿到 URL：本地路径未反查时先调 detect */
-  let url = _getMergeSourceUrl();
-  if (url) return url;
-  const v = document.getElementById("merge_source")?.value.trim() || "";
   if (!v) return "";
-  if (isSvnUrl(v)) return v;
+  if (isSvnUrl(v)) { el.dataset.url = v; return v; }
   try {
     const r = await fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path: v})});
     const d = await r.json();
     if (d.ok) {
-      document.getElementById("merge_source").dataset.url = d.url;
+      el.dataset.url = d.url;
       return d.url;
     }
   } catch(_) {}
   return "";
-}
-function _showLocalForMergeSource(url) {
-  /* 把输入框值换成 URL 对应的本地路径（仅显示），失败则保持 URL */
-  if (!url || !isSvnUrl(url)) return;
-  fetch("/api/svn/resolve-url", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({url})})
-    .then(r => r.json())
-    .then(d => {
-      if (d.ok && d.path) {
-        const el = document.getElementById("merge_source");
-        if (el && el.dataset.url === url) el.value = d.path;
-      }
-    })
-    .catch(() => {});
 }
 function buildMergeTab(panel) {
   const today = `${cy}-${String(cm).padStart(2,"0")}-${String(cd).padStart(2,"0")}`;
@@ -214,29 +192,24 @@ function buildMergeTab(panel) {
   `;
   S.merge.logEl = document.getElementById("merge_log");
   const svnUrlHistory = getSvnUrlHistory();
-  const savedSource = isSvnUrl(config.merge_source_current) ? config.merge_source_current : (svnUrlHistory[0] || "");
+  const savedSource = config.merge_source_current || svnUrlHistory[0] || "";
   if (savedSource) {
     const _ms = document.getElementById("merge_source");
     _ms.value = savedSource;
     if (isSvnUrl(savedSource)) _ms.dataset.url = savedSource;
-    _showLocalForMergeSource(savedSource); // 输入框显示本地路径（URL 时异步转）
   }
-  initSuggest("merge_source", svnUrlHistory); // 兜底：URL 历史
-  // 配置里的 URL 迁移为本地路径 + 下拉显示本地工作副本路径（查询时反查 URL）
-  _migrateSvnUrlsToLocal().then(res => {
-    if (!res) return;
-    const cur = config.merge_source_current || res.hist[0] || "";
-    const _ms = document.getElementById("merge_source");
-    _ms.value = cur;
-    if (!isSvnUrl(cur)) delete _ms.dataset.url;
-    initSuggest("merge_source", res.hist);
-  });
+  initSuggest("merge_source", svnUrlHistory);
+  // 下拉候选合并本机 SVN 工作副本本地路径
+  fetch("/api/svn/working-copies")
+    .then(r=>r.json()).then(d => {
+      if (d.ok && d.paths && d.paths.length) initSuggest("merge_source", [...new Set([...(config.svn_urls||[]), ...d.paths])]);
+    })
+    .catch(()=>{});
   document.getElementById("merge_source").addEventListener("change", () => {
     const v = document.getElementById("merge_source").value.trim();
     if (!v) return;
     if (isSvnUrl(v)) {
       document.getElementById("merge_source").dataset.url = v;
-      _showLocalForMergeSource(v);
     } else {
       // 本地路径 → 反查 SVN 链接
       fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path: v})})
@@ -419,14 +392,12 @@ function buildMergeTab(panel) {
       } catch(_) {}
       return;
     }
-    // URL 输入：保存历史 + 输入框转本地路径显示
+    // URL 输入：保存（不入历史）+ 自动解析本地路径填入目标路径（目标为空时）
     saveSvnUrlValue("merge_source", val);
     document.getElementById("merge_source").dataset.url = val;
-    _showLocalForMergeSource(val);
-    // 自动解析 SVN URL 到本地路径并填入目标路径（目标为空时）
     if (!document.getElementById("merge_target").value.trim()) {
       try {
-        const r = await fetch("/api/svn/resolve-url", {
+        const r = await fetch("/api/svn/find-wc", {
           method:"POST", headers:{"Content-Type":"application/json"},
           body:JSON.stringify({url: val})
         });
@@ -791,7 +762,8 @@ async function runMergeAnalysis() {
   logEl?.scrollIntoView({behavior:"smooth", block:"nearest"});
   _incRunning();
   _incTabRunning("merge");
-  const body = { source_url: sourceUrl, target_path: targetPath, revisions: checkedRevs, version_files: versionFiles, rev_file_map: revFileMap };
+  const _srcLocal = document.getElementById("merge_source")?.value.trim() || "";
+  const body = { source_url: sourceUrl, source_local: _srcLocal, target_path: targetPath, revisions: checkedRevs, version_files: versionFiles, rev_file_map: revFileMap };
   try {
     const r = await fetch("/api/merge/analyze", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const d = await r.json();

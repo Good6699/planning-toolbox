@@ -57,7 +57,7 @@ from toolbox_config import (  # noqa: E402
 )
 from toolbox_platform import _get_subprocess_kwargs, _get_bat_subprocess_kwargs, _get_svn_path, _check_office_lock, _diagnose_svn_missing, _auto_install_svn_cli  # noqa: E402
 from xlsm_zipper import apply_via_excel  # noqa: E402
-from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path, resolve_svn_url_to_local, migrate_old_svn_mappings, collect_svn_working_copies  # noqa: E402
+from toolbox_merge import svn_log, svn_merge, open_commit_dialog, resolve_target_path, collect_svn_working_copies  # noqa: E402
 from exceltool_export import run_export  # noqa: E402
 from atlas_migration import AtlasMigrationError, AtlasMigrationService  # noqa: E402
 
@@ -104,13 +104,7 @@ if os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true"):
     app.config["TEMPLATES_AUTO_RELOAD"] = True
     app.jinja_env.auto_reload = True
 
-# 启动时自动从旧配置迁移 SVN URL↔路径映射
-try:
-    cfg = load_config()
-    if not cfg.get("svn_url_mappings"):
-        migrate_old_svn_mappings(cfg)
-except Exception:
-    pass
+# 2026-08-29：不再使用 URL↔本地映射存储体系（一次性迁移在 working-copies 接口触发）
 
 
 @app.after_request
@@ -5308,24 +5302,10 @@ def api_svn_detect():
 
 def _find_svn_wc(url):
     """根据 SVN URL 查找对应的本地工作副本路径（不打开资源管理器）
-    
-    先查 svn_url_mappings 映射表，再走候选路径逐级匹配。
+
+    2026-08-29：不再使用映射表，只走候选路径逐级 svn info 匹配。
     """
     cfg = load_config()
-    # 先查映射表
-    clean_url = url.rstrip("/")
-    mappings = cfg.get("svn_url_mappings", {})
-    if clean_url in mappings:
-        p = mappings[clean_url]
-        if os.path.isdir(p):
-            return p
-    # 前缀匹配
-    for map_url, local_path in mappings.items():
-        if clean_url.startswith(map_url.rstrip("/") + "/"):
-            rel = clean_url[len(map_url.rstrip("/")) + 1:]
-            full = os.path.join(local_path, rel.replace("/", os.sep))
-            if os.path.isdir(full):
-                return os.path.normpath(full)
     # 候选路径逐级匹配
     candidates = set()
     for d in cfg.get("output_dir_history", []):
@@ -5364,6 +5344,58 @@ def _find_svn_wc(url):
     return found
 
 
+def _once_migrate_legacy_urls():
+    """一次性迁移：把配置历史里的 SVN URL 转成本地工作副本路径。
+
+    有本地副本的 URL 替换为本地路径；无副本的从历史丢弃；
+    svn_url_current / merge_source_current 同样处理。
+    迁移完成后配置里不再有 URL，后续不会重复执行。
+    """
+    try:
+        cfg = load_config()
+        # 无论有无 URL 历史，旧的 URL↔本地映射表一律清除（已废弃）
+        changed = False
+        if cfg.get("svn_url_mappings"):
+            cfg.pop("svn_url_mappings", None)
+            changed = True
+        has_url = any(str(u).startswith(("http://", "https://", "svn://"))
+                      for u in (cfg.get("svn_urls") or [])) or \
+                  str(cfg.get("svn_url_current", "")).startswith(("http://", "https://", "svn://")) or \
+                  str(cfg.get("merge_source_current", "")).startswith(("http://", "https://", "svn://"))
+        if not has_url:
+            if changed:
+                save_config(cfg)
+            return
+        # 全盘扫描工作副本 URL→本地路径 映射，作为转换依据
+        wc_map = collect_svn_working_copies() or {}
+
+        def _to_local(u):
+            nonlocal changed
+            if not u or not str(u).startswith(("http://", "https://", "svn://")):
+                return u
+            changed = True
+            p = wc_map.get(str(u).rstrip("/"))
+            return os.path.normpath(p) if p else None  # 无副本则丢弃
+
+        hist = []
+        for u in (cfg.get("svn_urls") or []):
+            loc = _to_local(u)
+            if loc:
+                hist.append(loc)
+        cfg["svn_urls"] = hist
+        for key in ("svn_url_current", "merge_source_current"):
+            v = cfg.get(key, "")
+            loc = _to_local(v)
+            if loc:
+                cfg[key] = loc
+            elif str(v).startswith(("http://", "https://", "svn://")):
+                cfg[key] = hist[0] if hist else ""
+        if changed:
+            save_config(cfg)
+    except Exception:
+        pass
+
+
 @app.route("/api/svn/clear-changelist", methods=["POST"])
 def api_svn_clear_changelist():
     data = request.get_json(force=True)
@@ -5384,97 +5416,38 @@ def api_svn_clear_changelist():
 
 @app.route("/api/svn/find-wc", methods=["POST"])
 def api_svn_find_wc():
-    """查找 SVN URL 对应的本地工作副本路径（不打开资源管理器）"""
+    """查找 SVN URL 对应的本地工作副本路径（不打开资源管理器）；本地路径直接返回"""
     data = request.get_json(force=True)
     url = data.get("url", "").strip()
     if not url:
         return jsonify({"ok": False, "error": "URL 为空"}), 400
+    if os.path.isdir(url):
+        return jsonify({"ok": True, "path": os.path.normpath(url)})
     found = _find_svn_wc(url)
     if found and os.path.isdir(found):
         return jsonify({"ok": True, "path": os.path.normpath(found)})
     return jsonify({"ok": False, "error": "未找到对应的本地工作副本"}), 200
 
 
-@app.route("/api/svn/resolve-url", methods=["POST"])
-def api_svn_resolve_url():
-    """解析 SVN URL 到本地路径，找到后自动保存映射"""
-    data = request.get_json(force=True)
-    url = data.get("url", "").strip()
-    if not url:
-        return jsonify({"ok": False, "error": "URL 为空"}), 400
-    with config_lock:
-        cfg = load_config()
-        local_path = resolve_svn_url_to_local(url, cfg=cfg)
-        if local_path and os.path.isdir(local_path):
-            mappings = cfg.get("svn_url_mappings", {}) or {}
-            mappings[url.rstrip("/")] = os.path.normpath(local_path)
-            cfg["svn_url_mappings"] = mappings
-            save_config(cfg)
-            return jsonify({"ok": True, "path": os.path.normpath(local_path)})
-    return jsonify({"ok": False, "error": "未找到对应的本地工作副本路径（可尝试先填写目标路径建立映射）"}), 200
-
-
 @app.route("/api/svn/working-copies", methods=["GET"])
 def api_svn_working_copies():
-    """返回本机所有 SVN 工作副本：paths=本地路径列表，map=URL→本地路径（供地址输入框显示本地路径）"""
+    """返回本机所有 SVN 工作副本本地路径列表（供地址输入框下拉候选）；顺带执行一次性 URL 历史迁移"""
+    _once_migrate_legacy_urls()
     wc_map = collect_svn_working_copies()
     paths = sorted(set(wc_map.values()))
-    return jsonify({"ok": True, "paths": paths, "map": wc_map})
-
-
-@app.route("/api/svn/save-mapping", methods=["POST"])
-def api_svn_save_mapping():
-    """验证并保存 URL↔本地路径映射"""
-    data = request.get_json(force=True)
-    url = data.get("url", "").strip()
-    path = data.get("path", "").strip()
-    if not url or not path:
-        return jsonify({"ok": False, "error": "URL 和路径不能为空"}), 400
-    if not os.path.isdir(path):
-        return jsonify({"ok": False, "error": f"路径不存在: {path}"}), 200
-    # 验证路径是有效的 SVN 工作副本且匹配该 URL
-    try:
-        svn_exe = _get_svn_path()
-        r = subprocess.run(
-            [svn_exe, "info", "--show-item", "url", path],
-            capture_output=True, encoding="utf-8", errors="replace", timeout=5,
-            **_get_subprocess_kwargs()
-        )
-        wc_url = r.stdout.strip() if r.returncode == 0 else ""
-        clean_url = url.rstrip("/")
-        if not wc_url or (clean_url != wc_url and not wc_url.startswith(clean_url + "/") and not clean_url.startswith(wc_url + "/")):
-            return jsonify({"ok": False, "error": f"路径 [{path}] 的 SVN URL 与输入不匹配"}), 200
-        # 找到工作副本根目录
-        r2 = subprocess.run(
-            [svn_exe, "info", "--show-item", "wc-root", path],
-            capture_output=True, encoding="utf-8", errors="replace", timeout=5,
-            **_get_subprocess_kwargs()
-        )
-        wc_root = r2.stdout.strip() if r2.returncode == 0 else path
-        with config_lock:
-            cfg = load_config()
-            mappings = cfg.get("svn_url_mappings", {}) or {}
-            new_key = clean_url
-            new_val = os.path.normpath(wc_root)
-            if mappings.get(new_key) != new_val:
-                mappings[new_key] = new_val
-                cfg["svn_url_mappings"] = mappings
-                save_config(cfg)
-        return jsonify({"ok": True, "path": new_val, "url": new_key})
-    except FileNotFoundError:
-        return jsonify({"ok": False, "error": "SVN 命令不可用"}), 200
-    except subprocess.TimeoutExpired:
-        return jsonify({"ok": False, "error": "SVN 命令超时"}), 200
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 200
+    return jsonify({"ok": True, "paths": paths})
 
 
 @app.route("/api/svn/open-wc", methods=["POST"])
 def api_svn_open_wc():
+    """打开本地工作副本目录；本地路径直接打开，SVN URL 先反查本地副本"""
     data = request.get_json(force=True)
     url = data.get("url", "").strip()
     if not url:
         return jsonify({"ok": False, "error": "URL 为空"}), 400
+    if os.path.isdir(url):
+        os.startfile(url)
+        return jsonify({"ok": True, "path": os.path.normpath(url)})
     found = _find_svn_wc(url)
     if found and os.path.isdir(found):
         os.startfile(found)
@@ -5930,6 +5903,7 @@ def api_merge_analyze():
     """语义分析：对勾选的版本做结构化解构，输出 txt 报告"""
     data = request.get_json(force=True)
     source_url = data.get("source_url", "").strip()
+    source_local = data.get("source_local", "").strip()
     revisions = data.get("revisions", [])
     version_files = data.get("version_files", [])
     rev_file_map = data.get("rev_file_map", {})
@@ -5937,10 +5911,10 @@ def api_merge_analyze():
         return jsonify({"error": "源SVN地址不能为空"}), 400
     if not revisions:
         return jsonify({"error": "请至少勾选一个版本"}), 400
-    # GUID 映射路径只从源SVN地址对应的本地工作副本获取
-    guid_path = resolve_svn_url_to_local(source_url)
+    # GUID 映射路径用源SVN地址对应的本地工作副本（前端直接传本地路径）
+    guid_path = source_local
     if not guid_path or not os.path.isdir(os.path.join(guid_path, "Assets")):
-        return jsonify({"error": f"无法找到 SVN 地址 [{source_url}] 对应的本地工作副本路径（用于 GUID 映射查询），请先在设置中保存 SVN 地址映射"}), 400
+        return jsonify({"error": "无法找到源 SVN 地址对应的本地工作副本路径（用于 GUID 映射查询），请在源地址处填写本地工作副本路径"}), 400
     cfg = load_config()
     svn_user = cfg.get("svn_user", "")
     svn_pass = cfg.get("svn_pass", "")

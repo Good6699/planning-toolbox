@@ -88,10 +88,7 @@ def load_config():
     # 脚本目录下的 svn_gui_config.json 作为默认模板
     _default_path = os.path.join(SCRIPT_DIR, "svn_gui_config.json")
     default = {
-        "svn_urls": [
-            "http://192.168.1.41:8080/svn/D3/branches/20240606_KR2/gameData/Text/Texts.xlsm"
-        ],
-        "svn_url_mappings": {},
+        "svn_urls": [],
         "cmp_file_presets": []
     }
     # 如果模板文件存在，用它替代硬编码默认值

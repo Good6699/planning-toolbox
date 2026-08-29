@@ -211,70 +211,19 @@ const cm = now.getMonth()+1;
 
 const cd = now.getDate();
 
-async function _migrateSvnUrlsToLocal() {
-  /* 把配置里的 SVN URL 迁移为本地工作副本路径（界面直接显示/存储本地路径），
-     查询时用本地路径反查 SVN 链接；返回 {hist, map} 或 null */
-  try {
-    const r = await fetch("/api/svn/working-copies");
-    const d = await r.json();
-    if (!d.ok || !d.map) return null;
-    const toLocal = (u) => {
-      if (!u || typeof u !== "string") return u;
-      const clean = u.replace(/\/+$/, "");
-      return d.map[clean] || u;
-    };
-    const hist = (config.svn_urls || []).map(toLocal);
-    const cur = toLocal(config.svn_url_current);
-    const curMerge = toLocal(config.merge_source_current);
-    const changed = JSON.stringify(hist) !== JSON.stringify(config.svn_urls) ||
-                    cur !== config.svn_url_current ||
-                    curMerge !== config.merge_source_current;
-    if (changed) {
-      config.svn_urls = hist;
-      config.svn_url_current = cur;
-      config.merge_source_current = curMerge;
-      saveConfig({svn_urls: hist, svn_url_current: cur, merge_source_current: curMerge});
-    }
-    return {hist, map: d.map};
-  } catch(_) { return null; }
-}
-function _getSvnUrlInputUrl() {
-  /* SVN 地址输入框显示本地路径，真实 URL 存 dataset.url；兼容直接填 URL */
+async function _ensureSvnUrlInputUrl() {
+  /* 查询前确保拿到 URL：输入框是本地路径时每次反查（不信任 dataset.url 缓存，避免切换路径后残留错位） */
   const el = document.getElementById("svn_url");
   if (!el) return "";
-  const u = el.dataset.url || "";
-  if (u) return u;
   const v = el.value.trim();
-  return isSvnUrl(v) ? v : "";
-}
-async function _ensureSvnUrlInputUrl() {
-  /* 查询前确保拿到 URL：本地路径未反查时先调 detect */
-  let url = _getSvnUrlInputUrl();
-  if (url) return url;
-  const v = document.getElementById("svn_url")?.value.trim() || "";
   if (!v) return "";
-  if (isSvnUrl(v)) return v;
+  if (isSvnUrl(v)) { el.dataset.url = v; return v; }
   try {
     const r = await fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path: v})});
     const d = await r.json();
-    if (d.ok) {
-      document.getElementById("svn_url").dataset.url = d.url;
-      return d.url;
-    }
+    if (d.ok) { el.dataset.url = d.url; return d.url; }
   } catch(_) {}
   return "";
-}
-function _showLocalForSvnInput(url) {
-  /* 把 SVN 地址输入框值换成 URL 对应的本地路径（仅显示），失败保持 URL */
-  if (!url || !isSvnUrl(url)) return;
-  fetch("/api/svn/resolve-url", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})})
-    .then(r=>r.json()).then(d => {
-      if (d.ok && d.path) {
-        const el = document.getElementById("svn_url");
-        if (el && el.dataset.url === url) el.value = d.path;
-      }
-    })
-    .catch(() => {});
 }
 function buildSvnTab(panel) {
 
@@ -430,9 +379,11 @@ function buildSvnTab(panel) {
 
   initSuggest("svn_url", svnUrlHistory);
 
-  // 下拉选项显示本地工作副本路径（值仍为 SVN URL）
+  // 下拉候选合并本机 SVN 工作副本本地路径（历史 + 全盘扫描）
   fetch("/api/svn/working-copies")
-    .then(r=>r.json()).then(d => { if (d.ok && d.paths && d.paths.length) initSuggest("svn_url", d.paths); })
+    .then(r=>r.json()).then(d => {
+      if (d.ok && d.paths && d.paths.length) initSuggest("svn_url", [...new Set([...(config.svn_urls||[]), ...d.paths])]);
+    })
     .catch(()=>{});
 
   enablePathDrop("svn_url", { mode: "svn" });
@@ -440,20 +391,11 @@ function buildSvnTab(panel) {
   enablePathDrop("svn_output", { mode: "path" });
 
   const _svnUrlInput = document.getElementById("svn_url");
-  const savedUrl = isSvnUrl(config.svn_url_current) ? config.svn_url_current : (svnUrlHistory[0] || "");
+  const savedUrl = config.svn_url_current || svnUrlHistory[0] || "";
   if (savedUrl) {
     _svnUrlInput.value = savedUrl;
     if (isSvnUrl(savedUrl)) _svnUrlInput.dataset.url = savedUrl;
-    _showLocalForSvnInput(savedUrl); // 输入框显示本地路径（URL 时异步转）
   }
-  // 配置里的 URL 迁移为本地工作副本路径（界面直接显示本地路径，查询时反查 URL）
-  _migrateSvnUrlsToLocal().then(res => {
-    if (!res) return;
-    const cur = config.svn_url_current || res.hist[0] || "";
-    _svnUrlInput.value = cur;
-    if (!isSvnUrl(cur)) delete _svnUrlInput.dataset.url;
-    initSuggest("svn_url", res.hist);
-  });
 
   _svnUrlInput.addEventListener("keydown",e=>{
     if (e.key === "Enter") {
@@ -461,7 +403,6 @@ function buildSvnTab(panel) {
       if (val && isSvnUrl(val)) {
         saveSvnUrlValue("svn_url", val);
         _svnUrlInput.dataset.url = val;
-        _showLocalForSvnInput(val);
       }
     }
   });
@@ -475,7 +416,6 @@ function buildSvnTab(panel) {
     if (!val) return;
     if (isSvnUrl(val)) {
       _svnUrlInput.dataset.url = val;
-      _showLocalForSvnInput(val);
     } else {
       // 本地路径 → 反查 SVN 链接
       fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path: val})})
@@ -498,7 +438,6 @@ function buildSvnTab(panel) {
     }
     saveSvnUrlValue("svn_url", val);
     _svnUrlInput.dataset.url = val;
-    _showLocalForSvnInput(val);
   });
 
   document.getElementById("svn_output").addEventListener("blur", ()=>{
@@ -607,7 +546,9 @@ async function runSvn() {
 
   const au = body.author;
 
-  const svnHist = isSvnUrl(body.svn_url) ? [body.svn_url, ...getSvnUrlHistory().filter(u=>u!==body.svn_url)].slice(0,20) : getSvnUrlHistory();
+  // 保存本地路径（输入框显示值）到当前值与历史；粘贴 URL 只用于本次查询，不入历史
+  const _urlDisplay = document.getElementById("svn_url")?.value.trim() || "";
+  const svnHist = isSvnUrl(_urlDisplay) ? getSvnUrlHistory() : [_urlDisplay, ...getSvnUrlHistory().filter(u=>u!==_urlDisplay)].slice(0,20);
 
   saveConfig({
 
@@ -615,7 +556,7 @@ async function runSvn() {
 
     output_dir_history: [out, ...(config.output_dir_history||[]).filter(u=>u!==out)].slice(0,10),
 
-    svn_url_current: body.svn_url,
+    svn_url_current: _urlDisplay || body.svn_url,
 
     svn_urls: svnHist,
 
@@ -625,7 +566,7 @@ async function runSvn() {
 
   });
 
-  config.svn_url_current = body.svn_url;
+  config.svn_url_current = _urlDisplay || body.svn_url;
 
   config.svn_urls = svnHist;
 
@@ -2617,17 +2558,19 @@ function _dateRangeError(start, end) {
 
 function getSvnUrlHistory() {
 
-  return (config.svn_urls || []).filter(isSvnUrl);
+  // 历史只存本地工作副本路径（不再包含 SVN URL）
+  return (config.svn_urls || []).filter(u => !isSvnUrl(u));
 
 }
 
 function saveSvnUrlValue(inputId, val) {
 
-  // 保存当前输入框值（本地路径或 URL 均可；下次打开页签会统一迁移为本地路径）
-
+  // 保存当前输入框值（本地路径）；SVN URL 只更新 current，不入历史
   const key = inputId === "merge_source" ? "merge_source_current" : "svn_url_current";
 
-  const hist = [val, ...getSvnUrlHistory().filter(u => u !== val)].slice(0, 20);
+  const isUrl = isSvnUrl(val);
+
+  const hist = isUrl ? getSvnUrlHistory() : [val, ...getSvnUrlHistory().filter(u => u !== val)].slice(0, 20);
 
   config[key] = val;
 

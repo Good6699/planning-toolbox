@@ -2589,8 +2589,11 @@ def _exec_merge_error_code(step, put, task_id=None):
     return export_ok
 
 
-def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put):
-    """返回 src_dir 下 cutoff_date 当天起有 SVN 提交的文件相对路径集合；不可用时返回 None"""
+def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None):
+    """返回 src_dir 下 cutoff_date 当天起有 SVN 提交的文件相对路径集合；不可用时返回 None
+
+    author 指定时只统计该作者的提交（精确匹配），None 表示所有人
+    """
     try:
         r = subprocess.run(
             [svn_exe, "log", "-v", "--xml", "-r", "{%s}:HEAD" % cutoff_date, src_dir],
@@ -2614,6 +2617,10 @@ def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put):
         return None
     files = set()
     for logentry in root_el.iter("logentry"):
+        if author:
+            au = (logentry.findtext("author") or "").strip()
+            if au != author:
+                continue
         for p in logentry.iter("path"):
             if p.get("action") == "D":
                 continue
@@ -2625,7 +2632,7 @@ def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put):
                 if rel:
                     files.add(rel.replace("/", os.sep))
     if files:
-        put(f"  SVN 识别: {cutoff_date} 起 {len(files)} 个文件有提交\n")
+        put(f"  SVN 识别: {cutoff_date} 起 {len(files)} 个文件有提交" + (f"（作者: {author}）" if author else "") + "\n")
     return files
 
 
@@ -2661,11 +2668,15 @@ def _exec_consolidate(step, put, task_id=None):
         except ValueError:
             days = 3
 
+    # 指定提交作者（留空 = 所有人）
+    author = str(step.get("author") or "").strip() or None
+
     put(f"{'='*50}\n")
     put("快速整合\n")
     put(f"来源: {', '.join(src_dirs)}\n")
     put(f"目标: {tgt_dir}\n")
     put(f"天数: {days}（今天起 {days} 个自然日）\n")
+    put(f"作者: {author if author else '所有人'}\n")
     put(f"提交: {', '.join(commit_dirs)}\n\n")
 
     os.makedirs(tgt_dir, exist_ok=True)
@@ -2717,7 +2728,7 @@ def _exec_consolidate(step, put, task_id=None):
             put(f"  路径对齐: +{extra_prefix}\n")
         else:
             put("  路径对齐: 直接覆盖（无公共路径段）\n")
-        changed = _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put)
+        changed = _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author)
         if changed is None:
             svn_mode_ok = False
             put(f"  ⚠ svn log 不可用，回退为按本地文件修改时间（{cutoff_date} 起）\n")

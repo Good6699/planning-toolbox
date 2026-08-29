@@ -1651,6 +1651,69 @@ def _notify_task_done_worker(name):
             pass
 
 
+def _collect_wf_svn_paths(steps):
+    """收集工作流步骤涉及的 SVN 本地路径（数组或逗号分隔字符串）"""
+    paths = set()
+    _keys = ("revert_paths", "commit_dir", "target_path", "tgt_dir", "update_dirs",
+             "src_dir", "tgt_path", "src_path", "root_dir", "file_paths", "dirs")
+    for st in steps:
+        for key in _keys:
+            v = st.get(key)
+            if not v:
+                continue
+            items = v if isinstance(v, list) else [s.strip() for s in str(v).split(",") if s.strip()]
+            for it in items:
+                if it and os.path.isdir(it):
+                    paths.add(os.path.normpath(it))
+    return list(paths)
+
+
+def _auto_svn_cleanup(paths, put=None, task_id=None):
+    """按需清理 SVN 工作副本残留：仅当检测到锁定（E155004/E155032）或残留 changelist 时才清理"""
+    svn_exe = _get_svn_path()
+    done = 0
+    for p in paths:
+        if not p or not os.path.isdir(p):
+            continue
+        need_cleanup = False
+        need_cl = False
+        # 1) 轻量检测工作副本锁/中断队列：svn status（--depth empty 只查根，快）。
+        #    只认 E155004（工作副本 locked）/E155032（队列需 cleanup）两个精确错误码，
+        #    正常文件锁定（svn lock / needs-lock）status 正常返回，不触发清理
+        try:
+            _so, _se, _sc = _svn_run_cancelable(
+                [svn_exe, "status", "--depth", "empty", p], task_id=task_id, timeout=30)
+            _err = _se.decode("utf-8", errors="replace") if _se else ""
+            if _sc != 0 and ("E155004" in _err or "E155032" in _err):
+                need_cleanup = True
+        except Exception:
+            need_cleanup = True
+        # 2) 检测残留 changelist（非空才清）
+        try:
+            _co, _ce, _cc = _svn_run_cancelable(
+                [svn_exe, "changelist", "--recursive", p], task_id=task_id, timeout=30)
+            _out = _co.decode("utf-8", errors="replace") if _co else ""
+            if _cc == 0 and "Changelist" in _out:
+                need_cl = True
+        except Exception:
+            pass
+        if not need_cleanup and not need_cl:
+            continue  # 无需清理
+        try:
+            if need_cleanup:
+                _svn_run_cancelable([svn_exe, "cleanup", p], task_id=task_id, timeout=120)
+            if need_cl:
+                _svn_run_cancelable(
+                    [svn_exe, "changelist", "--remove", "--recursive", p],
+                    task_id=task_id, timeout=60)
+            done += 1
+        except Exception:
+            pass
+    if put and done:
+        put(f"已清理 {done} 个 SVN 工作副本（存在锁/残留 changelist）\n")
+    return done
+
+
 def _run_wf_task(q, wf, steps, task_id, skip_lock=False):
     prefix = {"error": "❌ ", "ok": "✓ ", "warn": "⚠ ", "head": ""}
 
@@ -1670,6 +1733,12 @@ def _run_wf_task(q, wf, steps, task_id, skip_lock=False):
     _put(f"{'='*50}\n")
     _put(f"执行工作流: {wf.get('name', '未命名')}\n")
     _put(f"共 {len(steps)} 个步骤\n\n")
+
+    # 开始前检查涉及的 SVN 工作副本是否需要清理（有锁/残留 changelist 才清）
+    _wf_paths = _collect_wf_svn_paths(steps)
+    if _wf_paths:
+        _put(f"正在检查 {len(_wf_paths)} 个 SVN 工作副本是否需要清理（锁/残留 changelist）...\n")
+        _auto_svn_cleanup(_wf_paths, _put, task_id)
 
     blocked = False
     for i, step in enumerate(steps):
@@ -1723,6 +1792,9 @@ def _run_wf_task(q, wf, steps, task_id, skip_lock=False):
         if not ok:
             _line("步骤执行失败，阻断后续步骤", "error")
             blocked = True
+    # 结束后（含失败/中断）再次自动清理
+    if _wf_paths:
+        _auto_svn_cleanup(_wf_paths, _put, task_id)
     _put(f"\n{'='*50}\n")
     _put("工作流执行完成\n" if not blocked else "工作流执行完成（有失败步骤）\n")
     _notify_task_done(wf.get('name', '未命名'))

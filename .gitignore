@@ -119,6 +119,12 @@ _disasm.txt
 _line_map.txt
 _update_debug.txt
 
+# Not version-controlled (local/aux/large)
+package.json
+生成meta.vbs
+语义分析/
+预制对比工具/
+
 # Secrets
 *.token
 _git_*

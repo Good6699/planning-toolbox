@@ -643,6 +643,18 @@ async function runMergeQuery() {
   if (!targetPath) { _showToast("请输入目标本地工作副本路径"); document.getElementById("merge_target").focus(); return; }
   const dateError = _dateRangeError(startDate, endDate);
   if (dateError) { _showToast(dateError); document.getElementById("merge_start").focus(); return; }
+  // 重新查询前清空上次查询的版本列表与勾选状态
+  _mergeData.versions = [];
+  _mergeData.checkedRevs = {};
+  _mergeData.checkedFiles = {};
+  _mergeData.totalChecked = 0;
+  _mergeData.lastFileIdx = undefined;
+  document.getElementById("merge_version_list").innerHTML = '<div class="merge-empty">查询中…</div>';
+  document.getElementById("merge_file_list").innerHTML = '<div class="merge-empty">请勾选版本查看变更文件</div>';
+  document.getElementById("merge_file_hint").textContent = "请勾选需要合并的版本";
+  document.getElementById("merge_file_count_bottom").textContent = "已选 0 个文件";
+  document.getElementById("merge_run_btn").disabled = true;
+  document.getElementById("merge_version_count").textContent = "";
   const btn = document.getElementById("merge_query_btn");
   btn.dataset.orig = btn.dataset.orig || btn.textContent;
   const logEl = document.getElementById("merge_log");

@@ -68,6 +68,28 @@ function _getCheckedVersionFiles() {
   });
   return Object.values(allFiles);
 }
+function _getMergeSourceUrl() {
+  /* 源SVN地址输入框显示本地路径，真实 URL 存 dataset.url；兼容直接填 URL */
+  const el = document.getElementById("merge_source");
+  if (!el) return "";
+  const u = el.dataset.url || "";
+  if (u) return u;
+  const v = el.value.trim();
+  return isSvnUrl(v) ? v : "";
+}
+function _showLocalForMergeSource(url) {
+  /* 把输入框值换成 URL 对应的本地路径（仅显示），失败则保持 URL */
+  if (!url || !isSvnUrl(url)) return;
+  fetch("/api/svn/resolve-url", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({url})})
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok && d.path) {
+        const el = document.getElementById("merge_source");
+        if (el && el.dataset.url === url) el.value = d.path;
+      }
+    })
+    .catch(() => {});
+}
 function buildMergeTab(panel) {
   const today = `${cy}-${String(cm).padStart(2,"0")}-${String(cd).padStart(2,"0")}`;
   const yearStart = `${cy}-01-01`;
@@ -111,7 +133,7 @@ function buildMergeTab(panel) {
           </div>
           <div class="form-group">
             <label>提交者（留空不限）</label>
-            <input type="text" id="merge_author" placeholder="SVN提交者的账户名" autocomplete="off">
+            <input type="text" id="merge_author" placeholder="SVN提交者账户名，多个用逗号分隔" autocomplete="off">
           </div>
         </div>
       </div>
@@ -176,8 +198,20 @@ function buildMergeTab(panel) {
   S.merge.logEl = document.getElementById("merge_log");
   const svnUrlHistory = getSvnUrlHistory();
   const savedSource = isSvnUrl(config.merge_source_current) ? config.merge_source_current : (svnUrlHistory[0] || "");
-  if (savedSource) document.getElementById("merge_source").value = savedSource;
+  if (savedSource) {
+    const _ms = document.getElementById("merge_source");
+    _ms.value = savedSource;
+    _ms.dataset.url = savedSource;
+    _showLocalForMergeSource(savedSource); // 输入框显示本地路径
+  }
   initSuggest("merge_source", svnUrlHistory);
+  document.getElementById("merge_source").addEventListener("change", () => {
+    const v = document.getElementById("merge_source").value.trim();
+    if (v && isSvnUrl(v)) {
+      document.getElementById("merge_source").dataset.url = v;
+      _showLocalForMergeSource(v);
+    }
+  });
   const savedTarget = config.merge_target_history?.[0] || "";
   if (savedTarget) document.getElementById("merge_target").value = savedTarget;
   initSuggest("merge_target", config.merge_target_history||[]);
@@ -343,16 +377,14 @@ function buildMergeTab(panel) {
   });
   document.getElementById("merge_source").addEventListener("blur", async ()=>{
     const val = document.getElementById("merge_source").value.trim();
-    if (val && !isSvnUrl(val)) {
-      document.getElementById("merge_source").value = "";
-      _showToast("已过滤非 SVN 链接");
-      return;
-    }
-    if (val && isSvnUrl(val)) {
-      saveSvnUrlValue("merge_source", val);
-    }
-    // 自动解析 SVN URL 到本地路径并填入目标路径
-    if (val && isSvnUrl(val) && !document.getElementById("merge_target").value.trim()) {
+    if (!val) return;
+    if (!isSvnUrl(val)) return; // 本地路径（已转换显示），保留不动
+    // URL 输入：保存历史 + 输入框转本地路径显示
+    saveSvnUrlValue("merge_source", val);
+    document.getElementById("merge_source").dataset.url = val;
+    _showLocalForMergeSource(val);
+    // 自动解析 SVN URL 到本地路径并填入目标路径（目标为空时）
+    if (!document.getElementById("merge_target").value.trim()) {
       try {
         const r = await fetch("/api/svn/resolve-url", {
           method:"POST", headers:{"Content-Type":"application/json"},
@@ -584,7 +616,7 @@ function _selectAllMergeFiles(select) {
   _updateMergeFileCount();
 }
 async function runMergeQuery() {
-  const sourceUrl = document.getElementById("merge_source").value.trim();
+  const sourceUrl = _getMergeSourceUrl();
   const targetPath = document.getElementById("merge_target").value.trim();
   const startDate = document.getElementById("merge_start").value;
   const endDate = document.getElementById("merge_end").value;
@@ -681,7 +713,7 @@ async function runMergeQuery() {
 }
 async function runMergeAnalysis() {
   triggerUpdateCheck();
-  const sourceUrl = document.getElementById("merge_source").value.trim();
+  const sourceUrl = _getMergeSourceUrl();
   const targetPath = document.getElementById("merge_target").value.trim();
   if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
   if (!isSvnUrl(sourceUrl)) { _showToast("请输入有效的 SVN 链接"); document.getElementById("merge_source").focus(); return; }
@@ -792,7 +824,7 @@ async function runMergeAnalysis() {
 }
 async function runMergeRun() {
   triggerUpdateCheck();
-  const sourceUrl = document.getElementById("merge_source").value.trim();
+  const sourceUrl = _getMergeSourceUrl();
   const targetPath = document.getElementById("merge_target").value.trim();
   if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
   if (!isSvnUrl(sourceUrl)) { _showToast("请输入有效的 SVN 链接"); document.getElementById("merge_source").focus(); return; }

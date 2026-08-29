@@ -305,7 +305,7 @@ function buildSvnTab(panel) {
 
             <label>提交者过滤</label>
 
-            <input type="text" id="svn_author" placeholder="SVN提交者的账户名" autocomplete="off">
+            <input type="text" id="svn_author" placeholder="SVN提交者账户名，多个用逗号分隔" autocomplete="off">
 
           </div>
 
@@ -2021,7 +2021,9 @@ document.addEventListener("click",e=>{
         fetch("/api/svn/detect", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:p})})
           .then(r=>r.json()).then(d=>{
             if (d.ok) {
-              document.getElementById("merge_source").value = d.url;
+              // 输入框显示本地路径，SVN URL 存 dataset.url
+              document.getElementById("merge_source").dataset.url = d.url;
+              document.getElementById("merge_source").value = p;
               saveSvnUrlValue("merge_source", d.url);
             }
           });

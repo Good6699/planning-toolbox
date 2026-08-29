@@ -2897,9 +2897,50 @@ function enablePathDrop(inputId, opts){
 
     e.preventDefault();
 
+    e.stopPropagation();
+
     input.classList.remove("drag-over");
 
     _lastDropTargetId = inputId;
+
+    // 读取拖入的路径：优先文件路径，其次拖放文本
+    const dt = e.dataTransfer;
+
+    if (!dt) return;
+
+    let path = "";
+
+    if (dt.files && dt.files.length) {
+
+      path = dt.files[0].path || dt.files[0].webkitRelativePath || "";
+
+    }
+
+    if (!path) {
+
+      try { path = (dt.getData("text") || "").trim(); } catch(_) {}
+
+    }
+
+    if (!path) return;
+
+    const isAppend = input.dataset.append === "1";
+
+    if (isAppend) {
+
+      const oldPaths = input.value.trim().split(",").map(s=>s.trim()).filter(Boolean);
+
+      input.value = oldPaths.includes(path) ? oldPaths.join(", ") : [...oldPaths, path].join(", ");
+
+    } else {
+
+      input.value = path;
+
+    }
+
+    input.dispatchEvent(new Event("change", {bubbles:true}));
+
+    if (typeof window._wfModalAutoSave === "function") window._wfModalAutoSave();
 
   });
 

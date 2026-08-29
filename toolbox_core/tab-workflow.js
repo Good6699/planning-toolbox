@@ -396,7 +396,7 @@ function buildWorkflowTab(panel) {
     const v = (key) => escapeHtml(Array.isArray(step[key]) ? step[key].join(", ") : step[key]||"");
     const _fb = (label, dataKey, id, browseType, append, placeholder) => `
       <div class="form-group"><label>${label}</label>
-        <div class="flex-row"><input type="text" class="wf-modal-input" id="${id}" data-key="${dataKey}" value="${v(dataKey)}" style="flex:1" placeholder="${escapeHtml(placeholder || (browseType==='dir'?'输入本地目录路径':'输入文件路径'))}">
+        <div class="flex-row"><input type="text" class="wf-modal-input" id="${id}" data-key="${dataKey}" value="${v(dataKey)}" style="flex:1" ${append?'data-append="1"':''} placeholder="${escapeHtml(placeholder || (browseType==='dir'?'输入本地目录路径':'输入文件路径'))}">
         <button class="btn btn-normal btn-sm" onclick="(function(t,i,a){if(a){_browseDirAppend(i)}else{var v=document.getElementById(i).value.trim(),d=v.substring(0,v.lastIndexOf('\\\\'));if(!d)d=v;if(t==='file')browseFile(i,d||'');else browseDir(i,null,d||'');}})('${browseType.replace(/'/g,"\\'")}','${id}',${!!append})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>`;
     const m = {
       export_text: `
@@ -449,12 +449,13 @@ function buildWorkflowTab(panel) {
         ${_fb("目标路径","tgt_dir","wf_m_co_tgt","dir",false,"输入 SVN 工作副本目标目录")}
         ${_fb("提交路径（逗号分隔）","commit_dir","wf_m_co_commit","dir",true,"输入 TortoiseSVN 提交的根路径，多个用逗号分隔")}
         <div class="form-group"><label>天数</label><input type="number" class="wf-modal-input" id="wf_m_co_days" data-key="days" min="1" value="${v("days") || 3}" placeholder="合并最近几天修改的文件（1=当天）"></div>
-        <div class="form-group"><label>SVN提交作者（留空=所有人）</label><input type="text" class="wf-modal-input" id="wf_m_co_author" data-key="author" value="${v("author") || ""}" placeholder="只复制该作者提交的文件，留空则复制所有人"></div>`,
+        <div class="form-group"><label>SVN提交作者（留空=不限）</label><input type="text" class="wf-modal-input" id="wf_m_co_author" data-key="author" value="${v("author") || ""}" placeholder="只复制指定作者提交的文件，多个用逗号分隔（或关系），留空则不限"></div>
+        <div class="form-group"><label>SVN提交备注（留空=不限）</label><input type="text" class="wf-modal-input" id="wf_m_co_msg" data-key="commit_msg" value="${v("commit_msg") || ""}" placeholder="备注包含该关键词才复制，多个用逗号分隔，与提交作者为并（AND）关系"></div>`,
       merge_specified_text: `
         ${_fb("文字表来源路径","src_path","wf_m_mst_src","file",false,"输入来源文字表（SVN工作副本内的 Texts.xlsm 文件路径）")}
         ${_fb("目标文字表路径","tgt_path","wf_m_mst_tgt","file",false,"输入要合并到的目标文字表文件路径")}
         <div class="form-group"><label>SVN提交备注（包含匹配）</label><input type="text" class="wf-modal-input" id="wf_m_mst_msg" data-key="commit_msg" value="${v("commit_msg")}" placeholder="输入提交信息关键词，留空不限"></div>
-        <div class="form-group"><label>SVN提交作者</label><input type="text" class="wf-modal-input" id="wf_m_mst_author" data-key="commit_author" value="${v("commit_author")}" placeholder="输入 SVN 提交者账户名，留空不限"></div>
+        <div class="form-group"><label>SVN提交作者</label><input type="text" class="wf-modal-input" id="wf_m_mst_author" data-key="commit_author" value="${v("commit_author")}" placeholder="SVN提交者账户名，多个用逗号分隔，留空不限"></div>
         <div class="form-group"><label>自然日</label><input type="number" class="wf-modal-input" id="wf_m_mst_days" data-key="days" min="1" value="${v("days") || 3}" placeholder="合并距今几天内的提交（1=当天）"></div>
         ${_fb("提交路径（逗号分隔）","commit_dir","wf_m_mst_commit","dir",true,"输入 TortoiseSVN 提交的根路径，多个用逗号分隔")}`,
       error_code_entry: `

@@ -77,8 +77,9 @@ def _parse_svn_date(text):
 
 
 def svn_log(source_url, start_date, end_date, author=None, keyword=None,
-            svn_user=None, svn_pass=None, verbose=False):
-    """查询SVN提交日志，返回版本列表。verbose=True 时返回文件列表"""
+            svn_user=None, svn_pass=None, verbose=False, use_merge_history=False):
+    """查询SVN提交日志，返回版本列表。verbose=True 时返回文件列表；
+    use_merge_history=True 时追溯合并来源（merge 历史版本）"""
     end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
     cmd = ["log", source_url, "--xml", "-r",
            f"{{{start_date}}}:{{{end_dt.strftime('%Y-%m-%d')}}}"]
@@ -88,13 +89,18 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
         for a in author_list:
             cmd += ["--search", a]
     keywords_list = [k.strip() for k in keyword.split(",")] if keyword else []
-    if len(keywords_list) == 1 and not author_list:
-        cmd += ["--search", keywords_list[0]]
-    # author + keyword must be AND; SVN --search is OR, so keyword is filtered Python-side when author exists
+    # 关键词（单个或多个）加 --search 预过滤（svn 多 --search 是或关系，匹配提交备注），
+    # Python 端再按提交备注精确过滤（大小写不敏感）。
+    # 注意：--search 与 --use-merge-history 组合在 svn 端会返回 0，merge 历史模式走全量 + Python 过滤
+    if keywords_list and not use_merge_history:
+        for kw in keywords_list:
+            cmd += ["--search", kw]
     if verbose:
         cmd += ["--verbose"]
+    if use_merge_history:
+        cmd += ["--use-merge-history"]
     cmd += _build_svn_auth_args(svn_user, svn_pass)
-    raw = _run_svn(cmd, timeout=120)
+    raw = _run_svn(cmd, timeout=300)
     versions = []
     try:
         root = ET.fromstring(raw)
@@ -117,6 +123,9 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
                     files.append({
                         "path": path_el.text or "",
                         "action": action_map.get(action, action),
+                        # copyfrom 合并/复制信息（svn copy / svn merge 复制）：来源路径与版本
+                        "copyfrom_path": path_el.get("copyfrom-path") or "",
+                        "copyfrom_rev": path_el.get("copyfrom-rev") or "",
                     })
                 v["files"] = files
             versions.append(v)
@@ -125,9 +134,10 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
     # 作者过滤：逗号分隔多选，包含匹配，或关系
     if author_list:
         versions = [v for v in versions if any(a in (v.get("author") or "") for a in author_list)]
-    # 关键词过滤：逗号分隔多选，包含匹配，或关系
-    if len(keywords_list) > 1 or (author_list and keywords_list):
-        versions = [v for v in versions if any(kw in v.get("msg", "") for kw in keywords_list)]
+    # 关键词过滤：提交备注包含任一关键词（逗号分隔多选，大小写不敏感，或关系）
+    if keywords_list:
+        _kws_lower = [kw.lower() for kw in keywords_list]
+        versions = [v for v in versions if any(kw in (v.get("msg") or "").lower() for kw in _kws_lower)]
     return versions
 
 
@@ -603,6 +613,18 @@ def _svn_merge_one_file(svn_exe, source_url, revisions, file_path, local_file,
     # 文件新增 → export + add（用最新版本），并联动同路径 .meta
     if action == "add" and not is_dir:
         _log(f"  → 新增: {file_path}", "info")
+        if os.path.exists(local_file):
+            # 目标已存在（merge 来源版本映射场景）：已跟踪 → 按最新版覆盖；未跟踪 → 走 export+add
+            try:
+                _st = subprocess.run(
+                    [svn_exe, "info", local_file], capture_output=True, timeout=15,
+                    **_get_subprocess_kwargs())
+                if _st.returncode == 0:
+                    return _svn_merge_with_retry(
+                        svn_exe, source_url, revisions, file_path, local_file,
+                        auth_args, _log, global_max_rev)
+            except Exception:
+                pass
         ok = _svn_export_add(svn_exe, source_url, head_rev,
                              file_path, local_file, auth_args, _log)
         if ok:

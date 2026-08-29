@@ -2589,12 +2589,14 @@ def _exec_merge_error_code(step, put, task_id=None):
     return export_ok
 
 
-def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None):
+def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None, commit_msg=None):
     """返回 src_dir 下 cutoff_date 当天起有 SVN 提交的文件相对路径集合；不可用时返回 None
 
-    author 支持逗号分隔多选（或关系），None 表示所有人
+    author 支持逗号分隔多选（或关系），commit_msg 为提交备注包含匹配；
+    author 与 commit_msg 为 AND 关系，均不填表示所有人
     """
     authors = {a.strip() for a in str(author or "").split(",") if a.strip()} or None
+    msg_kws = [k.strip() for k in str(commit_msg or "").split(",") if k.strip()] or None
     try:
         r = subprocess.run(
             [svn_exe, "log", "-v", "--xml", "-r", "{%s}:HEAD" % cutoff_date, src_dir],
@@ -2622,6 +2624,10 @@ def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None):
             au = (logentry.findtext("author") or "").strip()
             if not any(a in au for a in authors):
                 continue
+        if msg_kws:
+            msg = logentry.findtext("msg") or ""
+            if not any(kw in msg for kw in msg_kws):
+                continue
         for p in logentry.iter("path"):
             if p.get("action") == "D":
                 continue
@@ -2633,7 +2639,12 @@ def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None):
                 if rel:
                     files.add(rel.replace("/", os.sep))
     if files:
-        put(f"  SVN 识别: {cutoff_date} 起 {len(files)} 个文件有提交" + (f"（作者: {', '.join(sorted(authors))}）" if authors else "") + "\n")
+        _cond = []
+        if authors:
+            _cond.append("作者: " + ", ".join(sorted(authors)))
+        if msg_kws:
+            _cond.append("备注含: " + ", ".join(msg_kws))
+        put(f"  SVN 识别: {cutoff_date} 起 {len(files)} 个文件有提交" + (f"（{'，'.join(_cond)}）" if _cond else "") + "\n")
     return files
 
 
@@ -2669,8 +2680,9 @@ def _exec_consolidate(step, put, task_id=None):
         except ValueError:
             days = 3
 
-    # 指定提交作者（留空 = 所有人）
+    # 指定提交作者/提交备注（留空 = 不限；作者与备注为 AND 关系）
     author = str(step.get("author") or "").strip() or None
+    commit_msg = str(step.get("commit_msg") or "").strip() or None
 
     put(f"{'='*50}\n")
     put("快速整合\n")
@@ -2678,6 +2690,7 @@ def _exec_consolidate(step, put, task_id=None):
     put(f"目标: {tgt_dir}\n")
     put(f"天数: {days}（今天起 {days} 个自然日）\n")
     put(f"作者: {author if author else '所有人'}\n")
+    put(f"备注含: {commit_msg if commit_msg else '不限'}\n")
     put(f"提交: {', '.join(commit_dirs)}\n\n")
 
     os.makedirs(tgt_dir, exist_ok=True)
@@ -2741,7 +2754,7 @@ def _exec_consolidate(step, put, task_id=None):
             put(f"  路径对齐: +{extra_prefix}\n")
         else:
             put("  路径对齐: 直接覆盖（无公共路径段）\n")
-        changed = _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author)
+        changed = _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author, commit_msg)
         if changed is None:
             svn_mode_ok = False
             put(f"  ⚠ svn log 不可用，回退为按本地文件修改时间（{cutoff_date} 起）\n")
@@ -5459,7 +5472,7 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
         versions = svn_log(source_url, start_date, end_date,
                            author=author, keyword=keyword,
                            svn_user=svn_user, svn_pass=svn_pass,
-                           verbose=True)
+                           verbose=True, use_merge_history=True)
 
         # SVN 的 {date} 解析会向前回溯到最近有提交的日期，导致日期范围外的版本混入
         # 在 Python 端再做一次日期过滤
@@ -5479,7 +5492,20 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
                     v["files"] = [f for f in v.get("files", []) if repo_relative in f.get("path", "") or f.get("path", "").endswith("/" + filter_str_verbose)]
                 else:
                     prefix = filter_str_verbose.rstrip("/") + "/"
-                    v["files"] = [f for f in v.get("files", []) if f.get("path", "").startswith(prefix)]
+                    # 目录过滤；merge 来源版本的路径在来源分支，映射到查询分支（去分支名拼查询分支根）
+                    _branch_root = "/" + "/".join(filter_str_verbose.strip("/").split("/")[:2])  # 如 /branches/20240606_KR2
+                    _new_files = []
+                    for _f in v.get("files", []):
+                        _p = _f.get("path", "")
+                        if _p.startswith(prefix):
+                            _new_files.append(_f)
+                            continue
+                        _m = re.match(r"^/branches/[^/]+(/.*)$", _p)
+                        if _m:
+                            _f2 = dict(_f)
+                            _f2["path"] = _branch_root + _m.group(1)
+                            _new_files.append(_f2)
+                    v["files"] = _new_files
             matched = sum(len(v.get("files", [])) for v in versions)
             if is_file_url and matched == 0:
                 _log(f"完整路径未匹配，尝试仅按文件名 '{filter_str_verbose}' 过滤")

@@ -1,11 +1,11 @@
 # 策划工具箱知识图谱报告
-生成时间：2026-08-27 23:23
+生成时间：2026-08-29 16:26
 
 ## 概况
 - 项目文件：1617 个
-- 图谱节点：24083 个（代码 17070，文档 1580）
-- 关系边数：47931 条
-- 社区数：2037 个
+- 图谱节点：24284 个（代码 17079，文档 1580）
+- 关系边数：48174 条
+- 社区数：2028 个
 
 ## 核心模块（高连接度节点）
 1. **Serialisable** — 493 条连接
@@ -84,7 +84,7 @@
 - **auto_study.py** — 13 节点
 - **browser_control.py** — 1 节点
 - **build.py** — 15 节点
-- **core.js** — 82 节点
+- **core.js** — 85 节点
 - **create_job_button.py** — 1 节点
 - **daily_worklog_schedule.ps1** — 3 节点
 - **daily_worklog_summary.py** — 8 节点
@@ -112,7 +112,7 @@
 - **start_web.py** — 1 节点
 - **svn_oneclick_compare.py** — 59 节点
 - **tab-assist.js** — 2 节点
-- **tab-merge.js** — 15 节点
+- **tab-merge.js** — 18 节点
 - **tab-prefab.js** — 3 节点
 - **tab-textcheck.js** — 3 节点
 - **tab-translate.js** — 6 节点
@@ -1082,12 +1082,12 @@
 - **toolbox_core/update_version.py** — 2 节点
 - **toolbox_core/web_app.py** — 82 节点
 - **toolbox_core/xlsm_zipper.py** — 4 节点
-- **toolbox_merge.py** — 25 节点
+- **toolbox_merge.py** — 27 节点
 - **toolbox_texts_merge.py** — 6 节点
 - **toolbox_xlsx_merge.py** — 5 节点
 - **tools/calamine_verify.py** — 5 节点
 - **update_version.py** — 1 节点
-- **web_app.py** — 140 节点
+- **web_app.py** — 141 节点
 - **web_launcher.py** — 2 节点
 - **xlsm_zipper.py** — 4 节点
 - **安装Python313.ps1** — 1 节点
@@ -1231,138 +1231,138 @@
 - **预制对比工具/PrefabContrastToolNew/artifacts/real-check/obj/Debug/net8.0/RealCheck.GlobalUsings.g.cs** — 1 节点
 - **预制对比工具/PrefabContrastToolNew/artifacts/verify-obj/PrefabContrastTool/Debug/PrefabContrastTool.GlobalUsings.g.cs** — 1 节点
 
-## 社区分组（Top 25 / 2037 个）
-### Community 735
+## 社区分组（Top 25 / 2028 个）
+### Community 724
 - 凝聚度：1.0
 - 节点：_build_dist.py, build(), copytree()
 - 文件：_build_dist.py
 
-### Community 741
+### Community 730
 - 凝聚度：1.0
 - 节点：_do_push.py, git(), log()
 - 文件：_do_push.py
 
-### Community 750
+### Community 739
 - 凝聚度：1.0
 - 节点：_push_via_api.py, api(), log()
 - 文件：_push_via_api.py
 
-### Community 781
+### Community 770
 - 凝聚度：1.0
 - 节点：tab-prefab.js, buildPrefabTab(), startPrefabClear()
 - 文件：toolbox_core/tab-prefab.js
 
-### Community 782
+### Community 771
 - 凝聚度：1.0
 - 节点：tab-prefab.min.js, buildPrefabTab(), startPrefabClear()
 - 文件：toolbox_core/tab-prefab.min.js
 
-### Community 693
+### Community 681
 - 凝聚度：0.8333333333333334
 - 节点：build.py, build(), _cleanup_copied_workers(), _get_pyinstaller()
 - 文件：build.py
 
-### Community 697
+### Community 685
 - 凝聚度：0.8333333333333334
 - 节点：eventLogDemo.py, ReadLog(), test(), usage()
 - 文件：toolbox_core/py_modules/win32/Demos/eventLogDemo.py
 
-### Community 704
+### Community 692
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：_export_error_code_erl.py
 
-### Community 705
+### Community 693
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：_internal/_export_error_code_erl.py
 
-### Community 706
+### Community 694
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：_internal/_export_error_code_erl.py
 
-### Community 708
+### Community 696
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：toolbox_core/py_modules_backup/_export_error_code_erl.py
 
-### Community 709
-- 凝聚度：0.8333333333333334
-- 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
-- 文件：toolbox_core/py_modules/_export_error_code_erl.py
-
-### Community 712
+### Community 703
 - 凝聚度：0.8333333333333334
 - 节点：h2py.py, main(), process(), pytify()
 - 文件：toolbox_core/py_modules/win32/scripts/h2py.py
 
-### Community 713
+### Community 704
 - 凝聚度：0.8333333333333334
 - 节点：localized_names.py, LookupAliasFromRid(), LookupUserGroupFromRid(), main()
 - 文件：toolbox_core/py_modules/win32/Demos/security/localized_names.py
 
-### Community 729
+### Community 718
 - 凝聚度：0.8333333333333334
 - 节点：_safe_cfg.py, copy(), read(), write()
 - 文件：toolbox_core/_safe_cfg.py
 
-### Community 732
+### Community 721
 - 凝聚度：0.8333333333333334
 - 节点：_export_error_code_erl.py, main(), _read_xlsm_data(), _write_erl()
 - 文件：策划工具箱_v1.1.4/策划工具箱/_internal/_export_error_code_erl.py
 
-### Community 659
+### Community 652
 - 凝聚度：0.8
 - 节点：setup_d.py, _docopy(), _domodule(), _doregister(), usage_and_die()
 - 文件：toolbox_core/py_modules/win32/scripts/setup_d.py
 
-### Community 670
+### Community 659
 - 凝聚度：0.8
 - 节点：_export_error_code_erl.py, main(), _export_error_code_erl.py, _read_xlsm_data(), _write_erl()
 - 文件：toolbox_core/_export_error_code_erl.py
 
-### Community 621
+### Community 611
 - 凝聚度：0.7333333333333333
 - 节点：testMSOfficeEvents.py, _CheckSeenEvents(), test(), TestExcel(), TestWord()...
 - 文件：toolbox_core/py_modules/win32com/test/testMSOfficeEvents.py
 
-### Community 664
+### Community 654
 - 凝聚度：0.7
 - 节点：GenTestScripts.py, CleanAll(), GenerateAll(), GenerateFromRegistered(), GetGenPath()
 - 文件：toolbox_core/py_modules/win32com/test/GenTestScripts.py
 
-### Community 620
+### Community 610
 - 凝聚度：0.6666666666666666
 - 节点：testAccess.py, CreateTestAccessDatabase(), DoDumpAccessInfo(), DumpAccessInfo(), GenerateSupport()...
 - 文件：toolbox_core/py_modules/win32com/test/testAccess.py
 
-### Community 715
+### Community 706
 - 凝聚度：0.6666666666666666
 - 节点：localserver.py, main(), # NOTE: When NOT running in any sort of debugging mode,, serve()
 - 文件：toolbox_core/py_modules/win32com/server/localserver.py
 
-### Community 731
+### Community 720
 - 凝聚度：0.6666666666666666
 - 节点：olectl.py, MAKE_SCODE(), Constants used by COM Controls  Hand created version of olectl.h constants., STD_CTL_SCODE()
 - 文件：toolbox_core/py_modules/win32com/olectl.py
 
-### Community 736
+### Community 725
 - 凝聚度：0.6666666666666666
 - 节点：daily_worklog_schedule.ps1, Get-TodayEnd(), New-TaskXml()
 - 文件：daily_worklog_schedule.ps1
 
-### Community 737
+### Community 726
 - 凝聚度：0.6666666666666666
 - 节点：NetValidatePasswordPolicy.py, main(), A demo of using win32net.NetValidatePasswordPolicy.  Example usage:  % NetVa
 - 文件：toolbox_core/py_modules/win32/Demos/NetValidatePasswordPolicy.py
+
+### Community 727
+- 凝聚度：0.6666666666666666
+- 节点：OpenEncryptedFileRaw.py, ReadCallback(), WriteCallback()
+- 文件：toolbox_core/py_modules/win32/Demos/OpenEncryptedFileRaw.py
 
 ## 跨模块连接（你可能不知道的关联）
 - `main()` → `_cmp_task_proc()` [INFERRED]
 - `main()` → `_cmp_task_proc()` [INFERRED]
 - `_run_svn()` → `_get_subprocess_kwargs()` [INFERRED]
-- `_run_svn()` → `_get_subprocess_kwargs()` [INFERRED]
 - `_detect_changed_blocks()` → `_log()` [INFERRED]
+- `_compare_prefab_texts_fast()` → `_log()` [INFERRED]
 
 ## 孤立节点（4108 个代码节点仅 0-1 条连接）
 - LPVOID ()

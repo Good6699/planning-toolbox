@@ -596,11 +596,18 @@ function renderMergeFiles(files) {
     if (sp && path.startsWith(sp + "/")) displayPath = path.slice(sp.length + 1);
     const name = _basename(displayPath);
     const dir = _dirname(displayPath);
+    // copyfrom 合并来源显示（svn copy / svn merge 复制）
+    let cfTag = "";
+    if (f.copyfrom_path && f.copyfrom_rev) {
+      const cfM = f.copyfrom_path.match(/^\/branches\/([^/]+)/);
+      const cfShort = cfM ? cfM[1] : f.copyfrom_path;
+      cfTag = `<span class="file-cf" title="${escapeHtml(f.copyfrom_path)}" style="color:var(--dim);font-size:11px;margin-left:8px">来自 ${escapeHtml(cfShort)}@r${escapeHtml(f.copyfrom_rev)}</span>`;
+    }
     return `<div class="merge-file-item${checked}${isDel ? " wf-file-del" : ""}" data-path="${escapeHtml(path)}" data-action="${action}" data-idx="${i}">
       <input type="checkbox"${checked}>
       <span class="action-tag ${action}">${actionCn[action]||action}</span>
       ${isDel ? '<span class="del-tag">已删除</span>' : ""}
-      <span class="path" title="${escapeHtml(path)}"><span class="file-name">${escapeHtml(name)}</span> <span class="file-dir">${escapeHtml(dir)}</span></span>
+      <span class="path" title="${escapeHtml(path)}"><span class="file-name">${escapeHtml(name)}</span> <span class="file-dir">${escapeHtml(dir)}</span>${cfTag}</span>
     </div>`;
   }).join("");
   _updateMergeFileCount();

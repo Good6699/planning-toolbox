@@ -425,7 +425,7 @@ function buildWorkflowTab(panel) {
         <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="锁定前先更新的目录，多个用逗号分隔"></div>
         <div class="form-group"><label>锁定消息</label><input type="text" class="wf-modal-input" id="wf_m_lock_msg" data-key="lock_msg" value="${v("lock_msg")}" placeholder="输入 SVN 锁定的说明信息"></div>`,
       unlock_svn: `
-        ${_fb("目标文件路径","target_path","wf_m_target_path","file",false,"输入要解锁的文件路径")}
+        ${_fb("目标路径（逗号分隔）","target_path","wf_m_target_path","file",true,"输入要解锁的文件或文件夹路径，多个用逗号分隔；文件夹将解锁其中本人锁定的全部文件")}
         <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="解锁前先更新的目录，多个用逗号分隔"></div>
         <div class="form-group"><label>解锁消息</label><input type="text" class="wf-modal-input" id="wf_m_lock_msg" data-key="lock_msg" value="${v("lock_msg")}" placeholder="输入 SVN 解锁的说明信息"></div>`,
       open_tables: `
@@ -939,8 +939,13 @@ function _wfDetectPrefixes(steps) {
   const SKIP_KEYS = new Set(["name","type","lock_msg","lang_codes","merge_mode"]);
   function walk(v) {
     if (typeof v === "string" && /^[A-Za-z]:\\/.test(v)) {
-      const m = v.match(/^(.+?)\\(?:gameData|Client)(?:\\|$)/i);
-      if (m) prefixes.add(m[1]);
+      // 逗号分隔的多值字段（如 src_dir/commit_dir）逐段匹配，避免把逗号吞进前缀
+      v.split(",").forEach(part => {
+        const s = part.trim();
+        if (!s) return;
+        const m = s.match(/^(.+?)\\(?:gameData|Client)(?:\\|$)/i);
+        if (m) prefixes.add(m[1]);
+      });
     } else if (Array.isArray(v)) {
       v.forEach(walk);
     } else if (v && typeof v === "object") {

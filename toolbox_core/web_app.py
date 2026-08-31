@@ -3394,19 +3394,57 @@ def _exec_merge_config(step, put, task_id=None):
 
     # 6. 命中表 → 源/目标文件对（目标存在同名文件才处理）
     tables = []
+    skipped_files = []
     for rel in results:
         src_file = os.path.join(src_dir, rel)
         tgt_file = os.path.join(tgt_dir, rel)
         if os.path.isfile(src_file) and os.path.isfile(tgt_file):
             tables.append((rel, src_file, tgt_file))
-    if not tables:
-        put("命中表在目标文件夹无同名文件，跳过\n")
-        return True
-    put(f"待合并配置表: {len(tables)} 个\n")
+        else:
+            skipped_files.append(rel)
+    if skipped_files:
+        put(f"待合并配置表: {len(tables)} 个\n")
+        put(f"  （目标文件夹无同名文件，跳过: {', '.join(skipped_files)}）\n")
+    else:
+        put(f"待合并配置表: {len(tables)} 个\n")
 
-    # 7. 每个命中表：锁目标 → 复制 ID 行 → 解锁
     from toolbox_xlsx_merge import run_xlsx_apply_worker
     merged_any = False
+
+    # 6.5 新增配置表（来源筛选命中但目标无同名文件）：整个复制到目标，
+    #     状态为新增（不 svn add、不自动提交，仅弹 SVN 提交框由用户勾选）
+    new_copied = []
+    for rel, pair_list in file_pairs.items():
+        if pair_list:
+            continue
+        if not rel.lower().endswith(".xlsm"):
+            continue
+        src_file = os.path.join(src_dir, rel)
+        tgt_file = os.path.join(tgt_dir, rel)
+        if not os.path.isfile(src_file):
+            continue
+        if os.path.isfile(tgt_file):
+            put(f"  {rel}: 来源为新增但目标已有同名文件（异常），跳过\n")
+            continue
+        try:
+            tgt_sub = os.path.dirname(tgt_file)
+            if tgt_sub:
+                os.makedirs(tgt_sub, exist_ok=True)
+            shutil.copy2(src_file, tgt_file)
+            new_copied.append(rel)
+            merged_any = True
+        except Exception as e:
+            put(f"  {rel}: 复制新增配置表失败: {e}\n")
+    if new_copied:
+        put(f"新增配置表: {len(new_copied)} 个，整个复制到目标（未提交，请在 SVN 提交框勾选）:\n")
+        for nc in new_copied:
+            put(f"  + {nc}\n")
+
+    if not tables and not new_copied:
+        put("无待合并/新增配置表\n")
+        return True
+
+    # 7. 每个命中表：锁目标 → 复制 ID 行 → 解锁
     for rel, src_file, tgt_file in tables:
         diff = (results or {}).get(rel)
         if not diff:

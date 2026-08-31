@@ -25,10 +25,13 @@ def run_xlsx_apply_worker(args, put, task_id=None, timeout=1200):
     try:
         with open(arg_path, "wb") as f:
             pickle.dump(args, f)
+        _env = dict(os.environ)
+        _env.setdefault("PYTHONIOENCODING", "utf-8")
         proc = subprocess.Popen(
             [sys.executable, worker_script, arg_path, res_path],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            env=_env)
         out_bytes, _ = proc.communicate(timeout=timeout)
         # 转发子进程日志
         try:
@@ -209,7 +212,17 @@ def _copy_rows_by_id(wb_src, wb_tgt, id_by_sheet, title_rows, id_col, put):
     added = updated = 0
     for sheet_name, ids in id_by_sheet.items():
         if sheet_name not in wb_src.sheetnames or sheet_name not in wb_tgt.sheetnames:
-            put(f"  sheet 缺失（源/目标）: {sheet_name}，跳过\n")
+            # 精确匹配失败：区分源/目标，列出目标表实际 sheet 名与相近候选，便于排查表结构差异
+            if sheet_name not in wb_src.sheetnames:
+                put(f"  sheet 缺失（源表无此 sheet）: {sheet_name}，跳过\n")
+            else:
+                put(f"  sheet 缺失（目标表无此 sheet）: {sheet_name}，跳过\n")
+                cands = [sn for sn in wb_tgt.sheetnames
+                         if sn.startswith(sheet_name) or sheet_name.startswith(sn)]
+                if cands:
+                    put(f"    相近候选（可能为分支改名的同一 sheet）: {', '.join(cands)}\n")
+                else:
+                    put(f"    目标表现有 sheet: {', '.join(wb_tgt.sheetnames)}\n")
             continue
         ws_src = wb_src[sheet_name]
         ws_tgt = wb_tgt[sheet_name]
@@ -246,15 +259,20 @@ def _copy_rows_by_id(wb_src, wb_tgt, id_by_sheet, title_rows, id_col, put):
                 src_rows.setdefault(sid, (r, row))
         if not src_rows:
             continue
-        # 目标表行索引：ID → 行号，单遍迭代
+        # 目标表行索引：ID → 行号，单遍迭代；同时定位 END 标记行
+        # （第 1 列 = "end"，仅当 ID 列不在第 1 列时启用，避免把 ID 值当标记覆盖）
         tgt_rows = {}
+        end_row_at = None
         for r, row in enumerate(ws_tgt.iter_rows(min_row=title_rows + 1, values_only=True),
                                 start=title_rows + 1):
+            if id_col != 1 and row and row[0] is not None and str(row[0]).strip().lower() == "end":
+                end_row_at = r
             v = row[tgt_id_col - 1] if len(row) >= tgt_id_col else None
             if v is None:
                 continue
             tgt_rows.setdefault(str(v).strip(), r)
         sh_added = sh_updated = 0
+        new_rows = []  # 待新增的 (sid, srow)
         for sid in sorted(ids):
             if sid not in src_rows:
                 continue
@@ -262,16 +280,40 @@ def _copy_rows_by_id(wb_src, wb_tgt, id_by_sheet, title_rows, id_col, put):
             if sid in tgt_rows:
                 tr = tgt_rows[sid]
                 sh_updated += 1
+                # 整行复制：按列头名对应，源有目标没有的列跳过；
+                # 有 END 标记时第 1 列为标记列，不复制（保持目标原有标记）
+                for name, sc in src_col.items():
+                    if end_row_at is not None and sc == 1:
+                        continue
+                    tc = tgt_col.get(name)
+                    if not tc:
+                        continue
+                    if sc - 1 < len(srow):
+                        ws_tgt.cell(row=tr, column=tc).value = srow[sc - 1]
             else:
-                tr = ws_tgt.max_row + 1
-                sh_added += 1
-            # 整行复制：按列头名对应，源有目标没有的列跳过
-            for name, sc in src_col.items():
-                tc = tgt_col.get(name)
-                if not tc:
-                    continue
-                if sc - 1 < len(srow):
-                    ws_tgt.cell(row=tr, column=tc).value = srow[sc - 1]
+                new_rows.append((sid, srow))
+        if new_rows:
+            # 新增行：有 END 时追加到 END 行之后（原 END 行标记 → 0，数据不动），
+            # 新行最后一行标记 → "END"，其余 → "0"；无 END 时直接追加表尾
+            if end_row_at is not None:
+                ws_tgt.cell(row=end_row_at, column=1).value = "0"
+                start_r = end_row_at + 1
+            else:
+                start_r = ws_tgt.max_row + 1
+            n = len(new_rows)
+            for i, (sid, srow) in enumerate(new_rows):
+                tr = start_r + i
+                if end_row_at is not None:
+                    ws_tgt.cell(row=tr, column=1).value = "END" if i == n - 1 else "0"
+                for name, sc in src_col.items():
+                    if end_row_at is not None and sc == 1:
+                        continue
+                    tc = tgt_col.get(name)
+                    if not tc:
+                        continue
+                    if sc - 1 < len(srow):
+                        ws_tgt.cell(row=tr, column=tc).value = srow[sc - 1]
+            sh_added += n
         added += sh_added
         updated += sh_updated
         put(f"  {sheet_name}: {sh_updated} 替换, {sh_added} 新增\n")

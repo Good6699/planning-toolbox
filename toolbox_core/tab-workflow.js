@@ -393,6 +393,16 @@ function buildWorkflowTab(panel) {
   }
   window._wfModalAutoSave = _wfModalAutoSave;
 
+  function _wfClearOneTimeFlag(wfIdx, stepIdx) {
+    // revert_svn 的「删除未版本控制文件」为单次生效：执行过后清掉勾选，
+    // 同步内存与配置，保证设置显示/重启后均为未勾选
+    const st = config.workflows?.[wfIdx]?.steps?.[stepIdx];
+    if (st && st.type === "revert_svn" && st.delete_unversioned) {
+      st.delete_unversioned = false;
+      saveConfig({workflows: config.workflows});
+    }
+  }
+
   function _wfModalFields(type, step) {
     const v = (key) => escapeHtml(Array.isArray(step[key]) ? step[key].join(", ") : step[key]||"");
     const _fb = (label, dataKey, id, browseType, append, placeholder) => `
@@ -811,6 +821,7 @@ function buildWorkflowTab(panel) {
           btn.classList.remove("stop");
           btn.title = "执行本步骤";
         }
+        _wfClearOneTimeFlag(wfIdx, stepIdx);
         _updateWfDot(wfIdx);
       });
     });
@@ -877,6 +888,7 @@ function buildWorkflowTab(panel) {
           btn.classList.remove("stop");
           btn.title = "打开（不锁定SVN）";
         }
+        _wfClearOneTimeFlag(wfIdx, stepIdx);
         _updateWfDot(wfIdx);
       });
     });

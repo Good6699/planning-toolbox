@@ -1708,7 +1708,7 @@ def _auto_svn_cleanup(paths, put=None, task_id=None):
     return done
 
 
-def _run_wf_task(q, wf, steps, task_id, skip_lock=False):
+def _run_wf_task(q, wf, steps, task_id, skip_lock=False, cfg=None):
     prefix = {"error": "❌ ", "ok": "✓ ", "warn": "⚠ ", "head": ""}
 
     def _put(msg, tag=""):
@@ -1767,6 +1767,15 @@ def _run_wf_task(q, wf, steps, task_id, skip_lock=False):
                 ok = _exec_open_tables(step, _put, task_id, skip_lock=skip_lock)
             elif stype == "revert_svn":
                 ok = _exec_revert_svn(step, _put, task_id)
+                # delete_unversioned 单次生效：执行后清除勾选并保存配置（不永久保留）
+                if step.get("delete_unversioned"):
+                    step["delete_unversioned"] = False
+                    if cfg is not None:
+                        try:
+                            save_config(cfg)
+                            _put("已清除「删除未版本控制文件」勾选（单次生效）\n")
+                        except Exception:
+                            pass
             elif stype == "copy_files":
                 ok = _exec_copy_files(step, _put, task_id)
             elif stype == "merge_error_code":
@@ -1914,7 +1923,7 @@ def api_workflow_run():
     task_id = _get_next_task_id()
     q = queue.Queue()
     _log_queues[task_id] = q
-    threading.Thread(target=_run_wf_task, args=(q, wf, steps, task_id, skip_lock), daemon=True).start()
+    threading.Thread(target=_run_wf_task, args=(q, wf, steps, task_id, skip_lock, cfg), daemon=True).start()
     return jsonify({"task_id": task_id})
 
 

@@ -5935,22 +5935,48 @@ def api_merge_version_files():
         from toolbox_config import decrypt_key
         svn_pass = decrypt_key(svn_pass)
     svn = _get_svn_path()
-    cmd = [svn, "log", source_url, "--xml", "-v", "-r", str(rev), "--non-interactive"]
+    files, has_entry = _svn_log_files(svn, source_url, rev, svn_user, svn_pass)
+    if files is None:
+        return jsonify({"ok": False, "error": f"获取版本 {rev} 文件失败"})
+    if has_entry:
+        # 本分支版本：按查询 URL 过滤（与查询阶段一致，copyfrom 重映射到查询分支）
+        _merge_filter_files_by_url(source_url, [{"files": files}])
+        files = [{"files": files}][0]["files"]
+    else:
+        # 该版本不在查询路径（merge 来源版本，提交在来源分支）：
+        # 用仓库根 URL 重查，直接使用来源路径的文件（不重映射到查询分支）
+        from urllib.parse import urlparse
+        _pu = urlparse(source_url)
+        _segs = _pu.path.strip("/").split("/")
+        if len(_segs) >= 2:
+            repo_root = f"{_pu.scheme}://{_pu.netloc}/" + "/".join(_segs[:2])
+            files2, _ = _svn_log_files(svn, repo_root, rev, svn_user, svn_pass)
+            if files2:
+                _merge_filter_files_by_url(source_url, [{"files": files2}], keep_src=True)
+                files = [{"files": files2}][0]["files"]
+    return jsonify({"ok": True, "rev": rev, "files": files})
+
+
+def _svn_log_files(svn, url, rev, svn_user, svn_pass):
+    """svn log -v -r <rev> <url> 解析变更文件列表（含 copyfrom 信息）。
+    返回 (files, has_logentry)；命令失败返回 (None, False)"""
+    cmd = [svn, "log", url, "--xml", "-v", "-r", str(rev), "--non-interactive"]
     if svn_user:
         cmd += ["--username", svn_user]
     if svn_pass:
         cmd += ["--password", svn_pass, "--no-auth-cache"]
     try:
         r = subprocess.run(cmd, capture_output=True, timeout=60, **_get_subprocess_kwargs())
-    except Exception as e:
-        return jsonify({"ok": False, "error": f"获取版本 {rev} 文件失败: {e}"})
+    except Exception:
+        return None, False
     if r.returncode != 0:
-        err = _decode_svn_output(r.stderr)[:200]
-        return jsonify({"ok": False, "error": f"获取版本 {rev} 文件失败: {err}"})
+        return None, False
     raw = _decode_svn_output(r.stdout)
     files = []
+    has_logentry = False
     try:
         root = ET.fromstring(raw)
+        has_logentry = bool(root.findall(".//logentry"))
         action_map = {"A": "add", "M": "mod", "D": "del"}
         for path_el in root.findall(".//path"):
             act = path_el.get("action", "M")
@@ -5962,13 +5988,13 @@ def api_merge_version_files():
             })
     except ET.ParseError:
         pass
-    _merge_filter_files_by_url(source_url, [{"files": files}])
-    files = [{"files": files}][0]["files"]
-    return jsonify({"ok": True, "rev": rev, "files": files})
+    return files, has_logentry
 
 
-def _merge_filter_files_by_url(source_url, versions):
+def _merge_filter_files_by_url(source_url, versions, keep_src=False):
     """按查询 URL 过滤各版本的变更文件（含 merge copyfrom 分支映射）。
+    keep_src=True 时 copyfrom 文件保留来源分支路径（不重映射到查询分支），
+    用于 merge 来源版本的懒加载（直接使用来源路径的文件）。
     返回 (is_file_url, filter_str_verbose)。修改各版本 dict 的 "files" 字段。"""
     from urllib.parse import urlparse
     _FILE_EXTS = (".xlsm", ".xlsx", ".xls", ".xlsb", ".csv")
@@ -6002,7 +6028,10 @@ def _merge_filter_files_by_url(source_url, versions):
                     _m = re.match(r"^/branches/[^/]+(/.*)$", _p)
                     if _m and (_m.group(1) == _rel_prefix or _m.group(1).startswith(_rel_prefix + "/")):
                         _f2 = dict(_f)
-                        _f2["path"] = _branch_root + _m.group(1)
+                        if keep_src:
+                            _f2["path"] = _p  # 保留来源分支路径（直接用来源路径的文件）
+                        else:
+                            _f2["path"] = _branch_root + _m.group(1)  # 重映射到查询分支
                         _new_files.append(_f2)
                 v["files"] = _new_files
         matched = sum(len(v.get("files", [])) for v in versions)
@@ -6152,23 +6181,36 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
         path_segs = url_path.strip("/").split("/")
         # 跳过前 2 段（仓库根路径 /svn/repo 等），保留分支路径
         strip_prefix = ("/" + "/".join(path_segs[2:]) + "/") if len(path_segs) > 2 else None
+        repo_root = ""
+        if parsed.scheme and parsed.netloc and len(path_segs) >= 2:
+            repo_root = f"{parsed.scheme}://{parsed.netloc}/" + "/".join(path_segs[:2])
+
+        def _clip_merge_path(raw):
+            """裁剪仓库完整路径为相对路径；merge 来源分支路径（copyfrom）：
+            目标按同构裁剪（去掉 /branches/<分支>/<Client|gameData>/ 前缀），
+            下载源保留完整仓库路径（返回 src_url）"""
+            if strip_prefix and raw.startswith(strip_prefix):
+                return raw[len(strip_prefix):], None
+            _m2 = re.match(r"^/branches/[^/]+/(Client|gameData)/?(.*)$", raw)
+            if _m2:
+                rel = _m2.group(2) if _m2.group(2) else _m2.group(1)
+                return rel, (repo_root + raw if repo_root else None)
+            if raw.startswith("/"):
+                return raw[1:], None
+            return raw, None
+
         # 同步裁剪 rev_file_map 的 key，保证与文件路径匹配
-        if strip_prefix:
-            new_map = {}
-            for orig_path, revs in rev_file_map.items():
-                if orig_path.startswith(strip_prefix):
-                    new_map[orig_path[len(strip_prefix):]] = revs
-                elif orig_path.startswith("/"):
-                    new_map[orig_path[1:]] = revs
-                else:
-                    new_map[orig_path] = revs
-            rev_file_map = new_map
+        new_map = {}
+        for orig_path, revs in rev_file_map.items():
+            clipped, _ = _clip_merge_path(orig_path)
+            new_map[clipped] = revs
+        rev_file_map = new_map
         for f in files:
             raw = f.get("path", "")
-            if strip_prefix and raw.startswith(strip_prefix):
-                f["path"] = raw[len(strip_prefix):]
-            elif raw.startswith("/"):
-                f["path"] = raw[1:]
+            clipped, src_url = _clip_merge_path(raw)
+            f["path"] = clipped
+            if src_url:
+                f["src_url"] = src_url
 
         total_merged = 0
         total_conflict = 0

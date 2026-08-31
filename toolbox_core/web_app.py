@@ -3275,6 +3275,50 @@ def _exec_merge_specified_text(step, put, task_id=None):
     return True
 
 
+def _svn_list_unversioned(svn, dirs):
+    """收集目录树内所有未版本化文件（svn status 的 ? 条目），返回规范化绝对路径集合"""
+    result = set()
+    for d in dirs:
+        if not os.path.isdir(d):
+            continue
+        try:
+            r = subprocess.run([svn, "status", d], capture_output=True,
+                               timeout=300, **_get_subprocess_kwargs())
+        except Exception:
+            continue
+        if r.returncode != 0:
+            continue
+        out = _decode_svn_output(r.stdout)
+        for line in out.splitlines():
+            if not line.startswith("?"):
+                continue
+            p = (line[8:] if len(line) > 8 else line[1:]).strip()
+            if not p:
+                continue
+            full = os.path.normpath(p if os.path.isabs(p) else os.path.join(d, p))
+            if os.path.isfile(full):
+                result.add(full)
+    return result
+
+
+def _svn_add_paths(svn, paths, put):
+    """把未版本化文件标记为新增（svn add --parents），批量执行"""
+    paths = sorted(set(paths))
+    if not paths:
+        return
+    try:
+        r = subprocess.run([svn, "add", "--parents", "--force"] + paths,
+                           capture_output=True, timeout=300, **_get_subprocess_kwargs())
+        out = _decode_svn_output(r.stdout)
+        err = _decode_svn_output(r.stderr)
+        if r.returncode != 0:
+            put(f"  svn add 部分失败: {err.strip()[:200]}\n")
+        else:
+            put(f"  已标记新增: {len(paths)} 个文件\n")
+    except Exception as e:
+        put(f"  svn add 异常: {e}\n")
+
+
 def _exec_merge_config(step, put, task_id=None):
     """合并配置（目录级）：来源文件夹下每个配置表按 提交备注(包含)/作者(精确)/自然日
     筛选修改的 ID，从更新到最新版的来源表整行复制到目标文件夹同名表，
@@ -3432,12 +3476,21 @@ def _exec_merge_config(step, put, task_id=None):
             if tgt_sub:
                 os.makedirs(tgt_sub, exist_ok=True)
             shutil.copy2(src_file, tgt_file)
+            # 标记为新增（A 状态），确保导出收录与提交时可见
+            try:
+                r_add = subprocess.run([svn, "add", "--parents", "--force", tgt_file],
+                                       capture_output=True, timeout=60,
+                                       **_get_subprocess_kwargs())
+                if r_add.returncode != 0:
+                    put(f"  {rel}: svn add 失败: {_decode_svn_output(r_add.stderr).strip()[:200]}\n")
+            except Exception as e:
+                put(f"  {rel}: svn add 异常: {e}\n")
             new_copied.append(rel)
             merged_any = True
         except Exception as e:
             put(f"  {rel}: 复制配置表失败: {e}\n")
     if new_copied:
-        put(f"复制到目标（未提交，请在 SVN 提交框勾选）: {len(new_copied)} 个\n")
+        put(f"复制到目标（已标记新增，未提交）: {len(new_copied)} 个\n")
         for nc in new_copied:
             put(f"  + {nc}\n")
 
@@ -3527,6 +3580,8 @@ def _exec_merge_config(step, put, task_id=None):
         with _cancel_lock:
             return task_id in _cancelled_tasks
 
+    # 记录导出前的未版本化文件，导出后新出现的即为本次导出新增文件（标记为新增）
+    _unver_before = _svn_list_unversioned(svn, commit_dirs)
     try:
         result = run_export(tgt_dir, svn, put, _cancelled, _on_launch)
         if result is None:
@@ -3538,6 +3593,12 @@ def _exec_merge_config(step, put, task_id=None):
     finally:
         if proc:
             _unregister_proc(proc, task_id)
+    # 导出新增文件（导出后新出现的未版本化文件）标记为新增
+    _unver_after = _svn_list_unversioned(svn, commit_dirs)
+    _new_exported = _unver_after - _unver_before
+    if _new_exported:
+        put(f"导出新增文件: {len(_new_exported)} 个，标记为新增\n")
+        _svn_add_paths(svn, _new_exported, put)
 
     # 9. 弹 TortoiseSVN 提交框（合并结果仍需提交，导出失败不阻断）
     tortoise = _get_tortoise_proc_path()

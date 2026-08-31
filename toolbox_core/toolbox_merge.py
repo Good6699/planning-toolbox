@@ -111,7 +111,9 @@ def svn_log(source_url, start_date, end_date, author=None, keyword=None,
     cmd = ["log", source_url, "--xml", "-r",
            f"{{{start_date}}}:{{{end_dt.strftime('%Y-%m-%d')}}}"]
     author_list = [a.strip() for a in str(author or "").split(",") if a.strip()]
-    if author_list:
+    # --search 与 --use-merge-history 组合会输出损坏 XML（返回 0 版本），
+    # merge 历史模式走全量 + Python 端作者过滤（与关键词处理一致）
+    if author_list and not use_merge_history:
         # 多个 --search 是或关系（svn >= 1.9），配合 Python 端过滤精确匹配
         for a in author_list:
             cmd += ["--search", a]

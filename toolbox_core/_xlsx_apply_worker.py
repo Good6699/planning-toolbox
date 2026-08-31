@@ -88,18 +88,23 @@ def main():
                         put(f"  {sheet_name}: {u} 修改, {a} 新增\n")
                     wb_tmp.close()
             finally:
-                wb_tgt.save(target_path)
+                # 仅在有实际修改时才保存，避免 openpyxl 无谓重写导致 svn 误标 M
+                if total_added + total_updated > 0:
+                    wb_tgt.save(target_path)
                 wb_tgt.close()
             result.update(ok=True, added=total_added, updated=total_updated)
         elif mode == "copy_rows_by_id":
             # 指定合并文字表：按 ID 整行复制
             wb_src = openpyxl.load_workbook(args["src_path"], read_only=True, data_only=True)
             wb_tgt = openpyxl.load_workbook(args["tgt_path"], keep_vba=True)
+            a = u = 0
             try:
                 a, u = _copy_rows_by_id(wb_src, wb_tgt, args["id_by_sheet"],
                                         args["title_rows"], args["id_col"], put)
             finally:
-                wb_tgt.save(args["tgt_path"])
+                # 仅在有实际修改时才保存，避免 openpyxl 无谓重写导致 svn 误标 M
+                if a + u > 0:
+                    wb_tgt.save(args["tgt_path"])
                 wb_src.close()
                 wb_tgt.close()
             result.update(ok=True, added=a, updated=u)

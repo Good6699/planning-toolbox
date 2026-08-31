@@ -4047,6 +4047,22 @@ def _revert_one_path(svn, target_path, step, put, task_id):
     put(f"{'='*50}\n")
     put(f"SVN回退: {target_path}\n")
 
+    # 强制保护目录（Client\Library，Unity 缓存）：无论用户如何设置，
+    # 回退/删除未版本化文件时一律不处理。Library 通常未版本化，
+    # svn revert 不影响它；删除未版本化文件时强制跳过。
+    _forced_protect = []
+    for _lp in (os.path.join(target_path, "Library"),
+                os.path.join(target_path, "Client", "Library")):
+        _lp = os.path.normpath(_lp)
+        if os.path.isdir(_lp):
+            _forced_protect.append(_lp)
+    if _forced_protect:
+        put(f"强制保护（不删除/不回退）: {', '.join(_forced_protect)}\n")
+
+    def _is_protected(p):
+        p = os.path.normpath(p)
+        return any(p == lp or p.startswith(lp + os.sep) for lp in _forced_protect)
+
     # 先 cleanup 确保无残留锁（串行等待真正完成，大库 cleanup 可能较慢）
     put("正在 cleanup 工作副本...\n")
     if not _svn_cleanup_wait(svn, target_path, put, task_id):
@@ -4146,7 +4162,7 @@ def _revert_one_path(svn, target_path, step, put, task_id):
                     if not os.path.isabs(p):
                         p = os.path.join(target_path, p)
                     p = os.path.normpath(p)
-                    if p not in excluded_set:
+                    if p not in excluded_set and not _is_protected(p):
                         unversioned.append(p)
                 if unversioned:
                     put(f"正在删除 {len(unversioned)} 个未版本控制文件...\n")

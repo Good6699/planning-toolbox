@@ -5940,8 +5940,9 @@ def api_merge_version_files():
         return jsonify({"ok": False, "error": f"获取版本 {rev} 文件失败"})
     if has_entry:
         # 本分支版本：按查询 URL 过滤（与查询阶段一致，copyfrom 重映射到查询分支）
-        _merge_filter_files_by_url(source_url, [{"files": files}])
-        files = [{"files": files}][0]["files"]
+        _wrap = {"files": files}
+        _merge_filter_files_by_url(source_url, [_wrap])
+        files = _wrap["files"]
     else:
         # 该版本不在查询路径（merge 来源版本，提交在来源分支）：
         # 用仓库根 URL 重查，直接使用来源路径的文件（不重映射到查询分支）
@@ -5952,8 +5953,9 @@ def api_merge_version_files():
             repo_root = f"{_pu.scheme}://{_pu.netloc}/" + "/".join(_segs[:2])
             files2, _ = _svn_log_files(svn, repo_root, rev, svn_user, svn_pass)
             if files2:
-                _merge_filter_files_by_url(source_url, [{"files": files2}], keep_src=True)
-                files = [{"files": files2}][0]["files"]
+                _wrap2 = {"files": files2}
+                _merge_filter_files_by_url(source_url, [_wrap2], keep_src=True)
+                files = _wrap2["files"]
     return jsonify({"ok": True, "rev": rev, "files": files})
 
 
@@ -6220,6 +6222,22 @@ def _merge_worker(task_id, source_url, target_path, revisions, rev_file_map, fil
         done_count = 0
 
         cfg = load_config()
+
+        # 同目标路径去重：copyfrom 来源版本优先。
+        # 同一文件被来源版本和本分支版本都改过时前端会聚合出两个条目
+        # （完整路径不同、裁剪后相同），若都执行会互相覆盖，最终结果
+        # 丢失来源版本内容；这里按裁剪后路径去重，有 src_url 的来源条目优先。
+        _dedup = {}
+        for _f in files:
+            _p = _f.get("path", "")
+            if not _p:
+                continue
+            if _p in _dedup:
+                if _f.get("src_url") and not _dedup[_p].get("src_url"):
+                    _dedup[_p] = _f
+            else:
+                _dedup[_p] = _f
+        files = list(_dedup.values())
 
         for f in files:
             file_path = f["path"]

@@ -1,7 +1,7 @@
 function buildWorkflowTab(panel) {
   const wfs = config.workflows || [];
-  const typeCn = {export_text:"导出文字表",export_modified_config:"导出修改配置表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表",merge_error_code:"整合错误码",consolidate:"快速整合",merge_specified_text:"指定合并文字表",error_code_entry:"录入错误码"};
-  const typeIcon = {export_text:"📄",export_modified_config:"📝",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📦",merge_error_code:"🧩",consolidate:"⚡",merge_specified_text:"📑",error_code_entry:"📥"};
+  const typeCn = {export_text:"导出文字表",export_modified_config:"导出修改配置表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表",merge_error_code:"整合错误码",consolidate:"快速整合",merge_specified_text:"指定合并文字表",merge_config:"合并配置",error_code_entry:"录入错误码"};
+  const typeIcon = {export_text:"📄",export_modified_config:"📝",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📦",merge_error_code:"🧩",consolidate:"⚡",merge_specified_text:"📑",merge_config:"🔧",error_code_entry:"📥"};
   const isEmpty = !wfs.length;
   panel.innerHTML = `
     <div class="wf-layout">
@@ -297,6 +297,7 @@ function buildWorkflowTab(panel) {
       merge_error_code:["src_path","tgt_path"],
       consolidate:["src_dir","tgt_dir","commit_dir"],
       merge_specified_text:["src_path","tgt_path","commit_dir"],
+      merge_config:["src_path","tgt_path","commit_dir"],
       error_code_entry:["translation_file","target_path"]
     };
     const labels = {
@@ -396,7 +397,7 @@ function buildWorkflowTab(panel) {
     const v = (key) => escapeHtml(Array.isArray(step[key]) ? step[key].join(", ") : step[key]||"");
     const _fb = (label, dataKey, id, browseType, append, placeholder) => `
       <div class="form-group"><label>${label}</label>
-        <div class="flex-row"><input type="text" class="wf-modal-input" id="${id}" data-key="${dataKey}" value="${v(dataKey)}" style="flex:1" ${append?'data-append="1"':''} placeholder="${escapeHtml(placeholder || (browseType==='dir'?'输入本地目录路径':'输入文件路径'))}">
+        <div class="flex-row"><input type="text" class="wf-modal-input" id="${id}" data-key="${dataKey}" data-browse="${browseType}" value="${v(dataKey)}" style="flex:1" ${append?'data-append="1"':''} placeholder="${escapeHtml(placeholder || (browseType==='dir'?'输入本地目录路径':'输入文件路径'))}">
         <button class="btn btn-normal btn-sm" onclick="(function(t,i,a){if(a){_browseDirAppend(i)}else{var v=document.getElementById(i).value.trim(),d=v.substring(0,v.lastIndexOf('\\\\'));if(!d)d=v;if(t==='file')browseFile(i,d||'');else browseDir(i,null,d||'');}})('${browseType.replace(/'/g,"\\'")}','${id}',${!!append})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>`;
     const m = {
       export_text: `
@@ -458,6 +459,13 @@ function buildWorkflowTab(panel) {
         <div class="form-group"><label>SVN提交作者</label><input type="text" class="wf-modal-input" id="wf_m_mst_author" data-key="commit_author" value="${v("commit_author")}" placeholder="SVN提交者账户名，多个用逗号分隔，留空不限"></div>
         <div class="form-group"><label>自然日</label><input type="number" class="wf-modal-input" id="wf_m_mst_days" data-key="days" min="1" value="${v("days") || 3}" placeholder="合并距今几天内的提交（1=当天）"></div>
         ${_fb("提交路径（逗号分隔）","commit_dir","wf_m_mst_commit","dir",true,"输入 TortoiseSVN 提交的根路径，多个用逗号分隔")}`,
+      merge_config: `
+        ${_fb("来源配置表文件夹","src_path","wf_m_mc_src","dir",false,"输入来源配置表所在文件夹（SVN工作副本内）")}
+        ${_fb("目标配置表文件夹","tgt_path","wf_m_mc_tgt","dir",false,"输入要合并到的目标配置表文件夹")}
+        <div class="form-group"><label>SVN提交备注（包含匹配）</label><input type="text" class="wf-modal-input" id="wf_m_mc_msg" data-key="commit_msg" value="${v("commit_msg")}" placeholder="输入提交信息关键词，留空不限"></div>
+        <div class="form-group"><label>SVN提交作者</label><input type="text" class="wf-modal-input" id="wf_m_mc_author" data-key="commit_author" value="${v("commit_author")}" placeholder="SVN提交者账户名，多个用逗号分隔，留空不限"></div>
+        <div class="form-group"><label>自然日</label><input type="number" class="wf-modal-input" id="wf_m_mc_days" data-key="days" min="1" value="${v("days") || 3}" placeholder="合并距今几天内的提交（1=当天）"></div>
+        ${_fb("提交路径（逗号分隔）","commit_dir","wf_m_mc_commit","dir",true,"输入 TortoiseSVN 提交的根路径，多个用逗号分隔")}`,
       error_code_entry: `
         ${_fb("翻译文件","translation_file","wf_m_ece_input","file",false,"输入包含错误码翻译的 Excel 文件路径")}
         ${_fb("目标路径","target_path","wf_m_ece_target","dir",false,"输入 gameData 所在目录（自动找 Language 子目录）")}
@@ -467,10 +475,17 @@ function buildWorkflowTab(panel) {
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
   }
 
-  function _wfHistoryPool(key) {
-    if (["input_file","original_file","target_path","root_dir","target_dir"].includes(key)) return "wf_history_paths";
-    if (["sheet_name","lock_msg"].includes(key)) return "wf_history_msgs";
-    return "wf_history_texts";
+  function _wfHistoryPool(key, browse) {
+    // 4 池语义分类：目录路径 / 文件路径 / 提交信息 / 配置文本；数字等字段不设历史
+    if (browse === "dir") return "wf_history_dirs";
+    if (browse === "file") return "wf_history_files";
+    if (["commit_msg", "commit_author", "author"].includes(key)) return "wf_history_commit";
+    if (["lang_codes", "lock_msg", "sheet_name"].includes(key)) return "wf_history_config";
+    if (["dirs", "update_dirs", "revert_paths", "exclude_paths", "src_dir", "tgt_dir",
+         "root_dir", "source_path", "src_path", "tgt_path", "commit_dir", "upload_svn_dir"].includes(key)) return "wf_history_dirs";
+    if (["file_paths", "input_file", "original_file", "target_path",
+         "input_dir", "target_dir", "translation_file"].includes(key)) return "wf_history_files";
+    return null; // days/title_rows/id_col 等无下拉历史
   }
   function _wfHistorySave(pool, val) {
     if (!val.trim()) return;
@@ -594,14 +609,39 @@ function buildWorkflowTab(panel) {
     cnt.textContent = `已选 ${_wfCfEntries.filter(f=>f._sel).length} 个文件`;
   }
 
+  function _wfMigrateLegacyHistory() {
+    // 一次性：旧 3 池（paths/msgs/texts）→ 新 4 池（dirs/files/commit/config）
+    if (config._wf_history_migrated) return;
+    const dirs = [], files = [];
+    (config._wf_history_paths || []).forEach(v => {
+      if (/\.(xlsm|xlsx|xls|csv|txt|erl|bin|json)$/i.test((v || "").trim())) files.push(v);
+      else dirs.push(v);
+    });
+    const cfg = {
+      _wf_history_migrated: true,
+      _wf_history_dirs: dirs,
+      _wf_history_files: files,
+      _wf_history_commit: [],
+      _wf_history_config: (config._wf_history_msgs || []).slice(),
+    };
+    saveConfig(cfg);
+    Object.assign(config, cfg);
+    // 旧键不再使用，从内存中移除（配置文件残留无害）
+    delete config._wf_history_paths;
+    delete config._wf_history_msgs;
+    delete config._wf_history_texts;
+  }
+
   function _wfModalAfterOpen() {
+    _wfMigrateLegacyHistory();
     modalBody.querySelectorAll("[id^=wf_m_]").forEach(inp => {
       if (inp.id) enablePathDrop(inp.id);
     });
     modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
       const key = inp.dataset.key;
       if (!key) return;
-      const pool = _wfHistoryPool(key);
+      const pool = _wfHistoryPool(key, inp.dataset.browse);
+      if (!pool) return; // 数字等字段无历史
       inp.addEventListener("focus", () => {
         _wfHistoryShow(inp, pool);
       });
@@ -1045,6 +1085,11 @@ function _wfAutoName(step) {
     return step.tgt_dir || "";
   }
   if (t === "merge_specified_text") {
+    const p = (step.tgt_path || "").replace(/[\\/]$/, "");
+    const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
+    return i >= 0 ? p.substring(i + 1) : p;
+  }
+  if (t === "merge_config") {
     const p = (step.tgt_path || "").replace(/[\\/]$/, "");
     const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
     return i >= 0 ? p.substring(i + 1) : p;

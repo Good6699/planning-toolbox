@@ -499,8 +499,15 @@ def warm_parse_cache() -> int:
 # ═══════════════════════════════════════════════════════════════════════════════
 def _svn(cmd: List[str], timeout: int = 60, svn_user: str = "", svn_pass: str = "") -> subprocess.CompletedProcess:
     """统一执行 SVN 命令，Windows 下隐藏窗口"""
+    # URL 参数统一 percent-encode（只含 ASCII）：避免 svn.exe 在部分进程环境
+    # 对中文 URL 参数做代码页转换导致路径乱码（E160013 path not found）
+    import urllib.parse as _up
+    cmd_with_auth = []
+    for _a in cmd:
+        if isinstance(_a, str) and (_a.startswith("http://") or _a.startswith("https://") or _a.startswith("svn://")):
+            _a = _up.quote(_a, safe=':/?&=%@#+.,;~')
+        cmd_with_auth.append(_a)
     # 添加认证参数
-    cmd_with_auth = cmd.copy()
     if svn_user:
         cmd_with_auth.extend(["--username", svn_user])
     if svn_pass:
@@ -525,12 +532,16 @@ def _svn(cmd: List[str], timeout: int = 60, svn_user: str = "", svn_pass: str = 
 
 def _get_svn_path() -> str:
     """返回 svn 命令路径"""
-    # 尝试多个可能的 SVN 路径
+    # 尝试多个可能的 SVN 路径（含 Subversion 用户级安装，
+    # 32 位进程访问 Program Files 会被重定向导致找不到）
     possible_paths = [
         "C:\\Program Files\\SlikSvn\\bin\\svn.exe",
         "C:\\Program Files (x86)\\SlikSvn\\bin\\svn.exe",
         "C:\\Program Files\\TortoiseSVN\\bin\\svn.exe",
-        "C:\\Program Files (x86)\\TortoiseSVN\\bin\\svn.exe"
+        "C:\\Program Files (x86)\\TortoiseSVN\\bin\\svn.exe",
+        "C:\\Program Files\\Subversion\\bin\\svn.exe",
+        "C:\\Program Files (x86)\\Subversion\\bin\\svn.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Subversion\bin\svn.exe"),
     ]
     for path in possible_paths:
         if os.path.exists(path):
@@ -664,11 +675,12 @@ def step1_query_file_pairs(
                     continue
             except Exception:
                 pass
-        # author 过滤
+        # author 过滤：逗号分隔多选，或关系（任一匹配即通过）
         if author:
             auth_el = entry.find("author")
             auth_text = auth_el.text.strip() if auth_el is not None and auth_el.text else ""
-            if auth_text.lower() != author.lower():
+            _auth_list = [a.strip().lower() for a in str(author).split(",") if a.strip()]
+            if not _auth_list or auth_text.lower() not in _auth_list:
                 continue
         # keyword 过滤
         if keywords:
@@ -754,7 +766,8 @@ def step1_query_file_pairs(
         """获取单个文件的版本历史"""
         # 查该文件的版本历史（筛选范围内）
         cmd_file = [svn_path, "log", file_url, "--xml", "-r", _svn_log_range(start_date, end_date)]
-        r_file = _svn(cmd_file, timeout=120)
+        # 必须传显式凭证（缓存凭证可能为无权限账号，导致 E160013 误判为文件已删除）
+        r_file = _svn(cmd_file, timeout=120, svn_user=svn_user, svn_pass=svn_pass)
         if r_file.returncode != 0:
             # E160013 = path not found：文件已在 SVN 中删除/移走，返回 None 由调用方跳过
             try:
@@ -762,6 +775,7 @@ def step1_query_file_pairs(
             except Exception:
                 _err = (r_file.stderr or b"").decode("utf-8", errors="replace")
             if "E160013" in _err or "path not found" in _err.lower():
+                _log(f"  [调试] {fname} svn log 报 E160013，实际 stderr: {_err.strip()[:300]}", level='WARNING')
                 return fname, None
             return fname, []
 
@@ -807,7 +821,7 @@ def step1_query_file_pairs(
 
         if need_full_history:
             cmd_file_full = [svn_path, "log", file_url, "--xml", "--limit", "50"]
-            r_file_full = _svn(cmd_file_full, timeout=120)
+            r_file_full = _svn(cmd_file_full, timeout=120, svn_user=svn_user, svn_pass=svn_pass)
             if r_file_full.returncode == 0:
                 try:
                     root_file_full = etree.fromstring(r_file_full.stdout)
@@ -952,7 +966,8 @@ def step1_query_revisions(
         if author:
             auth_el = entry.find("author")
             auth_text = auth_el.text.strip() if auth_el is not None and auth_el.text else ""
-            if auth_text.lower() != author.lower():
+            _auth_list = [a.strip().lower() for a in str(author).split(",") if a.strip()]
+            if not _auth_list or auth_text.lower() not in _auth_list:
                 continue
         if keywords:
             msg_el = entry.find("msg")

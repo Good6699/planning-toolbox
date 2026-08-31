@@ -109,13 +109,16 @@ except Exception:
 
 def _get_svn_path() -> str:
     """查找 svn.exe 的完整路径"""
-    # 常见固定安装路径
+    # 常见固定安装路径（含 Subversion 用户级安装，
+    # 32 位进程访问 Program Files 会被重定向导致找不到）
     possible_paths = [
         r"C:\Program Files\SlikSvn\bin\svn.exe",
         r"C:\Program Files (x86)\SlikSvn\bin\svn.exe",
         r"C:\Program Files\TortoiseSVN\bin\svn.exe",
         r"C:\Program Files (x86)\TortoiseSVN\bin\svn.exe",
         r"C:\Program Files\Subversion\bin\svn.exe",
+        r"C:\Program Files (x86)\Subversion\bin\svn.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Subversion\bin\svn.exe"),
     ]
     for p in possible_paths:
         if os.path.exists(p):

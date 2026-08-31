@@ -1775,6 +1775,8 @@ def _run_wf_task(q, wf, steps, task_id, skip_lock=False):
                 ok = _exec_consolidate(step, _put, task_id)
             elif stype == "merge_specified_text":
                 ok = _exec_merge_specified_text(step, _put, task_id)
+            elif stype == "merge_config":
+                ok = _exec_merge_config(step, _put, task_id)
             elif stype == "error_code_entry":
                 ok = _exec_error_code_entry(step, _put, task_id)
             else:
@@ -3273,6 +3275,243 @@ def _exec_merge_specified_text(step, put, task_id=None):
     return True
 
 
+def _exec_merge_config(step, put, task_id=None):
+    """合并配置（目录级）：来源文件夹下每个配置表按 提交备注(包含)/作者(精确)/自然日
+    筛选修改的 ID，从更新到最新版的来源表整行复制到目标文件夹同名表，
+    参考导出修改配置表逻辑（ExcelTool2）导出目标表项目，再按提交路径弹 SVN 提交框"""
+    import openpyxl
+    from toolbox_config import load_config
+    from datetime import datetime as _dt, timedelta as _td
+    cfg = load_config()
+
+    src_dir = (step.get("src_path") or "").strip()
+    tgt_dir = (step.get("tgt_path") or "").strip()
+    commit_msg = (step.get("commit_msg") or "").strip()
+    commit_author = (step.get("commit_author") or "").strip()
+    days = 3
+    raw_days = str(step.get("days") or "").strip()
+    if raw_days:
+        try:
+            days = max(1, int(raw_days))
+        except ValueError:
+            days = 3
+    raw_commit = step.get("commit_dir", "")
+    if isinstance(raw_commit, list):
+        commit_dirs = [s.strip() for s in raw_commit if s.strip()]
+    else:
+        commit_dirs = [s.strip() for s in str(raw_commit).split(",") if s.strip()]
+
+    if not src_dir or not os.path.isdir(src_dir):
+        put(f"来源文件夹无效: {src_dir}\n")
+        return False
+    if not tgt_dir or not os.path.isdir(tgt_dir):
+        put(f"目标文件夹无效: {tgt_dir}\n")
+        return False
+    if not commit_dirs:
+        put("未指定提交路径\n")
+        return False
+
+    # 表头行数/ID 列取全局高级设置
+    title_rows = int(cfg.get("cmp_title_rows") or "1")
+    id_col = int(cfg.get("cmp_id_col") or "1")
+
+    put(f"{'='*50}\n")
+    put("合并配置（目录级）\n")
+    put(f"来源文件夹: {src_dir}\n")
+    put(f"目标文件夹: {tgt_dir}\n")
+    put(f"筛选: 备注含「{commit_msg or '不限'}」 作者「{commit_author or '不限'}」 {days} 个自然日\n")
+    put(f"提交: {', '.join(commit_dirs)}\n\n")
+
+    svn = _get_svn_path()
+
+    # 1. 更新来源/目标工作副本
+    put("正在更新来源工作副本...\n")
+    _svn_update_wc_of_file(svn, src_dir, put, task_id)
+    put("正在更新目标工作副本...\n")
+    _svn_update_wc_of_file(svn, tgt_dir, put, task_id)
+
+    # 2. 来源文件夹 SVN URL
+    r = subprocess.run(
+        [svn, "info", "--show-item", "url", src_dir],
+        capture_output=True, timeout=30, **_get_subprocess_kwargs())
+    dir_url = _decode_svn_output(r.stdout).strip() if r.returncode == 0 else ""
+    if not dir_url:
+        put("来源文件夹不在 SVN 工作副本中，无法查询版本\n")
+        return False
+    put(f"来源文件夹 URL: {dir_url}\n")
+
+    # 3. 自然日范围
+    today = _dt.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    start = (today - _td(days=days - 1)).strftime("%Y-%m-%d")
+    end = today.strftime("%Y-%m-%d")
+
+    # 4. 目录级筛选（同 SVN 记录对比模式 step1）：
+    #    一次 svn log -v 目录，按 作者(逗号分隔或)/备注包含/日期 过滤，
+    #    收集变更的 Excel 文件并查版本对（仅 .xlsm 配置表）
+    from svn_oneclick_compare import step1_query_file_pairs, step3_download_and_compare
+    import svn_oneclick_compare as _cmp_mod
+    _orig_log = _cmp_mod._log
+    def _redirect_log(*a, **kw):
+        try:
+            put(" ".join(str(x) for x in a) + "\n")
+        except Exception:
+            pass
+    _cmp_mod._log = _redirect_log
+    try:
+        file_pairs, is_direct_file_url = step1_query_file_pairs(
+            dir_url, start, end,
+            author=commit_author or None,
+            keywords=[commit_msg] if commit_msg else None,
+            svn_user=cfg.get("svn_user") or "", svn_pass=cfg.get("svn_pass") or "")
+    except Exception as e:
+        put(f"筛选失败: {e}\n")
+        return False
+    finally:
+        _cmp_mod._log = _orig_log
+
+    # 只保留 .xlsm 配置表
+    file_pairs = {k: v for k, v in file_pairs.items() if k.lower().endswith(".xlsm")}
+    if not file_pairs:
+        put("没有符合条件的配置表提交，跳过\n")
+        return True
+    put(f"命中版本对的配置表: {len(file_pairs)} 个，版本对合计: {sum(len(v) for v in file_pairs.values())} 对\n")
+
+    # 5. 批量对比（同对比模式 step3）找修改 ID
+    _cmp_mod._log = _redirect_log
+    try:
+        results, header_data, sheet_order = step3_download_and_compare(
+            dir_url, file_pairs=file_pairs,
+            svn_user=cfg.get("svn_user") or "", svn_pass=cfg.get("svn_pass") or "")
+    except Exception as e:
+        put(f"对比失败: {e}\n")
+        return False
+    finally:
+        _cmp_mod._log = _orig_log
+
+    if not results:
+        put("无差异\n")
+        return True
+
+    # 6. 命中表 → 源/目标文件对（目标存在同名文件才处理）
+    tables = []
+    for rel in results:
+        src_file = os.path.join(src_dir, rel)
+        tgt_file = os.path.join(tgt_dir, rel)
+        if os.path.isfile(src_file) and os.path.isfile(tgt_file):
+            tables.append((rel, src_file, tgt_file))
+    if not tables:
+        put("命中表在目标文件夹无同名文件，跳过\n")
+        return True
+    put(f"待合并配置表: {len(tables)} 个\n")
+
+    # 7. 每个命中表：锁目标 → 复制 ID 行 → 解锁
+    from toolbox_xlsx_merge import run_xlsx_apply_worker
+    merged_any = False
+    for rel, src_file, tgt_file in tables:
+        diff = (results or {}).get(rel)
+        if not diff:
+            continue
+        # 读来源表 ID 列头
+        try:
+            wb_src = openpyxl.load_workbook(src_file, read_only=True, data_only=True)
+        except Exception as e:
+            put(f"{rel}: 读取来源表失败: {e}\n")
+            continue
+        id_header = None
+        for sn in wb_src.sheetnames:
+            ws = wb_src[sn]
+            if ws.max_row >= title_rows:
+                v = ws.cell(row=title_rows, column=id_col).value
+                if v:
+                    id_header = str(v).strip()
+                    break
+        wb_src.close()
+        if not id_header:
+            put(f"{rel}: 未找到 ID 列头，跳过\n")
+            continue
+        # 从对比结果提取修改 ID（按 sheet 分组）
+        id_by_sheet = {}
+        for row_data in diff:
+            sheet_name = row_data.get("sheet", "")
+            idv = row_data.get(id_header)
+            if sheet_name and idv is not None:
+                id_by_sheet.setdefault(sheet_name, set()).add(str(idv).strip())
+        if not id_by_sheet:
+            continue
+        total_ids = sum(len(v) for v in id_by_sheet.values())
+        # 锁定目标表（失败跳过该表）
+        put(f"{rel}: 锁定目标表...\n")
+        if not _exec_lock_svn({"target_path": tgt_file, "lock_msg": "合并配置前锁定", "update_dirs": []}, put, task_id):
+            put(f"{rel}: 目标表锁定失败，跳过\n")
+            continue
+        try:
+            put(f"{rel}: 复制 {total_ids} 个 ID 行...\n")
+            wr = run_xlsx_apply_worker({
+                "mode": "copy_rows_by_id",
+                "src_path": src_file,
+                "tgt_path": tgt_file,
+                "id_by_sheet": id_by_sheet,
+                "title_rows": title_rows,
+                "id_col": id_col,
+            }, put, task_id)
+            if wr and wr.get("ok"):
+                added = wr.get("added", 0)
+                updated = wr.get("updated", 0)
+                if added + updated > 0:
+                    merged_any = True
+                    put(f"{rel}: 合并完成 {updated} 行替换, {added} 行新增\n")
+                else:
+                    put(f"{rel}: 目标表无需修改\n")
+            else:
+                put(f"{rel}: 复制/保存目标表失败（子进程）\n")
+        finally:
+            # 合并后立即解锁（目录级多表不长期占用锁）
+            try:
+                subprocess.run([svn, "unlock", tgt_file],
+                               capture_output=True, timeout=30, **_get_subprocess_kwargs())
+            except Exception:
+                pass
+    if not merged_any:
+        put("所有配置表均无需修改，跳过导出\n")
+        return True
+
+    # 8. 导出目标表项目（参考导出修改配置表逻辑，ExcelTool2 驱动）
+    put("正在导出目标表项目（ExcelTool2）...\n")
+    proc = None
+
+    def _on_launch(started):
+        nonlocal proc
+        proc = started
+        _register_proc(proc, task_id)
+
+    def _cancelled():
+        with _cancel_lock:
+            return task_id in _cancelled_tasks
+
+    try:
+        result = run_export(tgt_dir, svn, put, _cancelled, _on_launch)
+        if result is None:
+            put("目标项目 Data2 无待导出配置表（目标表修改可能未纳入导出，可手动导出）\n")
+        elif not result:
+            put("⚠ 导出未完全成功，请检查 ExcelTool2 输出\n")
+    except Exception as e:
+        put(f"导出配置表失败: {e}\n")
+    finally:
+        if proc:
+            _unregister_proc(proc, task_id)
+
+    # 9. 弹 TortoiseSVN 提交框（合并结果仍需提交，导出失败不阻断）
+    tortoise = _get_tortoise_proc_path()
+    if tortoise:
+        for cp in commit_dirs:
+            subprocess.Popen([tortoise, "/command:commit", f"/path:{cp}"])
+        put(f"✓ TortoiseSVN 提交对话框已打开 ({len(commit_dirs)} 个路径)\n")
+    else:
+        put("⚠ 未找到 TortoiseSVN\n")
+    _notify_task_done("合并配置")
+    return True
+
+
 def _exec_error_code_entry(step, put, task_id=None):
     """录入错误码：从翻译文件读取错误码翻译，按语言写入各 ErrorMessage.xlsm"""
     import re as _re
@@ -3566,7 +3805,8 @@ def _exec_lock_svn(step, put, task_id=None):
 
 def _exec_unlock_svn(step, put, task_id=None):
     target_path = step.get("target_path", "").strip()
-    if not target_path or not os.path.isfile(target_path):
+    # 支持文件或文件夹：目录时递归解锁全部锁定文件
+    if not target_path or not os.path.exists(target_path):
         put(f"解锁目标无效: {target_path}\n")
         return False
     svn = _get_svn_path()
@@ -3585,19 +3825,25 @@ def _exec_unlock_svn(step, put, task_id=None):
 
     proc = None
     try:
-        proc = subprocess.Popen([svn, "unlock", target_path],
+        # 目录：--depth infinity 递归解锁；文件：直接解锁
+        _cmd = [svn, "unlock"]
+        if os.path.isdir(target_path):
+            _cmd += ["--depth", "infinity"]
+        _cmd.append(target_path)
+        proc = subprocess.Popen(_cmd,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 **_get_subprocess_kwargs())
         _register_proc(proc, task_id)
         try:
-            out_bytes, err_bytes = proc.communicate(timeout=60)
+            out_bytes, err_bytes = proc.communicate(timeout=120)
             stdout = _svn_decode_output(out_bytes)
             stderr = _svn_decode_output(err_bytes)
             if proc.returncode == 0:
                 put("解锁成功\n")
                 return True
             else:
-                put(f"解锁失败: {stderr[-200:]}\n")
+                # svn unlock 无锁时仅告警，不阻断（W160013 无锁）
+                put(f"解锁返回: {stderr[-200:] or stdout[-200:]}\n")
         finally:
             _unregister_proc(proc, task_id)
     except Exception as e:

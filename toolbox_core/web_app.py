@@ -3823,29 +3823,48 @@ def _exec_unlock_svn(step, put, task_id=None):
             if not _svn_update_with_cleanup(svn, d, put, task_id):
                 return False
 
+    # svn unlock 不支持递归：目录用 svn status --xml 找出全部锁定文件逐个解锁；文件直接解锁
+    _targets = []
+    if os.path.isdir(target_path):
+        import xml.etree.ElementTree as _ET
+        _r = subprocess.run([svn, "status", "--xml", target_path],
+                            capture_output=True, timeout=120, **_get_subprocess_kwargs())
+        if _r.returncode == 0 and _r.stdout:
+            try:
+                _root = _ET.fromstring(_r.stdout)
+                for _lock in _root.iter("lock"):
+                    _entry = _lock.getparent()
+                    if _entry is not None:
+                        _p = _entry.get("path", "")
+                        if _p:
+                            _targets.append(_p)
+            except Exception:
+                pass
+        if not _targets:
+            put("目录下没有锁定文件\n")
+            return True
+        put(f"发现 {len(_targets)} 个锁定文件\n")
+    else:
+        _targets = [target_path]
+
     proc = None
     try:
-        # 目录：--depth infinity 递归解锁；文件：直接解锁
-        _cmd = [svn, "unlock"]
-        if os.path.isdir(target_path):
-            _cmd += ["--depth", "infinity"]
-        _cmd.append(target_path)
-        proc = subprocess.Popen(_cmd,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                **_get_subprocess_kwargs())
-        _register_proc(proc, task_id)
-        try:
-            out_bytes, err_bytes = proc.communicate(timeout=120)
-            stdout = _svn_decode_output(out_bytes)
-            stderr = _svn_decode_output(err_bytes)
-            if proc.returncode == 0:
-                put("解锁成功\n")
-                return True
-            else:
-                # svn unlock 无锁时仅告警，不阻断（W160013 无锁）
-                put(f"解锁返回: {stderr[-200:] or stdout[-200:]}\n")
-        finally:
-            _unregister_proc(proc, task_id)
+        for _t in _targets:
+            proc = subprocess.Popen([svn, "unlock", _t],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    **_get_subprocess_kwargs())
+            _register_proc(proc, task_id)
+            try:
+                out_bytes, err_bytes = proc.communicate(timeout=60)
+                stdout = _svn_decode_output(out_bytes)
+                stderr = _svn_decode_output(err_bytes)
+                if proc.returncode == 0:
+                    put(f"解锁成功: {_t}\n")
+                else:
+                    # svn unlock 无锁时仅告警，不阻断（W160013 无锁）
+                    put(f"解锁返回: {stderr[-200:] or stdout[-200:]}\n")
+            finally:
+                _unregister_proc(proc, task_id)
     except Exception as e:
         if proc:
             _unregister_proc(proc, task_id)

@@ -37,36 +37,58 @@ function _mergeLogBatch(logEl, maxLines) {
 }
 
 function _getCheckedVersionFiles() {
+  // 文件列表来自懒加载缓存 versionFiles（按勾选版本聚合），不再依赖查询阶段的 v.files
   const allActions = {};
   const allFiles = {};
-  _mergeData.versions.forEach(v => {
-    if (!v.files) return;
-    v.files.forEach(f => {
+  const revs = Object.keys(_mergeData.checkedRevs).filter(k => _mergeData.checkedRevs[k]);
+  revs.forEach(rev => {
+    (_mergeData.versionFiles[rev] || []).forEach(f => {
       if (!allActions[f.path]) allActions[f.path] = [];
-      allActions[f.path].push({ rev: v.rev, action: f.action });
+      allActions[f.path].push({ rev: Number(rev), action: f.action });
     });
   });
-  _mergeData.versions.forEach(v => {
-    if (_mergeData.checkedRevs[v.rev] && v.files) {
-      v.files.forEach(f => {
-        if (_isPathExcluded(f.path)) return;
-        if (!allFiles[f.path]) {
-          const acts = allActions[f.path] || [];
-          const latest = acts.reduce((a, b) => a.rev > b.rev ? a : b, { rev: 0, action: "" });
-          let finalAction;
-          if (latest.action === "del") {
-            finalAction = "del";
-          } else if (acts.some(a => a.action === "add")) {
-            finalAction = "add";
-          } else {
-            finalAction = "mod";
-          }
-          allFiles[f.path] = { ...f, action: finalAction };
+  revs.forEach(rev => {
+    (_mergeData.versionFiles[rev] || []).forEach(f => {
+      if (_isPathExcluded(f.path)) return;
+      if (!allFiles[f.path]) {
+        const acts = allActions[f.path] || [];
+        const latest = acts.reduce((a, b) => a.rev > b.rev ? a : b, { rev: 0, action: "" });
+        let finalAction;
+        if (latest.action === "del") {
+          finalAction = "del";
+        } else if (acts.some(a => a.action === "add")) {
+          finalAction = "add";
+        } else {
+          finalAction = "mod";
         }
-      });
-    }
+        allFiles[f.path] = { ...f, action: finalAction };
+      }
+    });
   });
   return Object.values(allFiles);
+}
+
+async function _ensureMergeVersionFiles(revs) {
+  // 确保勾选版本的变更文件已加载（懒加载并缓存到 _mergeData.versionFiles）
+  const missing = revs.filter(r => !_mergeData.versionFiles[r]);
+  if (!missing.length) return;
+  const sourceUrl = await _ensureMergeSourceUrl();
+  if (!sourceUrl) return;
+  const hintEl = document.getElementById("merge_file_hint");
+  if (hintEl) hintEl.textContent = `正在加载 ${missing.length} 个版本的变更文件…`;
+  const _CONC = 8; // 并发上限，避免全选时一次性打几百个请求
+  for (let i = 0; i < missing.length; i += _CONC) {
+    const batch = missing.slice(i, i + _CONC);
+    await Promise.all(batch.map(async (r) => {
+      try {
+        const rr = await fetch("/api/merge/version-files", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source_url: sourceUrl, revision: r})});
+        const dd = await rr.json();
+        _mergeData.versionFiles[r] = dd.ok ? (dd.files || []) : [];
+      } catch(_) {
+        _mergeData.versionFiles[r] = [];
+      }
+    }));
+  }
 }
 async function _ensureMergeSourceUrl() {
   /* 查询/合并前确保拿到 URL：输入框是本地路径时每次反查（不信任 dataset.url 缓存，避免切换路径后残留错位） */
@@ -507,9 +529,19 @@ function renderMergeVersions() {
   }).join("");
   _refreshMergeFileList();
 }
-function _refreshMergeFileList() {
-  const files = _getCheckedVersionFiles();
+async function _refreshMergeFileList() {
+  const revs = Object.keys(_mergeData.checkedRevs).filter(k => _mergeData.checkedRevs[k]).map(Number);
   const hintEl = document.getElementById("merge_file_hint");
+  if (!revs.length) {
+    document.getElementById("merge_file_list").innerHTML = '<div class="merge-empty">请勾选版本查看变更文件</div>';
+    hintEl.textContent = "请勾选需要合并的版本";
+    _updateMergeFileCount();
+    _updateMergeVersionCount();
+    return;
+  }
+  // 懒加载缺失的勾选版本文件（异步，完成后渲染）
+  await _ensureMergeVersionFiles(revs);
+  const files = _getCheckedVersionFiles();
   if (!files.length) {
     document.getElementById("merge_file_list").innerHTML = '<div class="merge-empty">请勾选版本查看变更文件</div>';
     hintEl.textContent = "请勾选需要合并的版本";
@@ -645,6 +677,7 @@ async function runMergeQuery() {
   if (dateError) { _showToast(dateError); document.getElementById("merge_start").focus(); return; }
   // 重新查询前清空上次查询的版本列表与勾选状态
   _mergeData.versions = [];
+  _mergeData.versionFiles = {};
   _mergeData.checkedRevs = {};
   _mergeData.checkedFiles = {};
   _mergeData.totalChecked = 0;
@@ -682,6 +715,7 @@ async function runMergeQuery() {
     const evtSrc = new EventSource("/api/log/stream/" + d.task_id);
     window._esMergeQ = evtSrc;
     let resultData = null;
+    const _chunks = [];
     const _mergeDone = () => {
       if (!btn.dataset.taskId) return;
       btn.dataset.taskId = '';
@@ -697,7 +731,8 @@ async function runMergeQuery() {
         _mergeDone();
         if (resultData) {
           if (resultData.ok) {
-            _mergeData.versions = resultData.versions || [];
+            _mergeData.versions = _chunks.flat() || [];
+            _mergeData.versionFiles = {};
             _mergeData.stripPrefix = resultData.strip_prefix || "";
             _mergeData.checkedRevs = {};
             _mergeData.checkedFiles = {};
@@ -716,6 +751,11 @@ async function runMergeQuery() {
             _showToast(resultData.error || "查询失败");
           }
         }
+        return;
+      }
+      if (e.data.startsWith("[CHUNK]")) {
+        // 版本摘要分片，逐批累积
+        try { _chunks.push(JSON.parse(e.data.slice(7))); } catch(_) {}
         return;
       }
       if (e.data.startsWith("[RESULT]")) {
@@ -750,21 +790,23 @@ async function runMergeAnalysis() {
   if (!isSvnUrl(sourceUrl)) { _showToast("请输入有效的 SVN 链接"); document.getElementById("merge_source").focus(); return; }
   if (!targetPath) { _showToast("请输入目标路径（用于GUID映射查询）"); return; }
   const _hasCheckedFiles = Object.values(_mergeData.checkedFiles).some(Boolean);
+  const checkedRevsAll = Object.keys(_mergeData.checkedRevs).filter(k => _mergeData.checkedRevs[k]).map(Number);
+  if (!checkedRevsAll.length) { _showToast("请至少勾选一个版本"); return; }
+  // 懒加载勾选版本的变更文件（缺失则先拉取）
+  await _ensureMergeVersionFiles(checkedRevsAll);
   const revFileMap = {};
-  _mergeData.versions.forEach(v => {
-    if (_mergeData.checkedRevs[v.rev] && v.files) {
-      let filtered = v.files.filter(f => !_isPathExcluded(f.path));
-      if (_hasCheckedFiles) {
-        filtered = filtered.filter(f => _mergeData.checkedFiles[f.path]);
-      }
-      if (filtered.length) {
-        revFileMap[v.rev] = filtered.map(f => ({path: f.path, action: f.action}));
-      }
+  checkedRevsAll.forEach(rev => {
+    let filtered = (_mergeData.versionFiles[rev] || []).filter(f => !_isPathExcluded(f.path));
+    if (_hasCheckedFiles) {
+      filtered = filtered.filter(f => _mergeData.checkedFiles[f.path]);
+    }
+    if (filtered.length) {
+      revFileMap[rev] = filtered.map(f => ({path: f.path, action: f.action}));
     }
   });
   const checkedRevs = _hasCheckedFiles
     ? Object.keys(revFileMap).map(Number)
-    : Object.keys(_mergeData.checkedRevs).filter(k => _mergeData.checkedRevs[k]).map(Number);
+    : checkedRevsAll;
   if (!checkedRevs.length) { _showToast("请至少勾选一个版本"); return; }
   const versionFiles = Object.values(revFileMap).flat().map(f => f.path);
   const btn = document.getElementById("merge_analysis_btn");
@@ -865,6 +907,8 @@ async function runMergeRun() {
   if (!checkedPaths.length) { _showToast("请至少选择一个文件"); return; }
   const checkedRevs = Object.keys(_mergeData.checkedRevs).map(Number);
   if (!checkedRevs.length) { _showToast("请至少勾选一个版本"); return; }
+  // 懒加载勾选版本的变更文件（缺失则先拉取）
+  await _ensureMergeVersionFiles(checkedRevs);
   const btn = document.getElementById("merge_run_btn");
   btn.dataset.orig = btn.dataset.orig || btn.textContent;
   const logEl = document.getElementById("merge_log");
@@ -873,12 +917,11 @@ async function runMergeRun() {
   _incRunning();
   _incTabRunning("merge");
   const revFileMap = {};
-  _mergeData.versions.forEach(v => {
-    if (!_mergeData.checkedRevs[v.rev]) return;
-    (v.files || []).forEach(f => {
+  checkedRevs.forEach(rev => {
+    (_mergeData.versionFiles[rev] || []).forEach(f => {
       if (!_isPathExcluded(f.path) && _mergeData.checkedFiles[f.path]) {
         if (!revFileMap[f.path]) revFileMap[f.path] = [];
-        revFileMap[f.path].push(v.rev);
+        revFileMap[f.path].push(rev);
       }
     });
   });

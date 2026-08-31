@@ -5916,9 +5916,106 @@ def api_merge_query():
     return jsonify({"task_id": task_id})
 
 
+@app.route("/api/merge/version-files", methods=["POST"])
+def api_merge_version_files():
+    """单版本变更文件列表（懒加载）：svn log -v -r <rev> + 路径归属过滤（与查询阶段一致）"""
+    data = request.get_json(force=True)
+    source_url = data.get("source_url", "").strip()
+    revision = data.get("revision")
+    if not source_url or revision is None:
+        return jsonify({"ok": False, "error": "参数不完整"}), 400
+    try:
+        rev = int(revision)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "无效版本号"}), 400
+    cfg = load_config()
+    svn_user = data.get("svn_user") or cfg.get("svn_user", "")
+    svn_pass = data.get("svn_pass") or cfg.get("svn_pass", "")
+    if svn_pass:
+        from toolbox_config import decrypt_key
+        svn_pass = decrypt_key(svn_pass)
+    svn = _get_svn_path()
+    cmd = [svn, "log", source_url, "--xml", "-v", "-r", str(rev), "--non-interactive"]
+    if svn_user:
+        cmd += ["--username", svn_user]
+    if svn_pass:
+        cmd += ["--password", svn_pass, "--no-auth-cache"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=60, **_get_subprocess_kwargs())
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"获取版本 {rev} 文件失败: {e}"})
+    if r.returncode != 0:
+        err = _decode_svn_output(r.stderr)[:200]
+        return jsonify({"ok": False, "error": f"获取版本 {rev} 文件失败: {err}"})
+    raw = _decode_svn_output(r.stdout)
+    files = []
+    try:
+        root = ET.fromstring(raw)
+        action_map = {"A": "add", "M": "mod", "D": "del"}
+        for path_el in root.findall(".//path"):
+            act = path_el.get("action", "M")
+            files.append({
+                "path": path_el.text or "",
+                "action": action_map.get(act, act),
+                "copyfrom_path": path_el.get("copyfrom-path") or "",
+                "copyfrom_rev": path_el.get("copyfrom-rev") or "",
+            })
+    except ET.ParseError:
+        pass
+    _merge_filter_files_by_url(source_url, [{"files": files}])
+    files = [{"files": files}][0]["files"]
+    return jsonify({"ok": True, "rev": rev, "files": files})
+
+
+def _merge_filter_files_by_url(source_url, versions):
+    """按查询 URL 过滤各版本的变更文件（含 merge copyfrom 分支映射）。
+    返回 (is_file_url, filter_str_verbose)。修改各版本 dict 的 "files" 字段。"""
+    from urllib.parse import urlparse
+    _FILE_EXTS = (".xlsm", ".xlsx", ".xls", ".xlsb", ".csv")
+    parsed = urlparse(source_url)
+    path_segments = parsed.path.strip("/").split("/")
+    is_file_url = any(source_url.lower().endswith(ext) for ext in _FILE_EXTS)
+    filter_str_verbose = None
+    if is_file_url:
+        filter_str_verbose = path_segments[-1]
+    elif len(path_segments) > 2:
+        filter_str_verbose = "/" + "/".join(path_segments[2:])
+    if filter_str_verbose:
+        for v in versions:
+            if is_file_url:
+                repo_relative = "/" + "/".join(path_segments[2:]) if len(path_segments) > 2 else filter_str_verbose
+                v["files"] = [f for f in v.get("files", []) if repo_relative in f.get("path", "") or f.get("path", "").endswith("/" + filter_str_verbose)]
+            else:
+                prefix = filter_str_verbose.rstrip("/") + "/"
+                # 只保留归属于当前查询路径的文件：
+                # - 本分支提交的文件（path 以查询前缀开头）直接保留
+                # - merge 来源（copyfrom）文件：去掉来源分支名后仍属于查询路径（如 Client）→ 映射到查询分支保留；
+                #   属于其他目录（如 gameData）→ 排除，不合并
+                _rel_prefix = "/" + "/".join(filter_str_verbose.strip("/").split("/")[2:])  # 如 /Client
+                _branch_root = "/" + "/".join(filter_str_verbose.strip("/").split("/")[:2])  # 如 /branches/20240606_KR2
+                _new_files = []
+                for _f in v.get("files", []):
+                    _p = _f.get("path", "")
+                    if _p.startswith(prefix):
+                        _new_files.append(_f)
+                        continue
+                    _m = re.match(r"^/branches/[^/]+(/.*)$", _p)
+                    if _m and (_m.group(1) == _rel_prefix or _m.group(1).startswith(_rel_prefix + "/")):
+                        _f2 = dict(_f)
+                        _f2["path"] = _branch_root + _m.group(1)
+                        _new_files.append(_f2)
+                v["files"] = _new_files
+        matched = sum(len(v.get("files", [])) for v in versions)
+        if is_file_url and matched == 0:
+            for v in versions:
+                v["files"] = [f for f in v.get("files", []) if filter_str_verbose in f.get("path", "")]
+    return is_file_url, filter_str_verbose
+
+
 def _merge_query_worker(task_id, source_url, start_date, end_date,
                         author, keyword, target_path, svn_user, svn_pass):
-    """后台查询任务线程，使用svn log --verbose 一次获取版本+文件"""
+    """后台查询任务线程：svn log --verbose 获取版本，只回传版本摘要，
+    变更文件改为勾选版本后按需查询（/api/merge/version-files 懒加载）"""
     q = _log_queues.setdefault(task_id, queue.Queue())
     ts = datetime.now().strftime("%H:%M:%S")
 
@@ -5934,26 +6031,20 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
             _log(f"提交者: {author}")
         if keyword:
             _log(f"关键词: {keyword}")
-        _log("正在获取版本信息及变更文件（svn log --verbose）...")
+        _log("正在获取版本信息（svn log）...")
 
-        from urllib.parse import urlparse
-        _FILE_EXTS = (".xlsm", ".xlsx", ".xls", ".xlsb", ".csv")
-        parsed = urlparse(source_url)
-        path_segments = parsed.path.strip("/").split("/")
-        is_file_url = any(source_url.lower().endswith(ext) for ext in _FILE_EXTS)
-        filter_str_verbose = None
+        is_file_url, filter_str_verbose = _merge_filter_files_by_url(source_url, [])
         if is_file_url:
-            filter_str_verbose = path_segments[-1]
             _log(f"检测到文件URL，仅显示文件: {filter_str_verbose}")
-        elif len(path_segments) > 2:
-            filter_str_verbose = "/" + "/".join(path_segments[2:])
+        elif filter_str_verbose:
             _log(f"检测到目录URL，仅显示 {filter_str_verbose}/ 下的文件")
 
-        _log(f"svn log 开始（{start_date}~{end_date} 全量 + --verbose，数据量大时需 1~2 分钟）...")
+        # 查询阶段不拉文件明细（verbose=False）：版本摘要分片回传，文件按勾选版本懒加载
+        _log(f"svn log 开始（{start_date}~{end_date} 全量版本，文件明细按需加载）...")
         versions = svn_log(source_url, start_date, end_date,
                            author=author, keyword=keyword,
                            svn_user=svn_user, svn_pass=svn_pass,
-                           verbose=True, use_merge_history=True,
+                           verbose=False, use_merge_history=True,
                            cancel_check=lambda: task_id in _cancelled_tasks)
         _log(f"svn log 完成，共 {len(versions)} 个原始版本")
 
@@ -5968,46 +6059,23 @@ def _merge_query_worker(task_id, source_url, start_date, end_date,
         # svn diff --summarize 对 replace(R)/目录内变更文件不输出，会把真实变更误删
         # 纯属性变更由执行端兜底（目录属性跳过 + 最新版与本地无差异跳过）
 
-        if filter_str_verbose:
-            for v in versions:
-                if is_file_url:
-                    repo_relative = "/" + "/".join(path_segments[2:]) if len(path_segments) > 2 else filter_str_verbose
-                    v["files"] = [f for f in v.get("files", []) if repo_relative in f.get("path", "") or f.get("path", "").endswith("/" + filter_str_verbose)]
-                else:
-                    prefix = filter_str_verbose.rstrip("/") + "/"
-                    # 只保留归属于当前查询路径的文件：
-                    # - 本分支提交的文件（path 以查询前缀开头）直接保留
-                    # - merge 来源（copyfrom）文件：去掉来源分支名后仍属于查询路径（如 Client）→ 映射到查询分支保留；
-                    #   属于其他目录（如 gameData）→ 排除，不合并
-                    _rel_prefix = "/" + "/".join(filter_str_verbose.strip("/").split("/")[2:])  # 如 /Client
-                    _branch_root = "/" + "/".join(filter_str_verbose.strip("/").split("/")[:2])  # 如 /branches/20240606_KR2
-                    _new_files = []
-                    for _f in v.get("files", []):
-                        _p = _f.get("path", "")
-                        if _p.startswith(prefix):
-                            _new_files.append(_f)
-                            continue
-                        _m = re.match(r"^/branches/[^/]+(/.*)$", _p)
-                        if _m and (_m.group(1) == _rel_prefix or _m.group(1).startswith(_rel_prefix + "/")):
-                            _f2 = dict(_f)
-                            _f2["path"] = _branch_root + _m.group(1)
-                            _new_files.append(_f2)
-                    v["files"] = _new_files
-            matched = sum(len(v.get("files", [])) for v in versions)
-            if is_file_url and matched == 0:
-                _log(f"完整路径未匹配，尝试仅按文件名 '{filter_str_verbose}' 过滤")
-                for v in versions:
-                    v["files"] = [f for f in v.get("files", []) if filter_str_verbose in f.get("path", "")]
-
         # 2026-08-29：移除内容预检（svn cat 对比目标本地文件）——筛选只负责找出变更文件，
         # 收益低且对大量文件场景显著拖慢查询
 
         total = len(versions)
         _log(f"查询完成，共 {total} 个版本")
-        if total > 0:
-            file_count = sum(len(v.get("files", [])) for v in versions)
-            _log(f"所有版本累计变更文件: {file_count} 个")
-        result = json.dumps({"ok": True, "versions": versions, "total": total, "strip_prefix": filter_str_verbose if not is_file_url else ""})
+
+        # 只回传版本摘要（rev/author/date/msg），文件列表按需懒加载；
+        # 分片推送，避免单条 SSE 大消息导致前端解析/渲染卡死
+        _CHUNK = 200
+        for _i in range(0, len(versions), _CHUNK):
+            _sum = [{"rev": v.get("rev"), "author": v.get("author", ""),
+                     "date": v.get("date", ""), "msg": v.get("msg", "")}
+                    for v in versions[_i:_i + _CHUNK]]
+            q.put(f"[CHUNK]{json.dumps(_sum, ensure_ascii=False)}\n")
+        result = json.dumps({"ok": True, "total": total,
+                             "strip_prefix": filter_str_verbose if not is_file_url else ""},
+                            ensure_ascii=False)
         q.put(f"[RESULT]{result}\n")
     except RuntimeError as e:
         err = json.dumps({"ok": False, "error": str(e)})

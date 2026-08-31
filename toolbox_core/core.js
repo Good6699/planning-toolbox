@@ -1854,7 +1854,7 @@ function saveAdvSettings() {
 
 }
 
-let _mergeData = {versions:[], checkedRevs:{}, checkedFiles:{}, totalChecked:0, stripPrefix:""};
+let _mergeData = {versions:[], versionFiles:{}, checkedRevs:{}, checkedFiles:{}, totalChecked:0, stripPrefix:""};
 
 function _basename(p) {
 

@@ -3827,23 +3827,35 @@ def _exec_unlock_svn(step, put, task_id=None):
     _targets = []
     if os.path.isdir(target_path):
         import xml.etree.ElementTree as _ET
-        _r = subprocess.run([svn, "status", "--xml", target_path],
-                            capture_output=True, timeout=120, **_get_subprocess_kwargs())
+        # --show-updates 才会报告服务器端/工作副本锁（默认 svn status 不含锁信息）；
+        # 只显示并解锁当前用户自己的锁
+        _r = subprocess.run([svn, "status", "--xml", "--show-updates", target_path],
+                            capture_output=True, timeout=180, **_get_subprocess_kwargs())
         if _r.returncode == 0 and _r.stdout:
             try:
+                _cur_user = (_get_svn_cached_user() or "").strip()
                 _root = _ET.fromstring(_r.stdout)
-                for _lock in _root.iter("lock"):
-                    _entry = _lock.getparent()
-                    if _entry is not None:
-                        _p = _entry.get("path", "")
-                        if _p:
-                            _targets.append(_p)
+                for _entry in _root.iter("entry"):
+                    _lock = _entry.find("wc-status/lock")
+                    if _lock is None:
+                        continue
+                    _p = _entry.get("path", "")
+                    if not _p:
+                        continue
+                    if _cur_user:
+                        _o = _lock.find("owner")
+                        _owner = (_o.text or "").strip() if _o is not None and _o.text else ""
+                        if _owner and _owner != _cur_user:
+                            continue  # 他人锁，跳过
+                    _targets.append(_p)
             except Exception:
                 pass
         if not _targets:
-            put("目录下没有锁定文件\n")
+            _u = (_get_svn_cached_user() or "").strip()
+            put(("目录下没有当前用户" + (f"（{_u}）" if _u else "") + "的锁定文件\n") if _u else "目录下没有锁定文件\n")
             return True
-        put(f"发现 {len(_targets)} 个锁定文件\n")
+        _u = (_get_svn_cached_user() or "").strip()
+        put(f"发现 {len(_targets)} 个锁定文件" + (f"（仅当前用户 {_u}）" if _u else "") + "\n")
     else:
         _targets = [target_path]
 

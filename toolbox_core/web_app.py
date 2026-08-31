@@ -5962,7 +5962,9 @@ def api_merge_version_files():
 def _svn_log_files(svn, url, rev, svn_user, svn_pass):
     """svn log -v -r <rev> <url> 解析变更文件列表（含 copyfrom 信息）。
     返回 (files, has_logentry)；命令失败返回 (None, False)"""
-    cmd = [svn, "log", url, "--xml", "-v", "-r", str(rev), "--non-interactive"]
+    # 分支名可能含空格/特殊字符，URL 必须 percent-encode（safe 保留结构字符）
+    from urllib.parse import quote as _q
+    cmd = [svn, "log", _q(url, safe=":/?&=%@#+.,;~"), "--xml", "-v", "-r", str(rev), "--non-interactive"]
     if svn_user:
         cmd += ["--username", svn_user]
     if svn_pass:

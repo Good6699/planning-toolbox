@@ -45,9 +45,19 @@ def _svn_decode_output(data):
         return data.decode("utf-8", errors="replace")
 
 
+def _svn_quote_url(arg):
+    """SVN URL 参数 percent-encode（空格→%20、$→%24 等），保留 URL 结构字符。
+    非 URL 参数（本地路径、文件名等）原样返回。分支名可能含空格/特殊字符，
+    未编码的 URL 传给 svn 会报 E170013/E215004。"""
+    if isinstance(arg, str) and (arg.startswith("http://") or arg.startswith("https://") or arg.startswith("svn://")):
+        from urllib.parse import quote
+        return quote(arg, safe=":/?&=%@#+.,;~")
+    return arg
+
+
 def _run_svn(cmd, timeout=120, cancel_check=None):
     svn_exe = _get_svn_path()
-    full_cmd = [svn_exe] + cmd
+    full_cmd = [svn_exe] + [_svn_quote_url(a) for a in cmd]
     # Popen + 轮询：cancel_check 命中（任务手动终止）或超时则 kill，避免 svn 命令继续跑
     proc = subprocess.Popen(
         full_cmd,
@@ -244,7 +254,7 @@ def _svn_try_export(svn_exe, file_url, revision, local_file, auth_args, cancel_c
     import time as _t
     for attempt in range(2):
         export_cmd = [svn_exe, "export", "--force",
-                      "-r", str(revision), file_url, local_file] + auth_args
+                      "-r", str(revision), _svn_quote_url(file_url), local_file] + auth_args
         try:
             proc = subprocess.Popen(
                 export_cmd,
@@ -392,7 +402,7 @@ def _svn_resolve_conflict(svn_exe, source_url, revision, file_path, local_file, 
     for _attempt in range(2):
         try:
             proc = subprocess.Popen(
-                [svn_exe, "cat", "-r", str(cat_rev), file_url] + auth_args,
+                [svn_exe, "cat", "-r", str(cat_rev), _svn_quote_url(file_url)] + auth_args,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 **_get_subprocess_kwargs()
             )
@@ -525,7 +535,7 @@ def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
     # 1) summarize 快速检查：无任何差异（内容+属性）直接跳过
     try:
         dr = subprocess.run(
-            [svn_exe, "diff", "--summarize", file_url + "@HEAD", local_file] + auth_args,
+            [svn_exe, "diff", "--summarize", _svn_quote_url(file_url + "@HEAD"), local_file] + auth_args,
             capture_output=True, timeout=30, **_get_subprocess_kwargs())
         if dr.returncode == 0 and not (dr.stdout or b"").strip():
             _log(f"  ℹ 最新版与本地无差异，跳过: {file_path}", "info")
@@ -535,7 +545,7 @@ def _svn_merge_with_retry(svn_exe, source_url, revisions, file_path, local_file,
     # 2) summarize 有差异（可能只是属性差异）→ 内容级比较：svn cat vs 本地字节
     try:
         cat_r = subprocess.run(
-            [svn_exe, "cat", file_url + "@HEAD"] + auth_args,
+            [svn_exe, "cat", _svn_quote_url(file_url + "@HEAD")] + auth_args,
             capture_output=True, timeout=180, **_get_subprocess_kwargs())
         if cat_r.returncode == 0:
             with open(local_file, "rb") as _f:
@@ -570,7 +580,7 @@ def _sync_add_meta(svn_exe, source_url, file_path, local_file, auth_args, _log,
     import re as _re
     try:
         r = subprocess.run(
-            [svn_exe, "cat", meta_url] + auth_args,
+            [svn_exe, "cat", _svn_quote_url(meta_url)] + auth_args,
             capture_output=True, timeout=60, **_get_subprocess_kwargs())
     except Exception:
         return
@@ -773,7 +783,7 @@ def svn_merge(source_url, target_wc, revisions, files,
     if not head_rev:
         try:
             _r = subprocess.run(
-                [svn_exe, "info", "--show-item", "revision", source_url] + auth_args,
+                [svn_exe, "info", "--show-item", "revision", _svn_quote_url(source_url)] + auth_args,
                 capture_output=True, timeout=30, **_get_subprocess_kwargs())
             _txt = _r.stdout.decode("utf-8", errors="replace").strip()
             head_rev = int(_txt) if _txt.isdigit() else None

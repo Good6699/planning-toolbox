@@ -36,36 +36,34 @@ function _mergeLogBatch(logEl, maxLines) {
   return { push, stop };
 }
 
+function _mergePathKey(path) {
+  // 归一化目标路径：查询分支前缀或 /branches/<分支>/<Client|gameData>/ 前缀裁剪，
+  // 使本分支与 merge 来源分支的同一文件归为同一个 key
+  const sp = _mergeData.stripPrefix || "";
+  if (sp && path && path.startsWith(sp + "/")) return path.slice(sp.length + 1);
+  const m = (path || "").match(/^\/branches\/[^/]+\/(Client|gameData)\/?(.*)$/);
+  if (m) return m[2] || m[1];
+  if (path && path.startsWith("/")) return path.slice(1);
+  return path || "";
+}
+
 function _getCheckedVersionFiles() {
   // 文件列表来自懒加载缓存 versionFiles（按勾选版本聚合），不再依赖查询阶段的 v.files
-  const allActions = {};
-  const allFiles = {};
-  const revs = Object.keys(_mergeData.checkedRevs).filter(k => _mergeData.checkedRevs[k]);
-  revs.forEach(rev => {
-    (_mergeData.versionFiles[rev] || []).forEach(f => {
-      if (!allActions[f.path]) allActions[f.path] = [];
-      allActions[f.path].push({ rev: Number(rev), action: f.action });
-    });
-  });
+  // 按归一化目标路径归组，取最新版本的条目（action/path 以最新版本为准），
+  // 避免同一文件在来源分支与本分支的 del/add 冲突时误显示删除
+  const groups = {};
+  const revs = Object.keys(_mergeData.checkedRevs).filter(k => _mergeData.checkedRevs[k]).map(Number);
   revs.forEach(rev => {
     (_mergeData.versionFiles[rev] || []).forEach(f => {
       if (_isPathExcluded(f.path)) return;
-      if (!allFiles[f.path]) {
-        const acts = allActions[f.path] || [];
-        const latest = acts.reduce((a, b) => a.rev > b.rev ? a : b, { rev: 0, action: "" });
-        let finalAction;
-        if (latest.action === "del") {
-          finalAction = "del";
-        } else if (acts.some(a => a.action === "add")) {
-          finalAction = "add";
-        } else {
-          finalAction = "mod";
-        }
-        allFiles[f.path] = { ...f, action: finalAction };
+      const key = _mergePathKey(f.path);
+      const prev = groups[key];
+      if (!prev || rev > prev.rev) {
+        groups[key] = { rev, f };
       }
     });
   });
-  return Object.values(allFiles);
+  return Object.values(groups).map(g => g.f);
 }
 
 async function _ensureMergeVersionFiles(revs) {

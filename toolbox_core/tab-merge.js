@@ -458,12 +458,13 @@ function buildMergeTab(panel) {
       initSuggest("svn_keyword", config.svn_keyword_history, true);
     }
   });
-  // 日期范围修改即永久保存，切换页签/重启后保留
-  document.getElementById("merge_start").addEventListener("change", ()=>{
+  // 日期范围修改即永久保存，切换页签/重启后保留。
+  // 用 input 事件（每次键入触发）而非 change（失焦才触发，直接重启会丢）
+  document.getElementById("merge_start").addEventListener("input", ()=>{
     config.merge_start = document.getElementById("merge_start").value;
     saveConfig({merge_start: config.merge_start});
   });
-  document.getElementById("merge_end").addEventListener("change", ()=>{
+  document.getElementById("merge_end").addEventListener("input", ()=>{
     config.merge_end = document.getElementById("merge_end").value;
     saveConfig({merge_end: config.merge_end});
   });

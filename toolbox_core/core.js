@@ -446,12 +446,13 @@ function buildSvnTab(panel) {
 
   initSuggest("svn_author", config.svn_author_history||[], true);
 
-  // 日期范围修改即永久保存，切换页签/重启后保留
-  document.getElementById("svn_start").addEventListener("change", ()=>{
+  // 日期范围修改即永久保存，切换页签/重启后保留。
+  // 用 input 事件（每次键入触发）而非 change（失焦才触发，直接重启会丢）
+  document.getElementById("svn_start").addEventListener("input", ()=>{
     config.svn_start = document.getElementById("svn_start").value;
     saveConfig({svn_start: config.svn_start});
   });
-  document.getElementById("svn_end").addEventListener("change", ()=>{
+  document.getElementById("svn_end").addEventListener("input", ()=>{
     config.svn_end = document.getElementById("svn_end").value;
     saveConfig({svn_end: config.svn_end});
   });

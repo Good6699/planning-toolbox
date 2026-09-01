@@ -1828,7 +1828,7 @@ def api_workflow_open_update_wc():
     opened = []
     missing = []
     for prefix in prefixes:
-        for subdir in ["Client", "gameData"]:
+        for subdir in ["Client", "gameData", "tools"]:
             d = os.path.join(prefix, subdir)
             if os.path.isdir(d):
                 subprocess.Popen([tortoise, "/command:update", "/path:" + d])
@@ -1837,7 +1837,7 @@ def api_workflow_open_update_wc():
                 missing.append(d)
 
     if not opened:
-        return jsonify({"error": "未找到可更新的 Client 或 gameData 目录", "missing": missing}), 400
+        return jsonify({"error": "未找到可更新的 Client、gameData 或 tools 目录", "missing": missing}), 400
     return jsonify({"opened": opened, "missing": missing})
 
 
@@ -1868,7 +1868,7 @@ def _workflow_update_wc_worker(task_id, prefixes, name):
         q.put(f"{'='*50}\n")
         dirs = []
         for prefix in prefixes:
-            for subdir in ["Client", "gameData"]:
+            for subdir in ["Client", "gameData", "tools"]:
                 d = os.path.join(prefix, subdir)
                 if not os.path.isdir(d):
                     q.put(f"⏭ 目录不存在: {d}\n")

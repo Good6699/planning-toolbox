@@ -955,7 +955,7 @@ function _wfDetectPrefixes(steps) {
       v.split(",").forEach(part => {
         const s = part.trim();
         if (!s) return;
-        const m = s.match(/^(.+?)\\(?:gameData|Client)(?:\\|$)/i);
+        const m = s.match(/^(.+?)\\(?:gameData|Client|tools)(?:\\|$)/i);
         if (m) prefixes.add(m[1]);
       });
     } else if (Array.isArray(v)) {

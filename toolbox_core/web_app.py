@@ -282,6 +282,10 @@ def api_get_config():
         "merge_file_filter_mode": cfg.get("merge_file_filter_mode", "include"),
         "merge_file_filter_include_text": cfg.get("merge_file_filter_include_text", ""),
         "merge_file_filter_exclude_text": cfg.get("merge_file_filter_exclude_text", ""),
+        "svn_start": cfg.get("svn_start", ""),
+        "svn_end": cfg.get("svn_end", ""),
+        "merge_start": cfg.get("merge_start", ""),
+        "merge_end": cfg.get("merge_end", ""),
     }
     return jsonify(safe)
 

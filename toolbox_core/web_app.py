@@ -2698,8 +2698,9 @@ def _exec_merge_error_code(step, put, task_id=None):
 
 
 def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None, commit_msg=None, task_id=None):
-    """返回 src_dir 下 cutoff_date 当天起有 SVN 提交的文件相对路径集合；不可用时返回 None
+    """返回 src_dir 下 cutoff_date 当天起有 SVN 提交的 (变更文件, 删除文件) 相对路径集合；不可用时返回 (None, None)
 
+    变更文件集合供快速整合直接复制，删除文件集合供目标同步删除；
     author 支持逗号分隔多选（或关系），commit_msg 为提交备注包含匹配；
     author 与 commit_msg 为 AND 关系，均不填表示所有人
     """
@@ -2713,13 +2714,13 @@ def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None, c
             [svn_exe, "info", "--show-item", "relative-url", src_dir],
             task_id=task_id, timeout=15)
     except Exception:
-        return None
+        return None, None
     if _rc != 0 or _uc != 0:
-        return None
+        return None, None
     r = type("R", (), {"stdout": _ro, "returncode": _rc})()
     u = type("U", (), {"stdout": _uo, "returncode": _uc})()
     if r.returncode != 0 or u.returncode != 0:
-        return None
+        return None, None
     base_rel = _decode_svn_output(u.stdout).strip()
     if base_rel.startswith("^/"):
         base_rel = base_rel[1:]
@@ -2727,8 +2728,9 @@ def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None, c
     try:
         root_el = ET.fromstring(_decode_svn_output(r.stdout))
     except Exception:
-        return None
+        return None, None
     files = set()
+    deleted = set()
     for logentry in root_el.iter("logentry"):
         if authors:
             au = (logentry.findtext("author") or "").strip()
@@ -2739,23 +2741,26 @@ def _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author=None, c
             if not any(kw in msg for kw in msg_kws):
                 continue
         for p in logentry.iter("path"):
-            if p.get("action") == "D":
-                continue
             path = (p.text or "").strip()
             if not path or not base_rel:
                 continue
             if path.startswith(base_rel):
                 rel = path[len(base_rel):].lstrip("/")
                 if rel:
-                    files.add(rel.replace("/", os.sep))
-    if files:
+                    rel = rel.replace("/", os.sep)
+                    if p.get("action") == "D":
+                        deleted.add(rel)
+                    else:
+                        files.add(rel)
+    if files or deleted:
         _cond = []
         if authors:
             _cond.append("作者: " + ", ".join(sorted(authors)))
         if msg_kws:
             _cond.append("备注含: " + ", ".join(msg_kws))
-        put(f"  SVN 识别: {cutoff_date} 起 {len(files)} 个文件有提交" + (f"（{'，'.join(_cond)}）" if _cond else "") + "\n")
-    return files
+        _extra = f"，删除 {len(deleted)}" if deleted else ""
+        put(f"  SVN 识别: {cutoff_date} 起 {len(files)} 个文件有提交{_extra}" + (f"（{'，'.join(_cond)}）" if _cond else "") + "\n")
+    return files, deleted
 
 
 def _exec_consolidate(step, put, task_id=None):
@@ -2805,22 +2810,19 @@ def _exec_consolidate(step, put, task_id=None):
 
     os.makedirs(tgt_dir, exist_ok=True)
 
-    # SVN update 目标
+    # SVN update 目标：只更新提交路径（不做整个工作副本 update，避免无关文件被拉取/变更）
     svn_exe = _get_svn_path()
-    result = subprocess.run(
-        [svn_exe, "info", tgt_dir],
-        capture_output=True, timeout=15, **_get_subprocess_kwargs()
-    )
-    if result.returncode == 0:
-        wc_r = subprocess.run(
-            [svn_exe, "info", "--show-item", "wc-root", tgt_dir],
-            capture_output=True, timeout=15, **_get_subprocess_kwargs()
-        )
-        wc_root = _decode_svn_output(wc_r.stdout).strip()
-        if wc_root:
-            put(f"正在更新 SVN 工作副本: {wc_root}\n")
-            _svn_update_with_cleanup(svn_exe, wc_root, put, task_id)
-    else:
+    updated_any = False
+    for cd in dict.fromkeys(commit_dirs):
+        if not os.path.isdir(cd):
+            continue
+        put(f"正在更新 SVN 工作副本: {cd}\n")
+        try:
+            if _svn_update_with_cleanup(svn_exe, cd, put, task_id):
+                updated_any = True
+        except Exception as e:
+            put(f"  ⚠ 更新异常: {e}\n")
+    if not updated_any:
         put("⚠️ 目标目录没有 SVN 链接，跳过更新\n")
 
     # 遍历所有来源：按最近 days 天内的 SVN 提交识别修改文件（回退：本地文件修改时间）
@@ -2862,25 +2864,19 @@ def _exec_consolidate(step, put, task_id=None):
             put(f"  路径对齐: +{extra_prefix}\n")
         else:
             put("  路径对齐: 直接覆盖（无公共路径段）\n")
-        changed = _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author, commit_msg, task_id)
+        changed, deleted = _recent_svn_changed_files(svn_exe, src_dir, cutoff_date, put, author, commit_msg, task_id)
         if changed is None:
             svn_mode_ok = False
             put(f"  ⚠ svn log 不可用，回退为按本地文件修改时间（{cutoff_date} 起）\n")
-        for root, dirs, files in os.walk(src_dir):
-            for fn in files:
+        if changed is not None:
+            # SVN 模式：直接按变更文件列表复制，无需全量扫描目录树
+            for rel in changed:
                 total += 1
-                src_file = os.path.join(root, fn)
-                rel = os.path.relpath(src_file, src_dir)
-                if changed is not None:
-                    # 按 SVN 提交识别：只复制 cutoff_date 起有提交记录的文件
-                    if rel not in changed:
-                        old += 1
-                        continue
-                else:
-                    # 回退：按本地文件修改时间过滤
-                    if os.path.getmtime(src_file) < cutoff:
-                        old += 1
-                        continue
+                src_file = os.path.join(src_dir, rel)
+                if not os.path.isfile(src_file):
+                    # 目录条目或本地已不存在的文件，跳过
+                    old += 1
+                    continue
                 if extra_prefix:
                     tgt_file = os.path.join(tgt_dir, extra_prefix, rel)
                 else:
@@ -2892,6 +2888,41 @@ def _exec_consolidate(step, put, task_id=None):
                     copied_count += 1
                 except Exception as e:
                     put(f"  ✗ {rel}: {e}\n")
+            # 源中已删除的文件：目标对应路径同步删除（svn delete 标记，进入提交清单）
+            del_count = 0
+            for rel in deleted or ():
+                tgt_file = os.path.join(tgt_dir, extra_prefix, rel) if extra_prefix else os.path.join(tgt_dir, rel)
+                if not os.path.lexists(tgt_file):
+                    continue
+                try:
+                    _svn_run_cancelable([svn_exe, "delete", "--force", tgt_file], task_id=task_id, timeout=30)
+                    put(f"  ✕ 同步删除 {rel}\n")
+                    del_count += 1
+                except Exception as e:
+                    put(f"  ✗ 删除失败 {rel}: {e}\n")
+            if del_count:
+                put(f"  同步删除 {del_count} 个文件\n")
+        else:
+            for root, dirs, files in os.walk(src_dir):
+                for fn in files:
+                    total += 1
+                    src_file = os.path.join(root, fn)
+                    rel = os.path.relpath(src_file, src_dir)
+                    # 回退：按本地文件修改时间过滤
+                    if os.path.getmtime(src_file) < cutoff:
+                        old += 1
+                        continue
+                    if extra_prefix:
+                        tgt_file = os.path.join(tgt_dir, extra_prefix, rel)
+                    else:
+                        tgt_file = os.path.join(tgt_dir, rel)
+                    try:
+                        os.makedirs(os.path.dirname(tgt_file), exist_ok=True)
+                        _copy2_force(src_file, tgt_file)
+                        copied_files.append(tgt_file)
+                        copied_count += 1
+                    except Exception as e:
+                        put(f"  ✗ {rel}: {e}\n")
 
     if svn_mode_ok:
         put(f"扫描 {total} 个文件，复制 {copied_count} 个，跳过 {old} 个（{cutoff_date} 起无 SVN 提交）\n")

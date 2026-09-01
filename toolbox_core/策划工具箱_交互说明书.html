@@ -66,9 +66,13 @@ code{padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.3);color:#c8d8ff;f
           <tr class="dashed"><td>图集引用清理</td><td>扫描预制的图集引用，拖拽规划迁移到目标图集组</td></tr>
           <tr><td>字体检测</td><td>检测预制中的字体引用，批量替换字体名和行间距</td></tr>
           <tr><td style="white-space:nowrap">辅助功能</td><td>meta 生成</td><td>用一个 .meta 模板给目标文件夹批量生成 meta 文件</td></tr>
-          <tr class="dashed"><td style="white-space:nowrap" rowspan="12">工作流</td><td>导出文字表</td><td>从主 Excel 文件导出文字表，可上传到多个 SVN 目录</td></tr>
+          <tr class="dashed"><td style="white-space:nowrap" rowspan="16">工作流</td><td>导出文字表</td><td>从主 Excel 文件导出文字表，可上传到多个 SVN 目录</td></tr>
+          <tr class="dashed"><td>导出修改配置表</td><td>从本地 SVN 副本路径导出修改过的配置表，可上传到多个 SVN 目录</td></tr>
+          <tr class="dashed"><td>导出错误码</td><td>从根目录按语言代码导出错误码文件，可上传到 SVN 目录</td></tr>
           <tr class="dashed"><td>合并文字表</td><td>把多个 Excel 的指定列按 ID 合并到目标文件</td></tr>
           <tr class="dashed"><td>合并翻译</td><td>把翻译完成的 Excel 合入目标文件</td></tr>
+          <tr class="dashed"><td>指定合并文字表</td><td>按 SVN 提交备注/作者/自然日筛选修改的文字 ID，从来源表整行复制到目标表，导出后弹 SVN 提交框</td></tr>
+          <tr class="dashed"><td>合并配置</td><td>来源文件夹下配置表按提交备注/作者/自然日筛选修改的 ID，整行复制到目标文件夹同名表，导出后弹 SVN 提交框</td></tr>
           <tr class="dashed"><td>SVN 锁定</td><td>锁定指定文件防止他人修改</td></tr>
           <tr class="dashed"><td>SVN 解锁</td><td>解除文件锁定</td></tr>
           <tr class="dashed"><td>SVN 回退</td><td>回退指定路径的 SVN 修改</td></tr>
@@ -313,7 +317,7 @@ code{padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.3);color:#c8d8ff;f
     </section>
 
   </main>
-  <p class="small" style="margin-top:16px;text-align:center">说明书版本：2026-08-14</p>
+  <p class="small" style="margin-top:16px;text-align:center">说明书版本：2026-09-01</p>
 </div>
 </body>
 </html>

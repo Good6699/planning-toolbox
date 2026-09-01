@@ -3399,7 +3399,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
 // 界面完全打开后再检查更新（避免阻塞启动）
 (function() {
-  function onAppReady() { setTimeout(checkUpdate, 1000); }
+  function onAppReady() { setTimeout(checkUpdate, 1000); checkSvnCred(); }
   if (document.body.classList.contains("app-ready")) {
     onAppReady();
   } else {
@@ -3411,6 +3411,113 @@ window.addEventListener("DOMContentLoaded", async () => {
     }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
   }
 })();
+
+// ── SVN 凭证强制验证弹窗（启动时验证失败弹出，必须验证通过才能使用）──
+async function checkSvnCred() {
+  try {
+    const r = await fetch("/api/svn/verify-cred", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({})});
+    const d = await r.json();
+    if (d.ok) return;                       // 凭证有效，不打扰
+    showSvnCredModal(d.need_url, d.error);  // 未设置/无效 → 强制弹窗
+  } catch (e) { /* 后端不可达时不弹窗，避免干扰启动 */ }
+}
+
+function showSvnCredModal(needUrl, initialError) {
+  if (document.getElementById("svn_cred_modal")) return;  // 防重复
+  const overlay = document.createElement("div");
+  overlay.id = "svn_cred_modal";
+  Object.assign(overlay.style, {
+    position:"fixed", inset:"0", zIndex:"20000", background:"rgba(0,0,0,.6)",
+    display:"flex", alignItems:"center", justifyContent:"center"
+  });
+  const modal = document.createElement("div");
+  Object.assign(modal.style, {
+    background:"#151b26", border:"1px solid rgba(94,162,255,.18)", borderRadius:"12px",
+    padding:"20px", width:"420px", maxWidth:"90vw", boxShadow:"0 12px 36px rgba(0,0,0,.55)"
+  });
+  const title = document.createElement("div");
+  title.textContent = "SVN 凭证验证";
+  Object.assign(title.style, {fontSize:"15px", fontWeight:"600", marginBottom:"4px", color:"var(--text)"});
+  const sub = document.createElement("div");
+  sub.textContent = "请输入 SVN 账号密码，验证通过后才能使用工具箱的 SVN 功能";
+  Object.assign(sub.style, {fontSize:"12px", color:"var(--dim)", marginBottom:"12px"});
+  const errBox = document.createElement("div");
+  errBox.id = "svn_cred_error";
+  Object.assign(errBox.style, {display:"none", fontSize:"12px", color:"#ff637d", marginBottom:"8px", wordBreak:"break-all"});
+  errBox.textContent = initialError || "";
+  if (initialError) errBox.style.display = "block";
+  const urlWrap = document.createElement("div");
+  const urlInput = document.createElement("input");
+  urlInput.id = "svn_cred_url";
+  urlInput.type = "text";
+  urlInput.placeholder = "SVN 仓库地址（http(s)://*/svn/*）";
+  urlInput.autocomplete = "off";
+  urlWrap.appendChild(urlInput);
+  const userInput = document.createElement("input");
+  userInput.id = "svn_cred_user";
+  userInput.type = "text";
+  userInput.placeholder = "SVN 用户名";
+  userInput.autocomplete = "off";
+  const passInput = document.createElement("input");
+  passInput.id = "svn_cred_pass";
+  passInput.type = "password";
+  passInput.placeholder = "SVN 密码";
+  passInput.autocomplete = "off";
+  const btn = document.createElement("button");
+  btn.id = "svn_cred_btn";
+  btn.textContent = "验证并保存";
+  Object.assign(btn.style, {
+    width:"100%", height:"36px", border:"none", borderRadius:"8px", cursor:"pointer",
+    background:"linear-gradient(180deg,#67adff,#4b8dff)", color:"#fff",
+    fontSize:"13px", fontWeight:"600", marginTop:"12px"
+  });
+  [urlWrap, userInput, passInput].forEach(el => {
+    Object.assign(el.style, {
+      width:"100%", boxSizing:"border-box", borderRadius:"8px",
+      border:"1px solid #2a3040", background:"#0e1219", color:"#fff",
+      fontSize:"13px", marginBottom:"8px", outline:"none"
+    });
+  });
+  Object.assign(urlInput.style, {width:"100%", height:"36px", boxSizing:"border-box", background:"transparent", border:"none", outline:"none", color:"#fff", fontSize:"13px", padding:"0"});
+  Object.assign(userInput.style, {height:"36px", padding:"0 10px"});
+  Object.assign(passInput.style, {height:"36px", padding:"0 10px"});
+  urlWrap.style.display = needUrl ? "block" : "none";
+
+  async function submitCred() {
+    btn.disabled = true;
+    btn.textContent = "验证中...";
+    const payload = {};
+    if (needUrl) payload.url = urlInput.value.trim();
+    payload.username = userInput.value.trim();
+    payload.password = passInput.value;
+    try {
+      const r = await fetch("/api/svn/verify-cred", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});
+      const d = await r.json();
+      if (d.ok) { overlay.remove(); return; }
+      errBox.style.display = "block";
+      errBox.textContent = d.need_url ? "请填写 SVN 仓库地址" : (d.error || "凭证验证失败");
+    } catch (e) {
+      errBox.style.display = "block";
+      errBox.textContent = "验证请求失败，请重试";
+    }
+    btn.disabled = false;
+    btn.textContent = "验证并保存";
+  }
+  btn.addEventListener("click", submitCred);
+  [userInput, passInput, urlInput].forEach(inp => {
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") submitCred(); });
+  });
+  modal.appendChild(title);
+  modal.appendChild(sub);
+  modal.appendChild(errBox);
+  modal.appendChild(urlWrap);
+  modal.appendChild(userInput);
+  modal.appendChild(passInput);
+  modal.appendChild(btn);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  (needUrl ? urlInput : userInput).focus();
+}
 
 document.getElementById("close_btn")?.addEventListener("click", ()=>{
 

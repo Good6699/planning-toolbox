@@ -5711,6 +5711,79 @@ def api_svn_detect():
         return jsonify({"ok": False, "error": str(e)}), 200
 
 
+def _resolve_svn_url(url):
+    """本地工作副本路径 → 远程 SVN URL（svn info --show-item url）；URL 则原样返回"""
+    if url.startswith(("http://", "https://", "svn://", "svn+ssh://")):
+        return url, ""
+    if os.path.isdir(url) or os.path.exists(url):
+        try:
+            svn_exe = _get_svn_path()
+            r = subprocess.run([svn_exe, "info", "--show-item", "url", url],
+                               capture_output=True, encoding="utf-8", errors="replace",
+                               timeout=15, **_get_subprocess_kwargs())
+            if r.returncode == 0 and r.stdout.strip():
+                return r.stdout.strip(), ""
+            return "", f"无法从本地路径解析 SVN 地址: {url}"
+        except Exception as e:
+            return "", f"解析 SVN 地址失败: {e}"
+    return url, ""
+
+
+@app.route("/api/svn/verify-cred", methods=["POST"])
+def api_svn_verify_cred():
+    """验证 SVN 凭证；显式传入 username/password 时验证通过后保存到 config
+
+    - 启动检查（body 为空）：config 未保存凭证 → 直接要求输入（不执行验证，
+      避免本地路径/本机 auth cache 让验证形同虚设）；已保存 → 用保存的凭证验证
+    - 凭证弹窗提交（传 username/password）：用显式凭证验证，通过才保存
+    - 验证目标为本地工作副本路径时先解析为远程 URL，确保凭证真的被验证
+    """
+    data = request.get_json(force=True)
+    cfg = load_config()
+    url = (data.get("url") or "").strip() or cfg.get("svn_url_current") or cfg.get("merge_source_current") or ""
+    username = (data.get("username") or "").strip() or cfg.get("svn_user", "")
+    password = data.get("password") or ""
+    if not password:
+        enc = cfg.get("svn_pass", "")
+        if enc:
+            from toolbox_config import decrypt_key
+            password = decrypt_key(enc)
+    # 未显式传凭证且 config 未保存凭证 → 直接要求输入（不依赖验证）
+    if not data.get("username") and not data.get("password") and not cfg.get("svn_user") and not cfg.get("svn_pass"):
+        return jsonify({"ok": False, "need_url": not bool(url), "error": "尚未保存 SVN 凭证，请输入账号密码"}), 200
+    if not url:
+        return jsonify({"ok": False, "need_url": True, "error": "尚未配置 SVN 地址，请在弹窗中填写"}), 200
+    url, rerr = _resolve_svn_url(url)
+    if rerr:
+        return jsonify({"ok": False, "need_url": True, "error": rerr}), 200
+    try:
+        svn_exe = _get_svn_path()
+        cmd = [svn_exe, "info", "--non-interactive", "--no-auth-cache", url]
+        if username:
+            cmd += ["--username", username]
+        if password:
+            cmd += ["--password", password]
+        r = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace",
+                           timeout=20, **_get_subprocess_kwargs())
+        if r.returncode == 0:
+            # 仅当本次显式传入了新凭证才保存（避免启动检查空参数覆盖已有值）
+            if data.get("username") or data.get("password"):
+                from toolbox_config import encrypt_key
+                cfg["svn_user"] = username
+                cfg["svn_pass"] = encrypt_key(password) if password else ""
+                save_config(cfg)
+            return jsonify({"ok": True})
+        err = (r.stderr or r.stdout or "").strip().splitlines()
+        brief = err[-1] if err else f"svn 退出码 {r.returncode}"
+        return jsonify({"ok": False, "error": brief}), 200
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "error": "SVN 验证超时（20秒），请检查网络或仓库地址"}), 200
+    except FileNotFoundError:
+        return jsonify({"ok": False, "error": "SVN 命令行不可用，请确认已安装 SVN"}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 200
+
+
 def _find_svn_wc(url):
     """根据 SVN URL 查找对应的本地工作副本路径（不打开资源管理器）
 

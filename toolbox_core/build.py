@@ -79,6 +79,7 @@ DATA_DIRS = [
 
 DATA_FILES = [
     "core.js",
+    "sortable.min.js",
     "tab-merge.js",
     "tab-upload.js",
     "tab-workflow.js",

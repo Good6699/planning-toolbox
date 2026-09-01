@@ -137,9 +137,9 @@ function buildMergeTab(panel) {
           <div class="form-group">
             <label>时间范围</label>
             <div class="flex-row" style="align-items:center">
-              <input type="text" id="merge_start" value="${yearStart}" placeholder="YYYY-MM-DD 格式，默认当年 1 月 1 日" style="flex:1;min-width:0">
+              <input type="text" id="merge_start" value="${config.merge_start || yearStart}" placeholder="YYYY-MM-DD 格式，默认当年 1 月 1 日" style="flex:1;min-width:0">
               <span style="color:var(--dim)">—</span>
-              <input type="text" id="merge_end" value="${today}" placeholder="YYYY-MM-DD 格式，默认今天" style="flex:1;min-width:0">
+              <input type="text" id="merge_end" value="${config.merge_end || today}" placeholder="YYYY-MM-DD 格式，默认今天" style="flex:1;min-width:0">
             </div>
           </div>
           <div class="form-group">
@@ -458,6 +458,15 @@ function buildMergeTab(panel) {
       initSuggest("svn_keyword", config.svn_keyword_history, true);
     }
   });
+  // 日期范围修改即永久保存，切换页签/重启后保留
+  document.getElementById("merge_start").addEventListener("change", ()=>{
+    config.merge_start = document.getElementById("merge_start").value;
+    saveConfig({merge_start: config.merge_start});
+  });
+  document.getElementById("merge_end").addEventListener("change", ()=>{
+    config.merge_end = document.getElementById("merge_end").value;
+    saveConfig({merge_end: config.merge_end});
+  });
 
   function _initMergeFileFilter() {
     var trigger = document.getElementById("merge_file_filter_trigger");
@@ -668,6 +677,10 @@ async function runMergeQuery() {
   const targetPath = document.getElementById("merge_target").value.trim();
   const startDate = document.getElementById("merge_start").value;
   const endDate = document.getElementById("merge_end").value;
+  // 保存时间范围，下次打开页签保留上次的选择
+  config.merge_start = startDate;
+  config.merge_end = endDate;
+  saveConfig({merge_start: startDate, merge_end: endDate});
   if (!sourceUrl) { _showToast("请输入源SVN地址"); return; }
   if (!isSvnUrl(sourceUrl)) { _showToast("请输入有效的 SVN 链接"); return; }
   if (!targetPath) { _showToast("请输入目标本地工作副本路径"); document.getElementById("merge_target").focus(); return; }

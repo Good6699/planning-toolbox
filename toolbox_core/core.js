@@ -130,24 +130,6 @@ function switchTab(key) {
 
     buildTab(key);
 
-  } else if (key === "svn" || key === "merge") {
-
-    const now = new Date();
-
-    const y = now.getFullYear();
-
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-
-    const d = String(now.getDate()).padStart(2, "0");
-
-    const startEl = document.getElementById(key + "_start");
-
-    const endEl = document.getElementById(key + "_end");
-
-    if (startEl) startEl.value = y + "-01-01";
-
-    if (endEl) endEl.value = y + "-" + m + "-" + d;
-
   }
 
   // 切换页签时把日志区域滚动到底部
@@ -281,11 +263,11 @@ function buildSvnTab(panel) {
 
             <div class="flex-row" style="align-items:center">
 
-              <input type="text" id="svn_start" value="${yearStart}" placeholder="YYYY-MM-DD 格式，默认当年 1 月 1 日" style="flex:1;min-width:0">
+              <input type="text" id="svn_start" value="${config.svn_start || yearStart}" placeholder="YYYY-MM-DD 格式，默认当年 1 月 1 日" style="flex:1;min-width:0">
 
               <span style="color:var(--dim)">—</span>
 
-              <input type="text" id="svn_end" value="${today}" placeholder="YYYY-MM-DD 格式，默认今天" style="flex:1;min-width:0">
+              <input type="text" id="svn_end" value="${config.svn_end || today}" placeholder="YYYY-MM-DD 格式，默认今天" style="flex:1;min-width:0">
 
             </div>
 
@@ -464,6 +446,16 @@ function buildSvnTab(panel) {
 
   initSuggest("svn_author", config.svn_author_history||[], true);
 
+  // 日期范围修改即永久保存，切换页签/重启后保留
+  document.getElementById("svn_start").addEventListener("change", ()=>{
+    config.svn_start = document.getElementById("svn_start").value;
+    saveConfig({svn_start: config.svn_start});
+  });
+  document.getElementById("svn_end").addEventListener("change", ()=>{
+    config.svn_end = document.getElementById("svn_end").value;
+    saveConfig({svn_end: config.svn_end});
+  });
+
   ["svn_keyword","svn_author"].forEach(id => {
 
     document.getElementById(id).addEventListener("blur", ()=>{
@@ -499,6 +491,11 @@ async function runSvn() {
   const mode = document.querySelector("#svn_mode_group .toggle-btn.active")?.dataset.v || "compare";
 
   const svn_url = await _ensureSvnUrlInputUrl();
+
+  // 永久保存日期范围，切换页签/重启后保留
+  config.svn_start = document.getElementById("svn_start").value;
+  config.svn_end = document.getElementById("svn_end").value;
+  saveConfig({svn_start: config.svn_start, svn_end: config.svn_end});
 
   const body = {
 

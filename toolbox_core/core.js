@@ -1485,6 +1485,9 @@ function openAdvSettings() {
 
         <div style="padding:1.25rem 1.5rem;overflow:auto;flex:1">
 
+          <!-- SVN 凭证已由启动弹窗统一管理，此处隐藏输入（2026-09-01） -->
+          <div style="display:none">
+
           <div style="font-size:0.85rem;font-weight:600;color:var(--accent);margin-bottom:8px">SVN 认证</div>
 
           <div class="form-group">
@@ -1500,6 +1503,8 @@ function openAdvSettings() {
             <label>密码</label>
 
             <input type="password" id="adv_svn_pass" placeholder="输入 SVN 登录密码，加密存储" style="width:100%">
+
+          </div>
 
           </div>
 

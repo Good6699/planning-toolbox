@@ -1197,9 +1197,15 @@ def _set_progress(window, pct, text):
 
 def main():
     global _main_window, _main_hwnd
+    _t0 = time.time()
     _acquire_instance_lock()
+    print(f"[PERF] instance_lock: {time.time()-_t0:.2f}s", file=sys.stderr)
+    _t0 = time.time()
     _ensure_app_id()
+    print(f"[PERF] ensure_app_id: {time.time()-_t0:.2f}s", file=sys.stderr)
+    _t0 = time.time()
     _ensure_frozen_config()
+    print(f"[PERF] ensure_frozen_config: {time.time()-_t0:.2f}s", file=sys.stderr)
 
     flask_thread = threading.Thread(target=_start_flask, daemon=True)
     flask_thread.start()
@@ -1215,8 +1221,10 @@ def main():
     win_h = saved_h if has_saved else WINDOW_H
     init_cx, init_cy = _get_cursor_screen_center(win_w, win_h)
 
+    _t0 = time.time()
     if not _wait_for_flask(timeout=15):
         print("[错误] Flask 未能在 15 秒内就绪", file=sys.stderr)
+    print(f"[PERF] flask ready: {time.time()-_t0:.2f}s", file=sys.stderr)
 
     resize_api = ResizeApi()
 
@@ -1273,7 +1281,9 @@ def main():
 
     def _boot_app(window):
         print("[DEBUG] _boot_app 开始", file=sys.stderr)
+        _t0 = time.time()
         window.events.loaded.wait(timeout=30)
+        print(f"[PERF] webview page loaded: {time.time()-_t0:.2f}s", file=sys.stderr)
         loading_started = time.time()
         _set_progress(window, 15, "界面资源已加载")
         print("[DEBUG] 窗口已加载", file=sys.stderr)

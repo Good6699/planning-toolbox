@@ -447,14 +447,17 @@ function buildSvnTab(panel) {
   initSuggest("svn_author", config.svn_author_history||[], true);
 
   // 日期范围修改即永久保存，切换页签/重启后保留。
-  // 用 input 事件（每次键入触发）而非 change（失焦才触发，直接重启会丢）
-  document.getElementById("svn_start").addEventListener("input", ()=>{
-    config.svn_start = document.getElementById("svn_start").value;
-    saveConfig({svn_start: config.svn_start});
+  // input 事件每次键入触发（直接重启不丢），防抖 400ms 避免连续输入堆积保存请求
+  let _svnStartT, _svnEndT;
+  document.getElementById("svn_start").addEventListener("input", (e)=>{
+    config.svn_start = e.target.value;
+    clearTimeout(_svnStartT);
+    _svnStartT = setTimeout(()=>saveConfig({svn_start: config.svn_start}), 400);
   });
-  document.getElementById("svn_end").addEventListener("input", ()=>{
-    config.svn_end = document.getElementById("svn_end").value;
-    saveConfig({svn_end: config.svn_end});
+  document.getElementById("svn_end").addEventListener("input", (e)=>{
+    config.svn_end = e.target.value;
+    clearTimeout(_svnEndT);
+    _svnEndT = setTimeout(()=>saveConfig({svn_end: config.svn_end}), 400);
   });
 
   ["svn_keyword","svn_author"].forEach(id => {

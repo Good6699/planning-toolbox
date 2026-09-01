@@ -459,14 +459,17 @@ function buildMergeTab(panel) {
     }
   });
   // 日期范围修改即永久保存，切换页签/重启后保留。
-  // 用 input 事件（每次键入触发）而非 change（失焦才触发，直接重启会丢）
-  document.getElementById("merge_start").addEventListener("input", ()=>{
-    config.merge_start = document.getElementById("merge_start").value;
-    saveConfig({merge_start: config.merge_start});
+  // input 事件每次键入触发（直接重启不丢），防抖 400ms 避免连续输入堆积保存请求
+  let _mergeStartT, _mergeEndT;
+  document.getElementById("merge_start").addEventListener("input", (e)=>{
+    config.merge_start = e.target.value;
+    clearTimeout(_mergeStartT);
+    _mergeStartT = setTimeout(()=>saveConfig({merge_start: config.merge_start}), 400);
   });
-  document.getElementById("merge_end").addEventListener("input", ()=>{
-    config.merge_end = document.getElementById("merge_end").value;
-    saveConfig({merge_end: config.merge_end});
+  document.getElementById("merge_end").addEventListener("input", (e)=>{
+    config.merge_end = e.target.value;
+    clearTimeout(_mergeEndT);
+    _mergeEndT = setTimeout(()=>saveConfig({merge_end: config.merge_end}), 400);
   });
 
   function _initMergeFileFilter() {

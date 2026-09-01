@@ -307,7 +307,7 @@ function buildSvnTab(panel) {
 
           <div class="form-group">
 
-            <label>关键词过滤</label>
+            <label>备注关键词（留空不限）</label>
 
             <input type="text" id="svn_keyword" placeholder="输入提交信息中的关键字，多个用逗号分隔" autocomplete="off">
 
@@ -315,7 +315,7 @@ function buildSvnTab(panel) {
 
           <div class="form-group">
 
-            <label>提交者过滤</label>
+            <label>提交者（留空不限）</label>
 
             <input type="text" id="svn_author" placeholder="SVN提交者账户名，多个用逗号分隔" autocomplete="off">
 

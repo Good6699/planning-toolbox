@@ -133,7 +133,10 @@ function buildMergeTab(panel) {
       </div>
       <div class="merge-side">
         <div class="card">
-          <div class="section-label" style="display:flex;align-items:center;gap:4px">筛选条件<button data-action="merge-revert-exclude-toggle" title="排除设置" style="background:none;border:none;cursor:pointer;font-size:15px;color:var(--dim);padding:0;line-height:1;flex-shrink:0">⚙</button></div>
+          <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
+            <span>筛选条件</span>
+            <button data-action="merge-revert-exclude-toggle" title="排除设置" style="border:none;background:transparent;color:var(--dim);font-size:18px;padding:0;cursor:pointer;line-height:1">⚙</button>
+          </div>
           <div class="form-group">
             <label>时间范围</label>
             <div class="flex-row" style="align-items:center">

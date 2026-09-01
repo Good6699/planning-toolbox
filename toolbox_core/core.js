@@ -259,15 +259,15 @@ function buildSvnTab(panel) {
 
           <div class="form-group">
 
-            <label>日期范围</label>
+            <label>输出目录</label>
 
-            <div class="flex-row" style="align-items:center">
+            <div class="flex-row">
 
-              <input type="text" id="svn_start" value="${config.svn_start || yearStart}" placeholder="YYYY-MM-DD 格式，默认当年 1 月 1 日" style="flex:1;min-width:0">
+              <input type="text" id="svn_output" placeholder="选择导出文件的保存目录，导出前会清空该目录内容" style="flex:1" autocomplete="off">
 
-              <span style="color:var(--dim)">—</span>
+              <button class="btn btn-normal" style="flex-shrink:0" data-action="browse-svn-output" id="svn_browse_btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
 
-              <input type="text" id="svn_end" value="${config.svn_end || today}" placeholder="YYYY-MM-DD 格式，默认今天" style="flex:1;min-width:0">
+              <button class="btn btn-normal" style="flex-shrink:0" data-action="open-svn-output" title="打开输出文件夹" id="svn_open_btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
 
             </div>
 
@@ -283,9 +283,25 @@ function buildSvnTab(panel) {
 
           <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
 
-            <span>过滤与输出</span>
+            <span>筛选条件</span>
 
             <button data-action="svn-advanced" title="高级设置" style="border:none;background:transparent;color:var(--dim);font-size:18px;padding:0;cursor:pointer;line-height:1">⚙</button>
+
+          </div>
+
+          <div class="form-group">
+
+            <label>时间范围</label>
+
+            <div class="flex-row" style="align-items:center">
+
+              <input type="text" id="svn_start" value="${config.svn_start || yearStart}" placeholder="YYYY-MM-DD 格式，默认当年 1 月 1 日" style="flex:1;min-width:0">
+
+              <span style="color:var(--dim)">—</span>
+
+              <input type="text" id="svn_end" value="${config.svn_end || today}" placeholder="YYYY-MM-DD 格式，默认今天" style="flex:1;min-width:0">
+
+            </div>
 
           </div>
 
@@ -302,22 +318,6 @@ function buildSvnTab(panel) {
             <label>提交者过滤</label>
 
             <input type="text" id="svn_author" placeholder="SVN提交者账户名，多个用逗号分隔" autocomplete="off">
-
-          </div>
-
-          <div class="form-group">
-
-            <label>输出目录</label>
-
-            <div class="flex-row">
-
-              <input type="text" id="svn_output" placeholder="选择导出文件的保存目录，导出前会清空该目录内容" style="flex:1" autocomplete="off">
-
-              <button class="btn btn-normal" style="flex-shrink:0" data-action="browse-svn-output" id="svn_browse_btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
-
-              <button class="btn btn-normal" style="flex-shrink:0" data-action="open-svn-output" title="打开输出文件夹" id="svn_open_btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
-
-            </div>
 
           </div>
 

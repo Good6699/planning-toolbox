@@ -12,8 +12,8 @@ function buildPrefabTab(panel) {
 
   panel.innerHTML = `
     <div class="workbench prefab-workbench">
-      <div class="form-group prefab-mode-row">
-        <label>操作模式</label>
+      <div class="form-group" style="flex-direction:row;align-items:center;gap:12px">
+        <label style="white-space:nowrap">操作模式</label>
         <div class="toggle-group" id="prefab_mode_group">
           <button class="toggle-btn active" data-action="set-prefab-mode" data-mode="clear-text">一键清理文字</button>
           <button class="toggle-btn" data-action="set-prefab-mode" data-mode="atlas">图集引用清理</button>

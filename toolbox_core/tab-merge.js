@@ -246,10 +246,21 @@ function buildMergeTab(panel) {
   enablePathDrop("merge_target", {mode:"path"});
   initSuggest("merge_author", config.svn_author_history||[], true);
   initSuggest("merge_keyword", config.svn_keyword_history||[], true);
+  function _removeMergePopup(popupId, overlayId) {
+    const p = document.getElementById(popupId); if (p) p.remove();
+    const o = document.getElementById(overlayId); if (o) o.remove();
+  }
+  function _mergePopupOverlay(overlayId) {
+    const o = document.createElement("div");
+    o.id = overlayId;
+    Object.assign(o.style, {position:"fixed", top:"0", left:"0", width:"100%", height:"100%", background:"rgba(0,0,0,.5)", zIndex:"10000"});
+    document.body.appendChild(o);
+  }
   document.querySelector("[data-action='merge-file-filter-toggle']").addEventListener("click", (e) => {
     e.stopPropagation();
     const existing = document.getElementById("merge_file_filter_popup");
-    if (existing) { existing.remove(); return; }
+    if (existing) { _removeMergePopup("merge_file_filter_popup", "merge_file_filter_overlay"); return; }
+    _mergePopupOverlay("merge_file_filter_overlay");
     const popup = document.createElement("div");
     popup.id = "merge_file_filter_popup";
     Object.assign(popup.style, {
@@ -269,7 +280,7 @@ function buildMergeTab(panel) {
     closeBtn.textContent = "✕";
     closeBtn.title = "关闭";
     Object.assign(closeBtn.style, {background:"none", border:"none", color:"var(--dim)", fontSize:"15px", cursor:"pointer", lineHeight:"1", padding:"0"});
-    closeBtn.addEventListener("click", (ev) => { ev.stopPropagation(); popup.remove(); });
+    closeBtn.addEventListener("click", (ev) => { ev.stopPropagation(); _removeMergePopup("merge_file_filter_popup", "merge_file_filter_overlay"); });
     headRow.appendChild(title);
     headRow.appendChild(closeBtn);
     popup.appendChild(headRow);
@@ -344,7 +355,8 @@ function buildMergeTab(panel) {
   document.querySelector("[data-action='merge-revert-exclude-toggle']").addEventListener("click", (e) => {
     e.stopPropagation();
     const existing = document.getElementById("merge_revert_exclude_popup");
-    if (existing) { existing.remove(); return; }
+    if (existing) { _removeMergePopup("merge_revert_exclude_popup", "merge_revert_exclude_overlay"); return; }
+    _mergePopupOverlay("merge_revert_exclude_overlay");
     const popup = document.createElement("div");
     popup.id = "merge_revert_exclude_popup";
     Object.assign(popup.style, {
@@ -391,12 +403,12 @@ function buildMergeTab(panel) {
       var txt = document.getElementById("merge_exclude_input").value.trim();
       var arr = txt ? txt.split(",").map(function(s){return s.trim();}).filter(Boolean) : [];
       saveConfig({merge_revert_exclude_paths: arr});
-      popup.remove();
+      _removeMergePopup("merge_revert_exclude_popup", "merge_revert_exclude_overlay");
     };
     var closeBtn = document.createElement("button");
     closeBtn.textContent = "关闭";
     closeBtn.className = "btn btn-normal";
-    closeBtn.onclick = function() { popup.remove(); };
+    closeBtn.onclick = function() { _removeMergePopup("merge_revert_exclude_popup", "merge_revert_exclude_overlay"); };
     btnRow.appendChild(saveBtn);
     btnRow.appendChild(closeBtn);
     popup.appendChild(btnRow);

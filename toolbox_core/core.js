@@ -1464,10 +1464,18 @@ function _browseDirAppend(inputId) {
 }
 
 let advModal = null;
+let advOverlay = null;
 
 function openAdvSettings() {
 
   if (!advModal) {
+
+    if (!advOverlay) {
+      advOverlay = document.createElement("div");
+      advOverlay.id = "adv_modal_overlay";
+      advOverlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:999;display:none";
+      document.body.appendChild(advOverlay);
+    }
 
     advModal = document.createElement("div");
 
@@ -1598,6 +1606,7 @@ function openAdvSettings() {
 
   advRefreshPresetList();
 
+  advOverlay.style.display = "block";
   advModal.style.display = "flex";
 
 }
@@ -1808,6 +1817,7 @@ function delAdvFilePreset() {
 
 function closeAdvSettings() {
 
+  advOverlay.style.display = "none";
   advModal.style.display = "none";
 
 }

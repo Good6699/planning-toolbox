@@ -102,6 +102,20 @@ const tabMeta = {
 
 };
 
+// 切换页签时，SVN 记录 / 语义合并的时间范围自动重置为当天
+function _resetTabDateToToday(key) {
+  if (key !== "svn" && key !== "merge") return;
+  const n = new Date();
+  const y = n.getFullYear(), m = n.getMonth(), d = n.getDate();
+  ["start", "end"].forEach(function(sfx) {
+    const inp = document.getElementById(key + "_" + sfx);
+    if (!inp) return;
+    // 日期选择器初始化后暴露 _dpSet，能同时更新输入框值与内部选中状态
+    if (inp._dpSet) inp._dpSet(y, m, d);
+    else inp.value = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  });
+}
+
 function switchTab(key) {
 
   nav.forEach(n => {
@@ -131,6 +145,9 @@ function switchTab(key) {
     buildTab(key);
 
   }
+
+  // 切换页签后时间范围重置为当天（SVN 记录 / 语义合并）
+  _resetTabDateToToday(key);
 
   // 切换页签时把日志区域滚动到底部
   requestAnimationFrame(scrollLogToBottom);
@@ -178,7 +195,7 @@ function buildTab(key) {
 
   function _finishBuildTab(k) {
     if (k === "svn" || k === "merge") {
-      setTimeout(function(){_initDatePicker(k+"_start");_initDatePicker(k+"_end")}, 0);
+      setTimeout(function(){_initDatePicker(k+"_start");_initDatePicker(k+"_end");_resetTabDateToToday(k);}, 0);
     }
     S[k].built = true;
     scrollLogToBottom();

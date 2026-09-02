@@ -1152,6 +1152,9 @@ def _parse_excel_lxml(raw_bytes: bytes, rev: int,
                 continue
         if not target.endswith(".xml"):
             target = target + ".xml"
+        # 兼容 rels 目标两种写法：绝对式（/xl/...）与相对式（worksheets/...）。
+        # 先去前导斜杠/点，避免拼出 xl//xl/... 导致 zf.open KeyError。
+        target = target.lstrip("/").lstrip(".")
         if not target.startswith("xl/"):
             target = "xl/" + target
 

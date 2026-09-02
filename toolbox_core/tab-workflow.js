@@ -463,7 +463,8 @@ function buildWorkflowTab(panel) {
       merge_error_code: `
         ${_fb("源路径","src_path","wf_m_mec_src","dir",false,"输入错误码源文件所在目录")}
         ${_fb("目标路径","tgt_path","wf_m_mec_tgt","dir",false,"输入要合入到的目标目录")}
-        <div class="form-group"><label>语言代码（留空自动识别）</label><input type="text" class="wf-modal-input" id="wf_m_mec_lang" data-key="lang_codes" value="${v("lang_codes")}" placeholder="输入语言代码，多个用逗号分隔，留空自动识别"></div>`,
+        <input type="hidden" class="wf-modal-input" id="wf_m_mec_lang" data-key="lang_codes" value="${v("lang_codes")}">
+        <div class="form-group"><label>语言（自动扫描源路径 Language 子目录，勾选合并）</label><div id="wf_lang_list_mec" class="wf-lang-list"></div></div>`,
       consolidate: `
         ${_fb("来源路径（逗号分隔）","src_dir","wf_m_co_src","dir",true,"输入文件来源目录，多个用逗号分隔")}
         ${_fb("目标路径","tgt_dir","wf_m_co_tgt","dir",false,"输入 SVN 工作副本目标目录")}
@@ -720,11 +721,13 @@ function buildWorkflowTab(panel) {
       // 新增步骤挂起时从 newStep 取类型；已有步骤从配置取
       step = _modalCtx.isNew ? _modalCtx.newStep : config.workflows[_modalCtx.wfIdx]?.steps?.[_modalCtx.stepIdx];
     }
-    // 导出错误码 / 录入错误码：语言改为勾选，自动扫描
-    if (step && (step.type === "export_error_code" || step.type === "error_code_entry")) {
+    // 导出错误码 / 录入错误码 / 整合错误码：语言改为勾选，自动扫描
+    if (step && ["export_error_code", "error_code_entry", "merge_error_code"].includes(step.type)) {
       const cfg = step.type === "export_error_code"
         ? {base:"wf_m_root_dir", hidden:"wf_m_ec_lang", list:"wf_lang_list_ec"}
-        : {base:"wf_m_ece_target", hidden:"wf_m_ece_lang", list:"wf_lang_list_ece"};
+        : step.type === "error_code_entry"
+        ? {base:"wf_m_ece_target", hidden:"wf_m_ece_lang", list:"wf_lang_list_ece"}
+        : {base:"wf_m_mec_src", hidden:"wf_m_mec_lang", list:"wf_lang_list_mec"};
       const baseEl = document.getElementById(cfg.base);
       _wfLoadLangList(cfg.list, cfg.base, cfg.hidden);
       if (baseEl) baseEl.addEventListener("blur", () => _wfLoadLangList(cfg.list, cfg.base, cfg.hidden));

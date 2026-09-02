@@ -353,7 +353,8 @@ function buildWorkflowTab(panel) {
     }
     Object.assign(step, nextStep);
     const autoName = _wfAutoName(step);
-    if (!step.custom_name && autoName) step.name = autoName;
+    const _forceAutoName = step.type === "export_error_code" || step.type === "error_code_entry";
+    if (autoName && (!step.custom_name || _forceAutoName)) step.name = autoName;
     saveConfig({workflows:config.workflows});
     overlay.classList.remove("show");
     _modalCtx = null;
@@ -385,7 +386,8 @@ function buildWorkflowTab(panel) {
       step[inp.dataset.key] = inp.checked;
     });
     const autoName = _wfAutoName(step);
-    if (!step.custom_name && autoName) step.name = autoName;
+    const _forceAutoName = step.type === "export_error_code" || step.type === "error_code_entry";
+    if (autoName && (!step.custom_name || _forceAutoName)) step.name = autoName;
     saveConfig({workflows:config.workflows});
     _wfSaving = false;
     const childEl = document.querySelector(`.wf-parent[data-idx="${wfIdx}"] .wf-child[data-step="${stepIdx}"] .wf-child-name`);
@@ -428,18 +430,19 @@ function buildWorkflowTab(panel) {
         ${_fb("目标文件","original_file","wf_m_orig_file","file",false,"输入要合入翻译的目标文件")}`,
       export_error_code: `
         ${_fb("根目录","root_dir","wf_m_root_dir","dir",false,"输入错误码文件所在的根目录")}
-        <div class="form-group"><label>语言代码</label><input type="text" class="wf-modal-input" id="wf_m_ec_lang" data-key="lang_codes" value="${v("lang_codes")}" placeholder="输入语言代码，多个用逗号分隔，留空自动识别"></div>
+        <input type="hidden" class="wf-modal-input" id="wf_m_ec_lang" data-key="lang_codes" value="${v("lang_codes")}">
+        <div class="form-group"><label>语言（自动扫描根目录 Language 子目录，勾选导出）</label><div id="wf_lang_list_ec" class="wf-lang-list"></div></div>
         ${_fb("上传SVN目录","upload_svn_dir","wf_m_upload_svn_dir_ec","dir",true,"输入导出后要上传的本地SVN路径，多个用逗号分隔")}`,
       lock_svn: `
         ${_fb("目标文件路径","target_path","wf_m_target_path","file",false,"输入要锁定的文件路径")}
         <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="锁定前先更新的目录，多个用逗号分隔"></div>
         <div class="form-group"><label>锁定消息</label><input type="text" class="wf-modal-input" id="wf_m_lock_msg" data-key="lock_msg" value="${v("lock_msg")}" placeholder="输入 SVN 锁定的说明信息"></div>`,
       unlock_svn: `
-        ${_fb("目标路径（逗号分隔）","target_path","wf_m_target_path","file",true,"输入要解锁的文件或文件夹路径，多个用逗号分隔；文件夹将解锁其中本人锁定的全部文件")}
-        <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="解锁前先更新的目录，多个用逗号分隔"></div>
-        <div class="form-group"><label>解锁消息</label><input type="text" class="wf-modal-input" id="wf_m_lock_msg" data-key="lock_msg" value="${v("lock_msg")}" placeholder="输入 SVN 解锁的说明信息"></div>`,
+        ${_fb("目标路径（逗号分隔）","target_path","wf_m_target_path","file",true,"输入要解锁的文件或文件夹路径，多个用逗号分隔；文件夹将解锁其中本人锁定的全部文件")}`,
       open_tables: `
-        <div class="form-group"><label>文件路径（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_file_paths" data-key="file_paths" value="${v("file_paths")}" placeholder="输入要打开的 Excel 文件路径，多个用逗号分隔"></div>`,
+        <div class="form-group"><label>文件路径（逗号分隔）</label>
+          <div class="flex-row"><input type="text" class="wf-modal-input" id="wf_m_file_paths" data-key="file_paths" value="${v("file_paths")}" style="flex:1" placeholder="输入要打开的 Excel 文件路径，多个用逗号分隔">
+          <button class="btn btn-normal btn-sm" onclick="_browseFileAppend('wf_m_file_paths')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button></div></div>`,
       revert_svn: `
         <div class="form-group"><label>回退路径（逗号分隔）</label>
           <div class="flex-row"><input type="text" class="wf-modal-input" id="wf_m_rv_paths" data-key="revert_paths" value="${v("revert_paths")}" style="flex:1" placeholder="输入要回退的目录或文件路径，多个用逗号分隔">
@@ -479,13 +482,21 @@ function buildWorkflowTab(panel) {
       error_code_entry: `
         ${_fb("翻译文件","translation_file","wf_m_ece_input","file",false,"输入包含错误码翻译的 Excel 文件路径")}
         ${_fb("目标路径","target_path","wf_m_ece_target","dir",false,"输入 gameData 所在目录（自动找 Language 子目录）")}
-        <div class="form-group"><label>语言代码</label><input type="text" class="wf-modal-input" id="wf_m_ece_lang" data-key="lang_codes" value="${v("lang_codes")}" placeholder="输入语言代码，多个用逗号分隔，留空自动匹配"></div>
+        <input type="hidden" class="wf-modal-input" id="wf_m_ece_lang" data-key="lang_codes" value="${v("lang_codes")}">
+        <div class="form-group"><label>语言（自动扫描目标 Language 子目录，勾选导出）</label><div id="wf_lang_list_ece" class="wf-lang-list"></div></div>
         ${_fb("上传SVN路径（逗号分隔）","upload_svn_dir","wf_m_ece_upload","dir",true,"输入导出后要上传的本地SVN路径，多个用逗号分隔")}`,
     };
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
   }
 
-  function _wfHistoryPool(key, browse) {
+  function _wfHistoryKey(pool) {
+    // 名称以 svn_ 开头的池直接对应 SVN记录页签共享历史（svn_author_history / svn_keyword_history）
+    return pool.startsWith("svn_") ? pool : "_" + pool;
+  }
+  function _wfHistoryPool(key, browse, id) {
+    // 快速整合/合并配置：作者/提交备注与 SVN记录页签共享历史
+    if (["wf_m_co_author", "wf_m_mc_author"].includes(id)) return "svn_author_history";
+    if (["wf_m_co_msg", "wf_m_mc_msg"].includes(id)) return "svn_keyword_history";
     // 4 池语义分类：目录路径 / 文件路径 / 提交信息 / 配置文本；数字等字段不设历史
     if (browse === "dir") return "wf_history_dirs";
     if (browse === "file") return "wf_history_files";
@@ -499,14 +510,14 @@ function buildWorkflowTab(panel) {
   }
   function _wfHistorySave(pool, val) {
     if (!val.trim()) return;
-    const key = "_" + pool;
+    const key = _wfHistoryKey(pool);
     const arr = config[key] || [];
     const updated = [val, ...arr.filter(v => v !== val)].slice(0, 30);
     config[key] = updated;
     saveConfig({[key]: updated});
   }
   function _wfHistoryShow(inp, pool) {
-    const key = "_" + pool;
+    const key = _wfHistoryKey(pool);
     const items = config[key] || [];
     if (!items.length) return;
     if (_wfHistoryDd) _wfHistoryDd.remove();
@@ -642,6 +653,41 @@ function buildWorkflowTab(panel) {
     delete config._wf_history_texts;
   }
 
+  // 导出/录入错误码：按根目录/目标路径自动扫描 Language 子目录，渲染语言勾选列表，同步隐藏 lang_codes
+  async function _wfLoadLangList(containerId, baseInputId, hiddenId) {
+    const container = document.getElementById(containerId);
+    const base = document.getElementById(baseInputId);
+    const hidden = document.getElementById(hiddenId);
+    if (!container || !base) return;
+    const path = base.value.trim();
+    const initCodes = (hidden && hidden.value) ? hidden.value.split(",").map(s => s.trim()).filter(Boolean) : [];
+    if (!path) { container.innerHTML = '<div class="wf-lang-empty">请先填写上方路径</div>'; return; }
+    container.innerHTML = '<div class="wf-lang-empty">扫描中…</div>';
+    try {
+      const r = await fetch("/api/workflow/scan-langs", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({path})});
+      const d = await r.json();
+      if (d.error) { container.innerHTML = '<div class="wf-lang-empty">' + escapeHtml(d.error) + '</div>'; return; }
+      const langs = d.langs || [];
+      if (!langs.length) { container.innerHTML = '<div class="wf-lang-empty">未找到语言子目录</div>'; return; }
+      const setHidden = () => {
+        if (!hidden) return;
+        const checked = [...container.querySelectorAll("input[type=checkbox]:checked")].map(cb => cb.value);
+        hidden.value = checked.join(",");
+      };
+      container.innerHTML = langs.map(code =>
+        `<label><input type="checkbox" value="${escapeHtml(code)}" ${initCodes.includes(code) ? 'checked' : ''}><span>${escapeHtml(code)}</span></label>`
+      ).join("");
+      container.querySelectorAll("input[type=checkbox]").forEach(cb => cb.addEventListener("change", () => {
+        setHidden();
+        // 勾选调整后自动刷新工作流名称（步骤名取自 lang_codes）；直接调用闭包内函数，避免全局引用时序问题
+        _wfModalAutoSave();
+      }));
+      setHidden();
+    } catch (_) {
+      container.innerHTML = '<div class="wf-lang-empty">扫描失败</div>';
+    }
+  }
+
   function _wfModalAfterOpen() {
     _wfMigrateLegacyHistory();
     modalBody.querySelectorAll("[id^=wf_m_]").forEach(inp => {
@@ -650,7 +696,7 @@ function buildWorkflowTab(panel) {
     modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
       const key = inp.dataset.key;
       if (!key) return;
-      const pool = _wfHistoryPool(key, inp.dataset.browse);
+      const pool = _wfHistoryPool(key, inp.dataset.browse, inp.id);
       if (!pool) return; // 数字等字段无历史
       inp.addEventListener("focus", () => {
         _wfHistoryShow(inp, pool);
@@ -661,6 +707,15 @@ function buildWorkflowTab(panel) {
       });
     });
     const step = _modalCtx ? config.workflows[_modalCtx.wfIdx]?.steps?.[_modalCtx.stepIdx] : null;
+    // 导出错误码 / 录入错误码：语言改为勾选，自动扫描
+    if (step && (step.type === "export_error_code" || step.type === "error_code_entry")) {
+      const cfg = step.type === "export_error_code"
+        ? {base:"wf_m_root_dir", hidden:"wf_m_ec_lang", list:"wf_lang_list_ec"}
+        : {base:"wf_m_ece_target", hidden:"wf_m_ece_lang", list:"wf_lang_list_ece"};
+      const baseEl = document.getElementById(cfg.base);
+      _wfLoadLangList(cfg.list, cfg.base, cfg.hidden);
+      if (baseEl) baseEl.addEventListener("blur", () => _wfLoadLangList(cfg.list, cfg.base, cfg.hidden));
+    }
   }
 
   document.getElementById("wf_modal_close").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } });
@@ -1150,7 +1205,7 @@ function _wfAutoName(step) {
     return i >= 0 ? p.substring(i + 1) : p;
   }
   if (t === "error_code_entry") {
-    return step.target_path || "";
+    return step.lang_codes || step.target_path || "";
   }
   return "";
 }

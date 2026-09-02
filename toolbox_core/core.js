@@ -1480,6 +1480,32 @@ function _browseDirAppend(inputId) {
 
 }
 
+async function _browseFileAppend(inputId) {
+
+  if (window.pywebview && pywebview.api && pywebview.api.browseFile) {
+
+    try {
+
+      const path = await pywebview.api.browseFile("");
+
+      if (path) {
+
+        const inp = document.getElementById(inputId);
+
+        const oldPaths = inp.value.trim().split(",").map(s => s.trim()).filter(Boolean);
+
+        inp.value = oldPaths.includes(path) ? oldPaths.join(", ") : [...oldPaths, path].join(", ");
+
+        if (typeof window._wfModalAutoSave === "function") window._wfModalAutoSave();
+
+      }
+
+    } catch (e) { _showToast("browseFile error: " + e.message); }
+
+  }
+
+}
+
 let advModal = null;
 let advOverlay = null;
 

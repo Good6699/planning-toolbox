@@ -1942,6 +1942,37 @@ def api_workflow_scan_project_roots():
                     "error": _project_roots_cache.get("error")})
 
 
+def _resolve_lang_dir(base):
+    """从路径解析出 Language 目录（根目录含 Language，或根目录下有 gameData\\Language）。"""
+    base = os.path.abspath(base)
+    if base.endswith("Language") and os.path.isdir(base):
+        return base
+    test = os.path.join(base, "Language")
+    if os.path.isdir(test):
+        return test
+    test = os.path.join(base, "gameData", "Language")
+    if os.path.isdir(test):
+        return test
+    return None
+
+
+@app.route("/api/workflow/scan-langs", methods=["POST"])
+def api_workflow_scan_langs():
+    """扫描指定路径下的 Language 子目录，返回语言代码列表。"""
+    data = request.get_json(force=True)
+    path = (data.get("path") or "").strip()
+    if not path:
+        return jsonify({"langs": [], "error": "未指定路径"})
+    lang_dir = _resolve_lang_dir(path)
+    if not lang_dir:
+        return jsonify({"langs": [], "error": "未找到 Language 目录"})
+    try:
+        langs = [d for d in os.listdir(lang_dir) if os.path.isdir(os.path.join(lang_dir, d))]
+    except OSError:
+        return jsonify({"langs": [], "error": "读取 Language 目录失败"})
+    return jsonify({"langs": sorted(langs, key=lambda s: s.lower())})
+
+
 @app.route("/api/workflow/open-update-wc", methods=["POST"])
 def api_workflow_open_update_wc():
     data = request.get_json(force=True)

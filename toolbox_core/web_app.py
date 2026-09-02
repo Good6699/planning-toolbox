@@ -594,7 +594,7 @@ def _svn_update_first(q, target_dir):
             q.put(f"  → {msg}\n")
 
 
-def _run_svn_after_upload(q, target_dir, copied_files, commit_path=None):  # noqa: C901
+def _run_svn_after_upload(q, target_dir, copied_files, commit_path=None, task_id=None):  # noqa: C901
     q.put(f"\n{'─'*40}\n")
     q.put("开始SVN上传\n")
 
@@ -787,7 +787,7 @@ def _run_upload_copy(src, tgt, files, q, task_id):
     q.put(f"\n── 文件复制完成: {success} 成功, {fail} 失败 ──\n")
 
     if success > 0:
-        _run_svn_after_upload(q, tgt, copied_files)
+        _run_svn_after_upload(q, tgt, copied_files, task_id=task_id)
 
     _notify_task_done("上传SVN")
     q.put(None)
@@ -1814,6 +1814,134 @@ def _run_wf_task(q, wf, steps, task_id, skip_lock=False, cfg=None):
     _log_queues.pop(task_id, None)
 
 
+# ── 复制工作流前缀候选：项目根扫描 ──────────────────────────────
+_ROOT_MARKERS = {"client", "gamedata", "tools"}
+# 常见系统/无意义目录，跳过以加快扫描且避免进入不可能出现项目根的目录
+_SKIP_DIR_NAMES = {"$recycle.bin", "system volume information", "windows", "windows.old",
+                   "$windows.~bt", "$windows.~ws", "recovery", "program files", "program files (x86)", "programdata"}
+# 扫描时排除的盘符（格式为 "C:"）
+_EXCLUDE_DRIVES = {"C:"}
+_project_roots_cache = {"status": "idle", "roots": [], "scanning": False}
+
+
+def _get_local_drives():
+    """枚举本地固定/可移动盘符，跳过 CD/DVD、网络映射盘。"""
+    GetDriveTypeW = None
+    try:
+        import ctypes
+        GetDriveTypeW = ctypes.windll.kernel32.GetDriveTypeW
+    except Exception:
+        GetDriveTypeW = None
+    drives = []
+    for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+        root = f"{letter}:\\"
+        if f"{letter}:" in _EXCLUDE_DRIVES:
+            continue
+        if not os.path.exists(root):
+            continue
+        if GetDriveTypeW is not None:
+            try:
+                dtype = GetDriveTypeW(root)
+            except Exception:
+                dtype = None
+            # DRIVE_FIXED=3 DRIVE_REMOVABLE=2；跳过 DRIVE_CDROM=5 DRIVE_REMOTE=4
+            if dtype is not None and dtype not in (2, 3):
+                continue
+        drives.append(letter + ":")
+    return drives
+
+
+def _is_project_root_candidate(path, entries):
+    """目录是否为候选项目根：含 Client/gameData/tools 子目录，且为真实 SVN 工作副本——兼顾两种布局：
+    ① 根目录自身含 .svn（单 WC 根）；② 任一标记子目录内含 .svn（多独立 WC 根）。"""
+    marker_dirs = []
+    for e in entries:
+        if e.lower() in _ROOT_MARKERS:
+            p = os.path.join(path, e)
+            if os.path.isdir(p):
+                marker_dirs.append(p)
+    if not marker_dirs:
+        return False
+    if os.path.isdir(os.path.join(path, ".svn")):
+        return True
+    for md in marker_dirs:
+        if os.path.isdir(os.path.join(md, ".svn")):
+            return True
+    return False
+
+
+def _walk_project_roots(path, depth, max_depth, found):
+    """递归枚举目录（深度从盘根算起，根=1），命中候选项目根则加入 found。不深入标记内容树与 .svn。"""
+    if depth > max_depth:
+        return
+    try:
+        entries = os.listdir(path)
+    except (OSError, PermissionError):
+        return
+    if _is_project_root_candidate(path, entries):
+        found.add(path)
+    if depth >= max_depth:
+        return
+    for e in entries:
+        low = e.lower()
+        if low in _ROOT_MARKERS or low == ".svn" or low in _SKIP_DIR_NAMES:
+            continue
+        full = os.path.join(path, e)
+        try:
+            if os.path.isdir(full):
+                _walk_project_roots(full, depth + 1, max_depth, found)
+        except OSError:
+            pass
+
+
+def _scan_project_roots(max_depth=5):
+    """遍历本地磁盘收集候选项目根；为提速并避免内容树误判，按盘并行扫描。"""
+    drives = _get_local_drives()
+
+    def scan_drive(drive):
+        found = set()
+        _walk_project_roots(drive + "\\", 1, max_depth, found)
+        return found
+
+    all_found = set()
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(drives) or 1) as ex:
+            for sub in ex.map(scan_drive, drives):
+                all_found |= sub
+    except Exception:
+        # 并行失败则退化为串行兜底
+        for drive in drives:
+            all_found |= scan_drive(drive)
+    return sorted(all_found, key=lambda s: s.lower())
+
+
+def _run_project_roots_scan():
+    if _project_roots_cache.get("scanning"):
+        return
+    _project_roots_cache["scanning"] = True
+    _project_roots_cache["status"] = "scanning"
+    try:
+        _project_roots_cache["roots"] = _scan_project_roots()
+        _project_roots_cache["status"] = "done"
+        _project_roots_cache.pop("error", None)
+    except Exception as e:
+        _project_roots_cache["roots"] = []
+        _project_roots_cache["status"] = "error"
+        _project_roots_cache["error"] = str(e)
+    finally:
+        _project_roots_cache["scanning"] = False
+
+
+@app.route("/api/workflow/scan-project-roots", methods=["GET", "POST"])
+def api_workflow_scan_project_roots():
+    if request.method == "POST":
+        # 应用启动时触发一次后台扫描（幂等；每次启动仅调用一次）
+        threading.Thread(target=_run_project_roots_scan, daemon=True).start()
+    return jsonify({"status": _project_roots_cache.get("status", "idle"),
+                    "roots": _project_roots_cache.get("roots", []),
+                    "error": _project_roots_cache.get("error")})
+
+
 @app.route("/api/workflow/open-update-wc", methods=["POST"])
 def api_workflow_open_update_wc():
     data = request.get_json(force=True)
@@ -2010,7 +2138,7 @@ def _exec_export_text(step, put, task_id=None):
             stderr_thread.join(timeout=5)
             # 打印 stderr 内容（如果有）
             if _stderr_lines:
-                put(f"  --- stderr 输出 ---\n")
+                put("  --- stderr 输出 ---\n")
                 for err_line in _stderr_lines:
                     try:
                         raw = err_line.rstrip()
@@ -2043,7 +2171,7 @@ def _exec_export_text(step, put, task_id=None):
 
     # 导出成功后，如果有配置上传SVN目录，执行上传
     if upload_svn_dirs:
-        put(f"\n导出完成，执行上传\n")
+        put("\n导出完成，执行上传\n")
         _exec_upload_svn({"dirs": upload_svn_dirs}, put, task_id)
 
     return True
@@ -2152,7 +2280,7 @@ def _exec_copy_files(step, put, task_id=None):
         return False
 
     put(f"{'='*50}\n")
-    put(f"整合文字表\n")
+    put("整合文字表\n")
     put(f"源目录: {src_dir}\n")
     put(f"目标目录: {tgt_dir}\n\n")
 
@@ -2223,7 +2351,7 @@ def _exec_copy_files(step, put, task_id=None):
     # ── 5. svn lock ──
     lock_file = os.path.join(base_path, "gameData", "Text", "Texts.xlsm")
     if os.path.isfile(lock_file):
-        put(f"正在锁定: Texts.xlsm\n")
+        put("正在锁定: Texts.xlsm\n")
         if not _exec_lock_svn({"target_path": lock_file, "lock_msg": "整合文字表前锁定", "update_dirs": []}, put, task_id):
             return False
     else:
@@ -2278,7 +2406,7 @@ def _exec_copy_files(step, put, task_id=None):
                 stderr_thread.join(timeout=5)
                 # 打印 stderr 内容（如果有）
                 if _stderr_lines:
-                    put(f"  --- stderr 输出 ---\n")
+                    put("  --- stderr 输出 ---\n")
                     for err_line in _stderr_lines:
                         try:
                             raw = err_line.rstrip()
@@ -2312,7 +2440,7 @@ def _exec_copy_files(step, put, task_id=None):
     # ── 7. 上传 ──
     valid_upload = [up for up in upload_paths if os.path.isdir(up)]
     if valid_upload:
-        put(f"\n导出完成，执行上传\n")
+        put("\n导出完成，执行上传\n")
         _exec_upload_svn({"dirs": valid_upload}, put, task_id)
 
     return True
@@ -2401,8 +2529,8 @@ def _svn_update_with_cleanup(svn, d, put, task_id, accept_mine=False):  # noqa: 
                     if line:
                         put(f"  {line}\n")
                 if accept_mine:
-                    cfiles = [l[2:].strip() for l in stdout.splitlines()
-                              if l.strip().startswith("C ") and not l.strip().startswith(("C Summary","C Text","C Property"))]
+                    cfiles = [line[2:].strip() for line in stdout.splitlines()
+                              if line.strip().startswith("C ") and not line.strip().startswith(("C Summary", "C Text", "C Property"))]
                     cfiles = [f for f in cfiles if f]
                     if cfiles:
                         put(f"  ⚠ 以下 {len(cfiles)} 个文件存在冲突，已自动保留本地版本:\n")
@@ -2445,8 +2573,8 @@ def _svn_update_with_cleanup(svn, d, put, task_id, accept_mine=False):  # noqa: 
                                 if line:
                                     put(f"  {line}\n")
                             if accept_mine:
-                                cfiles = [l[2:].strip() for l in retry_stdout.splitlines()
-                                          if l.strip().startswith("C ") and not l.strip().startswith(("C Summary","C Text","C Property"))]
+                                cfiles = [line[2:].strip() for line in retry_stdout.splitlines()
+                                          if line.strip().startswith("C ") and not line.strip().startswith(("C Summary", "C Text", "C Property"))]
                                 cfiles = [f for f in cfiles if f]
                                 if cfiles:
                                     put(f"  ⚠ 以下 {len(cfiles)} 个文件存在冲突，已自动保留本地版本:\n")
@@ -3811,7 +3939,7 @@ def _exec_error_code_entry(step, put, task_id=None):
                         id_to_row[id_str] = r
 
             if end_row is None:
-                put(f"  ⚠ 未找到 END 标记，跳过\n")
+                put("  ⚠ 未找到 END 标记，跳过\n")
                 ec_wb.close()
                 continue
 
@@ -3837,7 +3965,7 @@ def _exec_error_code_entry(step, put, task_id=None):
 
             if updated == 0 and inserted == 0:
                 ec_wb.close()
-                put(f"  ✓ 无需更新\n")
+                put("  ✓ 无需更新\n")
             else:
                 ec_wb.save(xlsm_path)
                 ec_wb.close()
@@ -4263,7 +4391,7 @@ def _find_and_update_gamedata(file_path, put, task_id):
         if parent == d:
             break
         d = parent
-    put(f"未找到 gameData 目录，跳过更新\n")
+    put("未找到 gameData 目录，跳过更新\n")
 
 
 def _exec_export_error_code(step, put, task_id=None):
@@ -4375,7 +4503,8 @@ def _exec_export_error_code(step, put, task_id=None):
 
         put("  [" + code + "] 客户端导出...\n")
         try:
-            import tempfile, shutil
+            import tempfile
+            import shutil
             proto_dir = os.path.join(lang_path, "protobuf")
             proto_out = os.path.join(proto_dir, "proto", "out")
             # 检测分支类型：Asia 的 __init__.py 含 from importlib import reload（Python3）
@@ -4390,7 +4519,7 @@ def _exec_export_error_code(step, put, task_id=None):
                 _f.write('@echo off\r\n')
                 _f.write(f'cd /d "{lang_path}"\r\n')
                 _f.write(f'call "{os.path.join(lang_path, "config.bat")}"\r\n')
-                _f.write(f'cd %MASTER_DATA%\r\ncd protobuf\r\n')
+                _f.write('cd %MASTER_DATA%\r\ncd protobuf\r\n')
                 if _py3_init:
                     # Asia：走完整工具链（make_gamedata_exe.bat 含 make_ready+ExportXlsmToPB）
                     _f.write(f'call "{os.path.join(lang_path, "protobuf", "make_gamedata_exe.bat")}" "{xlsm_file}"\r\n')
@@ -4481,7 +4610,7 @@ def _exec_export_error_code(step, put, task_id=None):
     if isinstance(upload_svn_dirs, str):
         upload_svn_dirs = [d.strip() for d in upload_svn_dirs.split(",") if d.strip()]
     if ok_count > 0 and upload_svn_dirs:
-        put(f"\n导出完成，执行上传\n")
+        put("\n导出完成，执行上传\n")
         _exec_upload_svn({"dirs": upload_svn_dirs}, put, task_id)
 
     return ok_count == len(codes)

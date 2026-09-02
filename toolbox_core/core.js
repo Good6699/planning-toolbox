@@ -3431,7 +3431,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
 // 界面完全打开后再检查更新（避免阻塞启动）
 (function() {
-  function onAppReady() { setTimeout(checkUpdate, 1000); checkSvnCred(); }
+  function onAppReady() { setTimeout(checkUpdate, 1000); checkSvnCred(); setTimeout(_triggerPrefixScan, 3000); }
   if (document.body.classList.contains("app-ready")) {
     onAppReady();
   } else {
@@ -3443,6 +3443,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     }).observe(document.body, {attributes: true, attributeFilter: ["class"]});
   }
 })();
+
+// 启动后延迟触发：后台扫描一次本地项目根，供「复制工作流」前缀下拉候选使用
+function _triggerPrefixScan() {
+  try {
+    fetch("/api/workflow/scan-project-roots", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"}).catch(() => {});
+  } catch (_) {}
+}
 
 // ── SVN 凭证强制验证弹窗（启动时验证失败弹出，必须验证通过才能使用）──
 async function checkSvnCred() {

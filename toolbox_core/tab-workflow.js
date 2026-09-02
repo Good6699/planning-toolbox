@@ -996,14 +996,14 @@ function _wfShowPrefixModal(prefixes, onConfirm) {
   const overlay = document.createElement("div");
   overlay.className = "wf-modal-overlay";
   overlay.style.display = "flex";
-  overlay.innerHTML = `<div class="wf-modal" style="max-width:560px">
+  overlay.innerHTML = `<div class="wf-modal" style="max-width:640px">
     <div class="wf-modal-header"><h3>路径前缀替换</h3><button class="wf-modal-close" id="_pfx_close">✕</button></div>
     <div class="wf-modal-body" style="font-size:13px">
-      <p style="color:var(--dim);margin-bottom:12px">检测到以下路径前缀，输入替换内容后复制（留空则不替换该前缀）：</p>
-      ${prefixes.map(p => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <p style="color:var(--dim);margin-bottom:12px">检测到以下路径前缀，直接填写替换内容；或点击输入框弹出候选项目根下拉选择（留空则不替换该前缀）：</p>
+      ${prefixes.map((p, i) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <code style="flex-shrink:0;background:rgba(255,255,255,.04);padding:4px 8px;border-radius:4px;font-size:12px">${escapeHtml(p)}</code>
         <span style="color:var(--dim)">→</span>
-        <input class="_pfx_input" data-old="${escapeHtml(p)}" type="text" placeholder="输入替换后的路径，留空不替换" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:#090b10;color:#e0e0e0;font-size:13px">
+        <input class="_pfx_input" id="_pfx_${i}" data-old="${escapeHtml(p)}" type="text" autocomplete="off" placeholder="输入替换后的路径，留空不替换" style="flex:1;min-width:0;height:36px;padding:0 10px;border-radius:8px;border:1px solid #2a3040;background:#0e1219;color:#fff;font-size:13px">
       </div>`).join("")}
     </div>
     <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
@@ -1023,6 +1023,44 @@ function _wfShowPrefixModal(prefixes, onConfirm) {
     overlay.remove();
     onConfirm(map);
   };
+  _wfFillPrefixCandidates(overlay);
+}
+// 复制工作流弹窗：把后台扫描到的项目根候选，挂到各输入框的点击下拉（与 SVN 地址输入框同款）
+let _pfxCandidatesTimer = null;
+function _wfFillPrefixCandidates(overlay) {
+  clearInterval(_pfxCandidatesTimer);
+  _pfxCandidatesTimer = null;
+  const inputs = overlay.querySelectorAll("._pfx_input");
+  if (!inputs.length) return;
+  const setPlaceholder = (txt) => inputs.forEach(i => i.setAttribute("placeholder", txt));
+  const applyResult = (d) => {
+    if (d.status !== "done" && d.status !== "error") return false;
+    const roots = (d.roots || []).slice();
+    inputs.forEach(inp => {
+      if (inp.id) initSuggest(inp.id, roots, true);
+      if (document.activeElement === inp) _showSuggest(inp.id, true);
+    });
+    setPlaceholder("输入替换后的路径，留空不替换");
+    return true;
+  };
+  setPlaceholder("后台扫描中，稍候点击输入框可下拉选择…");
+  // 首次读取：若仍 idle（启动 POST 还没触发），先兜底触发一次扫描
+  fetch("/api/workflow/scan-project-roots").then(r => r.json()).then(d => {
+    if (applyResult(d)) return;
+    if (d.status === "idle") {
+      fetch("/api/workflow/scan-project-roots", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"}).catch(() => {});
+    }
+    _pfxCandidatesTimer = setInterval(async () => {
+      if (!document.body.contains(overlay)) { clearInterval(_pfxCandidatesTimer); _pfxCandidatesTimer = null; return; }
+      try {
+        const rr = await fetch("/api/workflow/scan-project-roots");
+        const d2 = await rr.json();
+        if (applyResult(d2)) { clearInterval(_pfxCandidatesTimer); _pfxCandidatesTimer = null; }
+      } catch (_) {}
+    }, 600);
+  }).catch(() => {
+    setPlaceholder("输入替换后的路径，留空不替换");
+  });
 }
 function _wfRebuild() {
   _wfSortables.forEach(s => s.destroy());

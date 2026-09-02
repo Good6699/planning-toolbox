@@ -201,28 +201,8 @@ function buildWorkflowTab(panel) {
           }
           const autoName = _wfAutoName(step);
           if (autoName) step.name = autoName;
-          wf.steps.push(step);
-          const stepIdx = wf.steps.length - 1;
-          saveConfig({workflows:config.workflows});
-          _wfRebuild();
-          const parentEl = document.querySelector(`.wf-parent[data-idx="${wfIdx}"]`);
-          if (parentEl) {
-            document.querySelectorAll(".wf-parent.expanded").forEach(p => p.classList.remove("expanded"));
-            parentEl.classList.add("expanded");
-          }
-          setTimeout(() => {
-            const step = config.workflows[wfIdx]?.steps?.[stepIdx];
-            if (!step) return;
-            document.getElementById("wf_modal_title").textContent = typeCn[step.type] || step.type;
-            document.getElementById("wf_modal_body").innerHTML = _wfModalFields(step.type, step);
-            document.getElementById("wf_modal_overlay").dataset.modalCtx = JSON.stringify({ wfIdx, stepIdx });
-            document.getElementById("wf_modal_overlay").classList.add("show");
-            setTimeout(() => {
-              document.getElementById("wf_modal_body").querySelectorAll("[id^=wf_m_]").forEach(inp => {
-                if (inp.id) enablePathDrop(inp.id);
-              });
-            }, 50);
-          }, 50);
+          // 挂起新步骤：不写入配置，弹窗点「保存」才创建；取消则丢弃
+          _wfModalOpen(wfIdx, -1, step);
         });
         menu.appendChild(opt);
       });
@@ -327,10 +307,16 @@ function buildWorkflowTab(panel) {
     const ctx = _modalCtx || (overlay.dataset.modalCtx ? JSON.parse(overlay.dataset.modalCtx) : null);
     if (!ctx) return;
     _wfSaving = true;
-    const { wfIdx, stepIdx } = ctx;
-    const step = config.workflows[wfIdx]?.steps?.[stepIdx];
-    if (!step) { _wfSaving = false; return; }
-    const nextStep = Object.assign({}, step);
+    const wfIdx = ctx.wfIdx;
+    let baseStep;
+    if (ctx.isNew) {
+      // 新增：从挂起的 newStep 开始，点保存才真正创建
+      baseStep = Object.assign({}, ctx.newStep || {});
+    } else {
+      baseStep = config.workflows[wfIdx]?.steps?.[ctx.stepIdx];
+      if (!baseStep) { _wfSaving = false; return; }
+    }
+    const nextStep = Object.assign({}, baseStep);
     modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
       const key = inp.dataset.key;
       if (!key) return;
@@ -351,7 +337,16 @@ function buildWorkflowTab(panel) {
       modalBody.querySelector(`[data-key="${validation.key}"]`)?.focus();
       return;
     }
-    Object.assign(step, nextStep);
+    let step, stepIdx;
+    if (ctx.isNew) {
+      config.workflows[wfIdx].steps.push(nextStep);
+      step = nextStep;
+      stepIdx = config.workflows[wfIdx].steps.length - 1;
+    } else {
+      Object.assign(baseStep, nextStep);
+      step = baseStep;
+      stepIdx = ctx.stepIdx;
+    }
     const autoName = _wfAutoName(step);
     const _forceAutoName = step.type === "export_error_code" || step.type === "error_code_entry";
     if (autoName && (!step.custom_name || _forceAutoName)) step.name = autoName;
@@ -359,6 +354,17 @@ function buildWorkflowTab(panel) {
     overlay.classList.remove("show");
     _modalCtx = null;
     _wfSaving = false;
+    if (ctx.isNew) {
+      // 新建后重建树并展开父级，让新步骤显示出来
+      _wfRebuild();
+      const parentEl = document.querySelector(`.wf-parent[data-idx="${wfIdx}"]`);
+      if (parentEl) {
+        document.querySelectorAll(".wf-parent.expanded").forEach(p => p.classList.remove("expanded"));
+        parentEl.classList.add("expanded");
+      }
+      _showToast("步骤设置已保存");
+      return;
+    }
     const childEl = document.querySelector(`.wf-parent[data-idx="${wfIdx}"] .wf-child[data-step="${stepIdx}"] .wf-child-name`);
     if (childEl) childEl.textContent = step.name;
     _showToast("步骤设置已保存");
@@ -690,10 +696,13 @@ function buildWorkflowTab(panel) {
 
   function _wfModalAfterOpen() {
     _wfMigrateLegacyHistory();
-    modalBody.querySelectorAll("[id^=wf_m_]").forEach(inp => {
+    // 每次重取弹窗 body：_wfRebuild 会重建面板并 recrea te 弹窗，闭包捕获的引用可能已分离
+    const _body = document.getElementById("wf_modal_body");
+    if (!_body) return;
+    _body.querySelectorAll("[id^=wf_m_]").forEach(inp => {
       if (inp.id) enablePathDrop(inp.id);
     });
-    modalBody.querySelectorAll(".wf-modal-input").forEach(inp => {
+    _body.querySelectorAll(".wf-modal-input").forEach(inp => {
       const key = inp.dataset.key;
       if (!key) return;
       const pool = _wfHistoryPool(key, inp.dataset.browse, inp.id);
@@ -706,7 +715,11 @@ function buildWorkflowTab(panel) {
         _wfHistorySave(pool, inp.value);
       });
     });
-    const step = _modalCtx ? config.workflows[_modalCtx.wfIdx]?.steps?.[_modalCtx.stepIdx] : null;
+    let step = null;
+    if (_modalCtx) {
+      // 新增步骤挂起时从 newStep 取类型；已有步骤从配置取
+      step = _modalCtx.isNew ? _modalCtx.newStep : config.workflows[_modalCtx.wfIdx]?.steps?.[_modalCtx.stepIdx];
+    }
     // 导出错误码 / 录入错误码：语言改为勾选，自动扫描
     if (step && (step.type === "export_error_code" || step.type === "error_code_entry")) {
       const cfg = step.type === "export_error_code"
@@ -725,14 +738,25 @@ function buildWorkflowTab(panel) {
   panel.querySelectorAll("button,input").forEach(el => {
     el.addEventListener("mousedown", (e) => e.stopPropagation());
   });
-  function _wfModalOpen(wfIdx, stepIdx) {
-    const step = config.workflows[wfIdx]?.steps?.[stepIdx];
+  function _wfModalOpen(wfIdx, stepIdx, newStep) {
+    const step = newStep || config.workflows[wfIdx]?.steps?.[stepIdx];
     if (!step) return;
-    modalTitle.textContent = typeCn[step.type] || step.type;
-    modalBody.innerHTML = _wfModalFields(step.type, step);
-    overlay.dataset.modalCtx = JSON.stringify({ wfIdx, stepIdx });
-    _modalCtx = { wfIdx, stepIdx };
-    overlay.classList.add("show");
+    // 每次重取弹窗元素：_wfRebuild 会重建面板并 recrea te 弹窗，闭包捕获的引用可能已分离
+    const _title = document.getElementById("wf_modal_title");
+    const _body = document.getElementById("wf_modal_body");
+    const _overlay = document.getElementById("wf_modal_overlay");
+    if (!_title || !_body || !_overlay) return;
+    _title.textContent = typeCn[step.type] || step.type;
+    _body.innerHTML = _wfModalFields(step.type, step);
+    if (newStep) {
+      // 新增步骤：挂起（不写入配置），点保存才 push 创建；取消则丢弃
+      _modalCtx = { wfIdx, stepIdx: -1, isNew: true, newStep };
+      _overlay.dataset.modalCtx = JSON.stringify({ wfIdx, stepIdx: -1, isNew: true, newStep });
+    } else {
+      _modalCtx = { wfIdx, stepIdx };
+      _overlay.dataset.modalCtx = JSON.stringify({ wfIdx, stepIdx });
+    }
+    _overlay.classList.add("show");
     setTimeout(() => _wfModalAfterOpen(), 50);
   }
   panel.querySelectorAll(".wf-settings-btn").forEach(btn => {

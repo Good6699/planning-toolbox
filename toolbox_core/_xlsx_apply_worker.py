@@ -12,6 +12,48 @@ _script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _script_dir)
 
 
+def _excel_recalc_save(path):
+    """用 Excel COM 打开 xlsm 重算并保存，恢复 openpyxl 保存丢失的公式缓存值。
+
+    openpyxl 加载+保存含公式的 xlsm 会清空公式单元格的缓存值（重读为 None），
+    Excel COM 打开触发重算再保存可恢复。失败时静默忽略，不影响主流程。
+    """
+    try:
+        import win32com.client
+    except Exception:
+        return
+    excel = wb = None
+    try:
+        excel = win32com.client.DispatchEx("Excel.Application")
+        excel.Visible = False
+        excel.DisplayAlerts = False
+        try:
+            # 禁用宏，避免打开 xlsm 时弹宏提示
+            excel.AutomationSecurity = 3
+        except Exception:
+            pass
+        wb = excel.Workbooks.Open(path)
+        try:
+            wb.ForceFullCalculation = True
+            excel.CalculateFull()
+        except Exception:
+            pass
+        wb.Save()
+    except Exception:
+        pass
+    finally:
+        try:
+            if wb is not None:
+                wb.Close(False)
+        except Exception:
+            pass
+        try:
+            if excel is not None:
+                excel.Quit()
+        except Exception:
+            pass
+
+
 def main():
     if len(sys.argv) != 3:
         sys.stderr.write("Usage: _xlsx_apply_worker.py <arg_pickle> <res_pickle>\n")
@@ -91,6 +133,8 @@ def main():
                 # 仅在有实际修改时才保存，避免 openpyxl 无谓重写导致 svn 误标 M
                 if total_added + total_updated > 0:
                     wb_tgt.save(target_path)
+                    # openpyxl 保存会丢公式缓存值，用 Excel COM 重算保存恢复
+                    _excel_recalc_save(target_path)
                 wb_tgt.close()
             result.update(ok=True, added=total_added, updated=total_updated)
         elif mode == "copy_rows_by_id":
@@ -100,11 +144,14 @@ def main():
             a = u = 0
             try:
                 a, u = _copy_rows_by_id(wb_src, wb_tgt, args["id_by_sheet"],
-                                        args["title_rows"], args["id_col"], put)
+                                        args["title_rows"], args["id_col"], put,
+                                        args.get("copy_cols"))
             finally:
                 # 仅在有实际修改时才保存，避免 openpyxl 无谓重写导致 svn 误标 M
                 if a + u > 0:
                     wb_tgt.save(args["tgt_path"])
+                    # openpyxl 保存会丢公式缓存值，用 Excel COM 重算保存恢复
+                    _excel_recalc_save(args["tgt_path"])
                 wb_src.close()
                 wb_tgt.close()
             result.update(ok=True, added=a, updated=u)

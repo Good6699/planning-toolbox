@@ -1545,6 +1545,24 @@ def _cells_equal(cells1: dict, cells2: dict) -> bool:
     return True
 
 
+def _changed_cols(cells1: dict, cells2: dict) -> List[str]:
+    """计算两行 cells 中"真正变化"的列（规范化后仍不同的列，与 _cells_equal 判定一致）。
+
+    仅返回列头名列表，供合并阶段只覆盖这些列，避免整行覆盖把目标其他列/类型一并改写。
+    """
+    cols = set()
+    for k in set(cells1) | set(cells2):
+        v1 = cells1.get(k)
+        v2 = cells2.get(k)
+        if v1 == v2:
+            continue
+        n1 = _normalize_value(str(v1)) if v1 is not None else ""
+        n2 = _normalize_value(str(v2)) if v2 is not None else ""
+        if n1 != n2 or (v1 is None) != (v2 is None):
+            cols.add(k)
+    return sorted(cols)
+
+
 def _row_hash(info: dict, cols: Optional[List[str]], id_col: str) -> int:
     """计算行的内容哈希。当 cols 指定时只按指定列哈希，否则按全部 cells。
     自动检测退化情况（列名不匹配导致全空）并回退到全部 cells。
@@ -1601,7 +1619,9 @@ def _compare_pair_merge(
                 prv_matched.add(sid)
                 if not output_cols:
                     if not _cells_equal(ci.get("cells", {}), pi.get("cells", {})):
-                        results.append(_build_row(sid, ci, cur_rev, prv_rev, "修改", output_cols))
+                        row = _build_row(sid, ci, cur_rev, prv_rev, "修改", output_cols)
+                        row["_changed_cols"] = _changed_cols(ci.get("cells", {}), pi.get("cells", {}))
+                        results.append(row)
                 else:
                     csc, psc = ci.get("sc", ""), pi.get("sc", "")
                     csub, psub = ci.get("sub", ""), pi.get("sub", "")
@@ -1612,6 +1632,7 @@ def _compare_pair_merge(
                         row = _build_row(sid, ci, cur_rev, prv_rev, "修改", output_cols)
                         row["前一版本_SC"] = psc
                         row["前一版本_sub"] = psub
+                        row["_changed_cols"] = _changed_cols(ci.get("cells", {}), pi.get("cells", {}))
                         results.append(row)
             else:
                 cur_remaining[sid] = ci

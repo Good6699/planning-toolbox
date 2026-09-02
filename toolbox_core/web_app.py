@@ -1831,7 +1831,8 @@ def api_workflow_open_update_wc():
         for subdir in ["Client", "gameData", "tools"]:
             d = os.path.join(prefix, subdir)
             if os.path.isdir(d):
-                subprocess.Popen([tortoise, "/command:update", "/path:" + d])
+                # /closeonend:2 = 无错误且无冲突时自动关闭弹窗；冲突/异常时保留人工处理
+                subprocess.Popen([tortoise, "/command:update", "/path:" + d, "/closeonend:2"])
                 opened.append(d)
             else:
                 missing.append(d)
@@ -3080,6 +3081,11 @@ def _exec_merge_specified_text(step, put, task_id=None):
     from toolbox_config import load_config
     from datetime import datetime as _dt, timedelta as _td
     cfg = load_config()
+    svn_cred_user = cfg.get("svn_user") or ""
+    svn_cred_pass = cfg.get("svn_pass") or ""
+    if svn_cred_pass:
+        from toolbox_config import decrypt_key
+        svn_cred_pass = decrypt_key(svn_cred_pass)
 
     src_path = (step.get("src_path") or "").strip()
     tgt_path = (step.get("tgt_path") or "").strip()
@@ -3156,7 +3162,7 @@ def _exec_merge_specified_text(step, put, task_id=None):
     from toolbox_merge import svn_log
     try:
         all_versions = svn_log(file_url, "2000-01-01", end,
-                               svn_user=cfg.get("svn_user") or "", svn_pass=cfg.get("svn_pass") or "")
+                               svn_user=svn_cred_user, svn_pass=svn_cred_pass)
     except Exception as e:
         put(f"版本查询失败: {e}\n")
         return False
@@ -3190,7 +3196,8 @@ def _exec_merge_specified_text(step, put, task_id=None):
     put(f"版本对: {len(pairs)} 对\n")
 
     # 7. 版本对对比（走现有 _cmp_worker 子进程池 worker 机制）
-    from svn_oneclick_compare import step3_download_and_compare
+    from svn_oneclick_compare import step3_download_and_compare, _load_cmp_file_settings
+    _load_cmp_file_settings()   # 加载 per-file 对比配置（title_rows/id_col/output_cols），否则回退默认参数导致 ID 提取错误
     import svn_oneclick_compare as _cmp_mod
     _orig_log = _cmp_mod._log
     def _redirect_log(*a, **kw):
@@ -3202,7 +3209,7 @@ def _exec_merge_specified_text(step, put, task_id=None):
     try:
         results, header_data, sheet_order = step3_download_and_compare(
             dir_url, file_pairs={fname: pairs},
-            svn_user=cfg.get("svn_user") or "", svn_pass=cfg.get("svn_pass") or "")
+            svn_user=svn_cred_user, svn_pass=svn_cred_pass)
     except Exception as e:
         put(f"对比失败: {e}\n")
         return False
@@ -3371,6 +3378,11 @@ def _exec_merge_config(step, put, task_id=None):
     from toolbox_config import load_config
     from datetime import datetime as _dt, timedelta as _td
     cfg = load_config()
+    svn_cred_user = cfg.get("svn_user") or ""
+    svn_cred_pass = cfg.get("svn_pass") or ""
+    if svn_cred_pass:
+        from toolbox_config import decrypt_key
+        svn_cred_pass = decrypt_key(svn_cred_pass)
 
     src_dir = (step.get("src_path") or "").strip()
     tgt_dir = (step.get("tgt_path") or "").strip()
@@ -3436,7 +3448,8 @@ def _exec_merge_config(step, put, task_id=None):
     # 4. 目录级筛选（同 SVN 记录对比模式 step1）：
     #    一次 svn log -v 目录，按 作者(逗号分隔或)/备注包含/日期 过滤，
     #    收集变更的 Excel 文件并查版本对（仅 .xlsm 配置表）
-    from svn_oneclick_compare import step1_query_file_pairs, step3_download_and_compare
+    from svn_oneclick_compare import step1_query_file_pairs, step3_download_and_compare, _load_cmp_file_settings
+    _load_cmp_file_settings()   # 加载 per-file 对比配置（title_rows/id_col/output_cols），否则回退默认参数导致 ID 提取错误
     import svn_oneclick_compare as _cmp_mod
     _orig_log = _cmp_mod._log
     def _redirect_log(*a, **kw):
@@ -3450,7 +3463,7 @@ def _exec_merge_config(step, put, task_id=None):
             dir_url, start, end,
             author=commit_author or None,
             keywords=[commit_msg] if commit_msg else None,
-            svn_user=cfg.get("svn_user") or "", svn_pass=cfg.get("svn_pass") or "")
+            svn_user=svn_cred_user, svn_pass=svn_cred_pass)
     except Exception as e:
         put(f"筛选失败: {e}\n")
         return False
@@ -3469,7 +3482,7 @@ def _exec_merge_config(step, put, task_id=None):
     try:
         results, header_data, sheet_order = step3_download_and_compare(
             dir_url, file_pairs=file_pairs,
-            svn_user=cfg.get("svn_user") or "", svn_pass=cfg.get("svn_pass") or "")
+            svn_user=svn_cred_user, svn_pass=svn_cred_pass)
     except Exception as e:
         put(f"对比失败: {e}\n")
         return False
@@ -3499,12 +3512,9 @@ def _exec_merge_config(step, put, task_id=None):
     from toolbox_xlsx_merge import run_xlsx_apply_worker
     merged_any = False
 
-    # 6.5 目标无同名文件的配置表（修改或新增）：整个复制到目标，
-    #     状态为新增（不 svn add、不自动提交，仅弹 SVN 提交框由用户勾选）
+    # 6.5 目标无同名文件的配置表（有版本记录的修改）：整个复制到目标，
+    #     不 svn add（保持未版本化原始状态）；无版本记录的新增文件不处理
     copy_candidates = set(skipped_files)
-    for rel, pair_list in file_pairs.items():
-        if not pair_list and rel.lower().endswith(".xlsm"):
-            copy_candidates.add(rel)
     new_copied = []
     for rel in sorted(copy_candidates):
         src_file = os.path.join(src_dir, rel)
@@ -3520,21 +3530,12 @@ def _exec_merge_config(step, put, task_id=None):
             if tgt_sub:
                 os.makedirs(tgt_sub, exist_ok=True)
             shutil.copy2(src_file, tgt_file)
-            # 标记为新增（A 状态），确保导出收录与提交时可见
-            try:
-                r_add = subprocess.run([svn, "add", "--parents", "--force", tgt_file],
-                                       capture_output=True, timeout=60,
-                                       **_get_subprocess_kwargs())
-                if r_add.returncode != 0:
-                    put(f"  {rel}: svn add 失败: {_decode_svn_output(r_add.stderr).strip()[:200]}\n")
-            except Exception as e:
-                put(f"  {rel}: svn add 异常: {e}\n")
             new_copied.append(rel)
             merged_any = True
         except Exception as e:
             put(f"  {rel}: 复制配置表失败: {e}\n")
     if new_copied:
-        put(f"复制到目标（已标记新增，未提交）: {len(new_copied)} 个\n")
+        put(f"复制到目标（未标记 svn add，保持未版本化）: {len(new_copied)} 个\n")
         for nc in new_copied:
             put(f"  + {nc}\n")
 
@@ -3581,6 +3582,14 @@ def _exec_merge_config(step, put, task_id=None):
             put(f"{rel}: 目标表锁定失败，跳过\n")
             continue
         try:
+            # 从 diff 行提取每个 ID 的变化列（仅覆盖这些列，避免整行覆盖改坏目标其他列/类型）
+            copy_cols = {}
+            for row_data in diff:
+                sheet_name = row_data.get("sheet", "")
+                idv = row_data.get(id_header)
+                ch = row_data.get("_changed_cols")
+                if sheet_name and idv is not None and ch:
+                    copy_cols.setdefault(sheet_name, {})[str(idv).strip()] = list(ch)
             put(f"{rel}: 复制 {total_ids} 个 ID 行...\n")
             wr = run_xlsx_apply_worker({
                 "mode": "copy_rows_by_id",
@@ -3589,6 +3598,7 @@ def _exec_merge_config(step, put, task_id=None):
                 "id_by_sheet": id_by_sheet,
                 "title_rows": title_rows,
                 "id_col": id_col,
+                "copy_cols": copy_cols,
             }, put, task_id)
             if wr and wr.get("ok"):
                 added = wr.get("added", 0)
@@ -3637,12 +3647,11 @@ def _exec_merge_config(step, put, task_id=None):
     finally:
         if proc:
             _unregister_proc(proc, task_id)
-    # 导出新增文件（导出后新出现的未版本化文件）标记为新增
+    # 导出新增文件（导出后新出现的未版本化文件）：不 svn add，保持未版本化原始状态
     _unver_after = _svn_list_unversioned(svn, commit_dirs)
     _new_exported = _unver_after - _unver_before
     if _new_exported:
-        put(f"导出新增文件: {len(_new_exported)} 个，标记为新增\n")
-        _svn_add_paths(svn, _new_exported, put)
+        put(f"导出新增文件: {len(_new_exported)} 个（未标记 svn add，保持未版本化）\n")
 
     # 9. 弹 TortoiseSVN 提交框（合并结果仍需提交，导出失败不阻断）
     tortoise = _get_tortoise_proc_path()
@@ -3840,6 +3849,11 @@ def _exec_error_code_entry(step, put, task_id=None):
                         xl.Visible = False
                         xl.DisplayAlerts = False
                         wb = xl.Workbooks.Open(xlsm_path)
+                        try:
+                            wb.ForceFullCalculation = True
+                            xl.CalculateFull()
+                        except Exception:
+                            pass
                         wb.Save()
                         wb.Close()
                         xl.Quit()
@@ -5068,6 +5082,11 @@ def _exec_merge_table(step, put, task_id=None):
                 xl.Visible = False
                 xl.DisplayAlerts = False
                 wb = xl.Workbooks.Open(target_path)
+                try:
+                    wb.ForceFullCalculation = True
+                    xl.CalculateFull()
+                except Exception:
+                    pass
                 wb.Save()
                 wb.Close()
                 xl.Quit()

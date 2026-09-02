@@ -11,6 +11,48 @@ import sys
 import tempfile
 
 
+def _excel_recalc_save(path):
+    """用 Excel COM 打开 xlsm 重算并保存，恢复 openpyxl 保存丢失的公式缓存值。
+
+    openpyxl 加载+保存含公式的 .xlsm 会清空公式单元格缓存值（重读为 None），
+    Excel COM 打开触发重算再保存可恢复。失败时静默忽略，不影响主流程。
+    """
+    try:
+        import win32com.client
+    except Exception:
+        return
+    excel = wb = None
+    try:
+        excel = win32com.client.DispatchEx("Excel.Application")
+        excel.Visible = False
+        excel.DisplayAlerts = False
+        try:
+            # 禁用宏，避免打开 xlsm 时弹宏提示
+            excel.AutomationSecurity = 3
+        except Exception:
+            pass
+        wb = excel.Workbooks.Open(path)
+        try:
+            wb.ForceFullCalculation = True
+            excel.CalculateFull()
+        except Exception:
+            pass
+        wb.Save()
+    except Exception:
+        pass
+    finally:
+        try:
+            if wb is not None:
+                wb.Close(False)
+        except Exception:
+            pass
+        try:
+            if excel is not None:
+                excel.Quit()
+        except Exception:
+            pass
+
+
 def run_xlsx_apply_worker(args, put, task_id=None, timeout=1200):
     """把 openpyxl 合并任务丢给 _xlsx_apply_worker 子进程执行（避免占主进程 GIL）。
     args: {"mode": "merge_sheet_rows"|"copy_rows_by_id"|"sync_index", ...}
@@ -206,9 +248,10 @@ def _merge_sheet_rows(ws_in, ws_tgt, inp_rows, title_rows, id_col, dup_ids, put)
     return added, updated, source_ids
 
 
-def _copy_rows_by_id(wb_src, wb_tgt, id_by_sheet, title_rows, id_col, put):
-    """按 ID 从来源表整行复制到目标表（列头名对应，值类型保持，目标缺失追加）。
-    单遍 iter_rows 扫描，避免 read_only 工作表随机访问。返回 (added, updated)"""
+def _copy_rows_by_id(wb_src, wb_tgt, id_by_sheet, title_rows, id_col, put, copy_cols=None):
+    """按 ID 从来源表复制到目标表（列头名对应，值类型保持，目标缺失追加）。
+    copy_cols: {sheet: {id: [列头名]}}，仅更新时覆盖这些列（避免整行覆盖把目标其他列/类型改写）；
+    为 None 或未指定该 ID 时整行复制；新增行始终整行复制。返回 (added, updated)"""
     added = updated = 0
     for sheet_name, ids in id_by_sheet.items():
         if sheet_name not in wb_src.sheetnames or sheet_name not in wb_tgt.sheetnames:
@@ -280,9 +323,18 @@ def _copy_rows_by_id(wb_src, wb_tgt, id_by_sheet, title_rows, id_col, put):
             if sid in tgt_rows:
                 tr = tgt_rows[sid]
                 sh_updated += 1
-                # 整行复制：按列头名对应，源有目标没有的列跳过；
+                # 仅覆盖变化的列（copy_cols 指定），未指定时整行复制；
                 # 有 END 标记时第 1 列为标记列，不复制（保持目标原有标记）
-                for name, sc in src_col.items():
+                if copy_cols is not None:
+                    cols_to_copy = copy_cols.get(sheet_name, {}).get(sid)
+                    if cols_to_copy is None:
+                        cols_to_copy = list(src_col.keys())
+                else:
+                    cols_to_copy = list(src_col.keys())
+                for name in cols_to_copy:
+                    sc = src_col.get(name)
+                    if sc is None:
+                        continue
                     if end_row_at is not None and sc == 1:
                         continue
                     tc = tgt_col.get(name)
@@ -422,6 +474,8 @@ def _sync_index_table(src_path, tgt_path, changed_ids, put):
             put(f"  {sn}: {sh_updated} 替换, {sh_added} 新增\n")
         if added + updated > 0:
             wb_tgt.save(tgt_path)
+            # openpyxl 保存会丢公式缓存值，用 Excel COM 重算保存恢复
+            _excel_recalc_save(tgt_path)
     except Exception as e:
         put(f"  同步索引表异常: {e}\n")
     finally:

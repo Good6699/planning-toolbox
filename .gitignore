@@ -113,6 +113,7 @@ memory/
 .dgameai/
 _internal/
 PrefabContrastToolNew.zip
+.last_release
 
 # Scratch debug output
 _batch_out*.txt

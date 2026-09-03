@@ -3272,9 +3272,29 @@ function _showUpdateBar(data) {
 
   const dismiss = document.getElementById("update_dismiss");
 
+  const notes = document.getElementById("update_notes");
+
   if (!bar || !text || !dismiss) return;
 
   text.textContent = `📦 新版本 ${data.latest} 可用`;
+
+  if (notes) {
+
+    if (data.notes) {
+
+      notes.textContent = data.notes;
+
+      notes.classList.add("visible");
+
+    } else {
+
+      notes.textContent = "";
+
+      notes.classList.remove("visible");
+
+    }
+
+  }
 
   if (data.force) {
 

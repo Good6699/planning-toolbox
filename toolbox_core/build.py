@@ -36,6 +36,9 @@ UPDATE_DIR = os.path.join(WORKSPACE, "update-server")
 APP_NAME = "策划工具箱"
 HELP_DOC = "策划工具箱_交互说明书.html"
 
+# 记录上次出包时 HEAD 的本地标记文件（gitignore，纯本地开发态）
+RELEASE_MARKER = os.path.join(WORKSPACE, ".last_release")
+
 # 从 update_version.py 读取版本号（唯一来源）
 _ver_line = [l for l in open(os.path.join(CORE_DIR, "update_version.py"), encoding="utf-8") if "APP_VERSION" in l and "=" in l]
 APP_VERSION = _ver_line[0].split("=", 1)[1].strip().strip('"').strip("'") if _ver_line else "v1.0"
@@ -538,6 +541,55 @@ def build():
     return dist_app
 
 
+def _git(*args):
+    """在仓库根运行 git 命令，返回 stdout（strip 后）。失败/无 git/超时返回 None。"""
+    try:
+        r = subprocess.run(["git"] + list(args), cwd=WORKSPACE,
+                           capture_output=True, text=True, timeout=10,
+                           encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            return None
+        return r.stdout.strip()
+    except Exception:
+        return None
+
+
+def _write_release_marker(commit):
+    """把上次出包时 HEAD 写入本地标记文件（.last_release）。"""
+    try:
+        with open(RELEASE_MARKER, "w", encoding="utf-8") as f:
+            f.write(commit + "\n")
+    except Exception:
+        pass
+
+
+def _build_release_notes():
+    """取上次出包后到当前 HEAD 的 commit 列表，拼成更新日志文本（\n 分隔）。
+    首次出包（无 .last_release）→ 基线设为当前 HEAD，日志为空（无上一版可比）。
+    无改动 / git 失败 → 日志为空，不阻断打包。"""
+    head = _git("rev-parse", "HEAD")
+    if not head:
+        return ""
+    last = None
+    if os.path.isfile(RELEASE_MARKER):
+        try:
+            with open(RELEASE_MARKER, "r", encoding="utf-8") as f:
+                last = f.read().strip()
+        except Exception:
+            last = None
+    if not last:
+        _write_release_marker(head)
+        return ""
+    log = _git("log", f"{last}..HEAD", "--format=%s")
+    _write_release_marker(head)
+    if not log:
+        return ""
+    lines = [line.strip() for line in log.splitlines() if line.strip()]
+    if not lines:
+        return ""
+    return "\n".join([f"【{APP_VERSION}】更新内容"] + [f"- {l}" for l in lines])
+
+
 def make_update_zip(dist_app):
     """将 dist 目录压缩为更新 zip 包，放入 update-server/"""
     os.makedirs(UPDATE_DIR, exist_ok=True)
@@ -574,6 +626,7 @@ def make_update_zip(dist_app):
     ver_info["version"] = APP_VERSION
     ver_info["url"] = zip_name
     ver_info["md5"] = md5_hex
+    ver_info["notes"] = _build_release_notes()
     with open(ver_path, "w", encoding="utf-8") as f:
         json.dump(ver_info, f, ensure_ascii=False, indent=2)
     print(f"  version.json → {UPDATE_DIR}\\")

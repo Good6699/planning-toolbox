@@ -88,18 +88,30 @@ def _extract_placeholders(text):
     return set(re.findall(r'\{(\d+)\}|%[.\d]*[sdfgeE%]', str(text)))
 
 
-def _extract_special_placeholders(text):
-    """提取特殊占位符 {{{1}}}（三花括号）的具体值，如数字 1。"""
+def _extract_malformed_special(text):
+    """提取格式错误的特殊占位符：{{{n}}} 的右括号数不是 3 个的变体（如 {{{n}} 少一个 }）。返回 token 集合。"""
     if not text:
         return set()
-    return set(re.findall(r'\{\{\{(\d+)\}\}\}', str(text)))
+    out = set()
+    for m in re.finditer(r'\{\{\{\s*\d+\s*\}\}+', str(text)):
+        tok = m.group(0)
+        if re.fullmatch(r'\{\{\{\s*\d+\s*\}\}\}', tok) is None:
+            out.add(tok)
+    return out
+
+
+def _extract_special_placeholders(text):
+    """提取规范特殊占位符 {{{n}}}（恰好三个右括号）的值集合，用于数值对比。"""
+    if not text:
+        return set()
+    return set(re.findall(r'\{\{\{\s*(\d+)\s*\}\}\}', str(text)))
 
 
 def _extract_regular_placeholders(text):
-    """提取普通占位符 {0} %s %d 等（先剔除特殊 {{{n}}}，避免把特殊占位符重复计作普通）。"""
+    """提取普通占位符 {0} %s %d 等（先剔除 {{{n}}} / {{{n}} 特殊占位符，避免把其降级计入普通）。"""
     if not text:
         return set()
-    t = re.sub(r'\{\{\{\s*\d+\s*\}\}\}', '', str(text))
+    t = re.sub(r'\{\{\{\s*\d+\s*\}\}+', '', str(text))
     return set(re.findall(r'\{(\d+)\}|%[.\d]*[sdfgeE%]', t))
 
 
@@ -293,8 +305,10 @@ def _issue_cat_rank(issue: str) -> int:
         return 4
     if "多余闭标签" in s:
         return 5
-    if "特殊占位符不一致" in s:
+    if "占位符格式错误" in s:
         return 12
+    if "特殊占位符不一致" in s:
+        return 13
     if "占位符不一致" in s:
         return 6
     if "缺少格式串" in s:
@@ -308,9 +322,9 @@ def _issue_cat_rank(issue: str) -> int:
     if "疑似乱码" in s:
         return 11
     if "漏翻" in s:
-        return 13
-    if "SC列为空" in s:
         return 14
+    if "SC列为空" in s:
+        return 15
     return 99
 
 
@@ -485,6 +499,7 @@ def detect(input_path, progress_callback=None, target_langs=None, lang_id_map=No
             if sc_val:
                 sc_placeholders = _extract_regular_placeholders(sc_val)
                 sc_special_ph = _extract_special_placeholders(sc_val)
+                sc_malformed_ph = _extract_malformed_special(sc_val)
                 sc_game_fmt = _extract_game_fmt(sc_val)
                 sc_color_issues = _validate_color_codes(sc_val)
                 sc_len = len(sc_val)
@@ -492,6 +507,9 @@ def detect(input_path, progress_callback=None, target_langs=None, lang_id_map=No
                 # SC 本身的颜色码格式检查
                 for bad_color in sc_color_issues:
                     issues.append(f"SC颜色码格式错误: {bad_color}")
+                # SC 特殊占位符格式错误
+                if sc_malformed_ph:
+                    issues.append(f"SC 占位符格式错误: {','.join(sorted(sc_malformed_ph))}")
 
                 for lang_name, col_idx in lang_map.items():
                     lang_val = str(row[col_idx]).strip() if row[col_idx] is not None else ""
@@ -504,11 +522,16 @@ def detect(input_path, progress_callback=None, target_langs=None, lang_id_map=No
 
                     lang_placeholders = _extract_regular_placeholders(lang_val)
                     lang_special_ph = _extract_special_placeholders(lang_val)
+                    lang_malformed_ph = _extract_malformed_special(lang_val)
                     lang_game_fmt = _extract_game_fmt(lang_val)
 
-                    # 特殊占位符（{{{n}}}）具体值对比
-                    if sc_special_ph != lang_special_ph:
-                        issues.append(f"{lang_name} 特殊占位符不一致")
+                    # 特殊占位符格式错误（{{{n}}} 括号数不对）
+                    if lang_malformed_ph:
+                        issues.append(f"{lang_name} 占位符格式错误: {','.join(sorted(lang_malformed_ph))}")
+                    # 若两侧都有格式错误的占位符，则不再叠加「特殊占位符不一致」，只报格式错误
+                    if not sc_malformed_ph and not lang_malformed_ph:
+                        if sc_special_ph != lang_special_ph:
+                            issues.append(f"{lang_name} 特殊占位符不一致")
                     # 普通占位符具体值对比（不是只数数量）
                     if sc_placeholders != lang_placeholders:
                         issues.append(f"{lang_name} 占位符不一致")

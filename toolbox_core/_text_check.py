@@ -89,14 +89,14 @@ def _extract_placeholders(text):
 
 
 def _extract_malformed_special(text):
-    """提取格式错误的特殊占位符：{{{n}}} 的右括号数不是 3 个的变体（如 {{{n}} 少一个 }）。返回 token 集合。"""
+    """提取格式错误的特殊占位符：只有右括号数 < 3 才视为「少括号」错误；
+    右括号 ≥3 的（含宏包裹如 {%V{{{1}}}} 的规范 {{{n}}}）视为合法，不报。"""
     if not text:
         return set()
     out = set()
-    for m in re.finditer(r'\{\{\{\s*\d+\s*\}\}+', str(text)):
-        tok = m.group(0)
-        if re.fullmatch(r'\{\{\{\s*\d+\s*\}\}\}', tok) is None:
-            out.add(tok)
+    for m in re.finditer(r'\{\{\{\s*\d+\s*(\}+)', str(text)):
+        if len(m.group(1)) < 3:
+            out.add(m.group(0))
     return out
 
 
@@ -306,25 +306,29 @@ def _issue_cat_rank(issue: str) -> int:
     if "多余闭标签" in s:
         return 5
     if "占位符格式错误" in s:
-        return 12
-    if "特殊占位符不一致" in s:
-        return 13
-    if "占位符不一致" in s:
         return 6
-    if "缺少格式串" in s:
-        return 7
-    if "多余格式串" in s:
-        return 8
-    if "颜色码格式错误" in s:
-        return 9
-    if "空格不一致" in s:
-        return 10
-    if "疑似乱码" in s:
-        return 11
-    if "漏翻" in s:
+    if "特殊占位符数量不一致" in s:
         return 14
-    if "SC列为空" in s:
+    if "无特殊占位符" in s:
         return 15
+    if "占位符数量不一致" in s:
+        return 7
+    if "无占位符" in s:
+        return 8
+    if "缺少格式串" in s:
+        return 9
+    if "多余格式串" in s:
+        return 10
+    if "颜色码格式错误" in s:
+        return 11
+    if "空格不一致" in s:
+        return 12
+    if "疑似乱码" in s:
+        return 13
+    if "漏翻" in s:
+        return 16
+    if "SC列为空" in s:
+        return 17
     return 99
 
 
@@ -528,13 +532,19 @@ def detect(input_path, progress_callback=None, target_langs=None, lang_id_map=No
                     # 特殊占位符格式错误（{{{n}}} 括号数不对）
                     if lang_malformed_ph:
                         issues.append(f"{lang_name} 占位符格式错误: {','.join(sorted(lang_malformed_ph))}")
-                    # 若两侧都有格式错误的占位符，则不再叠加「特殊占位符不一致」，只报格式错误
+                    # 若两侧都有格式错误的占位符，则不再叠加「特殊占位符数量不一致」，只报格式错误
                     if not sc_malformed_ph and not lang_malformed_ph:
                         if sc_special_ph != lang_special_ph:
-                            issues.append(f"{lang_name} 特殊占位符不一致")
-                    # 普通占位符具体值对比（不是只数数量）
+                            if sc_special_ph and lang_special_ph:
+                                issues.append(f"{lang_name} 特殊占位符数量不一致")
+                            else:
+                                issues.append(f"{lang_name} 无特殊占位符")
+                    # 普通占位符具体值对比（不是只数数量）：细分「数量不一致 / 无占位符」
                     if sc_placeholders != lang_placeholders:
-                        issues.append(f"{lang_name} 占位符不一致")
+                        if sc_placeholders and lang_placeholders:
+                            issues.append(f"{lang_name} 占位符数量不一致")
+                        else:
+                            issues.append(f"{lang_name} 无占位符")
                         cell_colors[col_idx] = FILL_YELLOW
 
                     # 标签配对检查：只检查目标语言内部标签是否成对闭合，

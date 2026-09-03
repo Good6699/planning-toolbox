@@ -563,31 +563,49 @@ def _write_release_marker(commit):
         pass
 
 
-def _build_release_notes():
-    """取上次出包后到当前 HEAD 的 commit 列表，拼成更新日志文本（\n 分隔）。
-    首次出包（无 .last_release）→ 基线设为当前 HEAD，日志为空（无上一版可比）。
-    无改动 / git 失败 → 日志为空，不阻断打包。"""
+def _read_release_marker():
+    """读上次出包时 HEAD。不存在/失败 → None。"""
+    if not os.path.isfile(RELEASE_MARKER):
+        return None
+    try:
+        with open(RELEASE_MARKER, "r", encoding="utf-8") as f:
+            return f.read().strip() or None
+    except Exception:
+        return None
+
+
+def _get_current_version_segment():
+    """计算本次出包对应的更新段 (version, log 文本)。
+    基线 = 上次出包时 HEAD。取基线之后的 commit 作为本次版本段的增量。
+    返回：有内容 → (APP_VERSION, "\\n".join("- ..."))；无内容/首包/失败 → None。
+    无论有无内容，都会把基线推进到当前 HEAD（增量被消费）。"""
     head = _git("rev-parse", "HEAD")
     if not head:
-        return ""
-    last = None
-    if os.path.isfile(RELEASE_MARKER):
-        try:
-            with open(RELEASE_MARKER, "r", encoding="utf-8") as f:
-                last = f.read().strip()
-        except Exception:
-            last = None
+        return None
+    last = _read_release_marker()
     if not last:
+        # 首包：没有上一版基线可对比，本次不产生段，仅推进基线
         _write_release_marker(head)
-        return ""
+        return None
     log = _git("log", f"{last}..HEAD", "--format=%s")
-    _write_release_marker(head)
+    _write_release_marker(head)  # 推进基线到当前 HEAD（增量已消费）
     if not log:
-        return ""
+        return None  # 连续出包无修改：不产生历史段
     lines = [line.strip() for line in log.splitlines() if line.strip()]
     if not lines:
-        return ""
-    return "\n".join([f"【{APP_VERSION}】更新内容"] + [f"- {l}" for l in lines])
+        return None
+    return (APP_VERSION, "\n".join(f"- {line}" for line in lines))
+
+
+def _append_segment(changelog, seg, limit=20):
+    """把新版本段插到 changelog 最前（最新在前），用版本号去重，截断到最近 limit 段。"""
+    changelog = list(changelog or [])
+    if seg is None:
+        return changelog
+    v, log = seg
+    changelog = [s for s in changelog if s.get("v") != v]
+    changelog.insert(0, {"v": v, "log": log})
+    return changelog[:limit]
 
 
 def make_update_zip(dist_app):
@@ -626,7 +644,9 @@ def make_update_zip(dist_app):
     ver_info["version"] = APP_VERSION
     ver_info["url"] = zip_name
     ver_info["md5"] = md5_hex
-    ver_info["notes"] = _build_release_notes()
+    ver_info["changelog"] = _append_segment(
+        ver_info.get("changelog", []), _get_current_version_segment()
+    )
     with open(ver_path, "w", encoding="utf-8") as f:
         json.dump(ver_info, f, ensure_ascii=False, indent=2)
     print(f"  version.json → {UPDATE_DIR}\\")

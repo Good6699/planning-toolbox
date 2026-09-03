@@ -6884,7 +6884,6 @@ def api_update_check():
         remote = _json.loads(resp.read().decode("utf-8"))
         remote_ver = remote.get("version", "")
         result["latest"] = remote_ver
-        result["notes"] = remote.get("notes", "")
         result["url"] = remote.get("url", "")
         result["force"] = remote.get("force", False)
 
@@ -6892,6 +6891,13 @@ def api_update_check():
             v = v.lstrip("vV")
             parts = v.split(".")
             return tuple(int(p) if p.isdigit() else 0 for p in parts)
+
+        # 版本历史：只返回「比客户端当前版本新」的更新段，拼成该用户应见的 notes
+        _changelog = remote.get("changelog", []) or []
+        _filtered = [s for s in _changelog if _parse_ver(s.get("v", "")) > _parse_ver(APP_VERSION)]
+        result["notes"] = "\n\n".join(
+            f"【{s.get('v')}】更新内容\n{s.get('log', '')}" for s in _filtered
+        )
 
         if remote_ver and _parse_ver(remote_ver) > _parse_ver(APP_VERSION):
             result["available"] = True

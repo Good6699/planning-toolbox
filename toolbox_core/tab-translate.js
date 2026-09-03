@@ -3,7 +3,7 @@ function buildTranslateTab(panel) {
   const model = config.tr_model||"gpt-4o-mini";
   const src_lang = config.tr_src_lang||"zh";
   const out = config.tr_out_dir||"";
-  const prompt = config.tr_prompt||"你是一位专业的游戏本地化翻译专家。请将以下文本从{src_lang}翻译为{tgt_lang}。\n\n## 核心规则\n1. 术语一致性：游戏专有名词（技能名、道具名、地名、角色名、系统术语）保持统一。\n2. 格式保护：所有格式占位符、标签、转义序列必须原样保留，不可修改或删除。\n3. 长短控制：英文→中文控制在原文60%-100%字符数；中文→英文自然地道。\n4. 风格统一：遵循目标语言的游戏本地化惯例。\n\n## 格式保护规则（必须原样保留）\n- XML/HTML标签：如 <Item size=25 style=1 cfgid={0}>\n- 格式占位符：{0}, {1}, %s, %d, %f\n- 语言标记：::SC::, ::EN::, ::TH::\n- 转义序列：\\n, \\t\n- 颜色/富文本标签：[c], [/c], [color=red]\n\n## 输出格式\n严格按照以下格式返回：\n编号|翻译1|翻译2|翻译3...\n每行一条，不要包含任何额外说明、解释或空行。";
+  const prompt = config.tr_prompt||"你是一名专业的游戏本地化翻译专家，精通多语言游戏文本翻译。请严格遵守用户提供的翻译指令、输出格式（JSON、占位符保留）和术语参考对照，确保译文准确、术语一致、符合目标语言习惯。";
   panel.innerHTML = `
     <div class="translate-layout tr-layout">
       <div class="tr-main">
@@ -102,6 +102,17 @@ function buildTranslateTab(panel) {
   _initDirHistory("tr_src", "tr_src_history");
   _initDirHistory("tr_ref", "tr_ref_history");
   _initDirHistory("tr_out", "tr_out_dir");
+  // tr_prompt 即时保存（防抖）：避免用户改了提示词但没点"翻译"时，被 config 旧值还原
+  {
+    const _tp = document.getElementById("tr_prompt");
+    if (_tp) {
+      let _ptimer = null;
+      _tp.addEventListener("input", () => {
+        clearTimeout(_ptimer);
+        _ptimer = setTimeout(() => { saveConfig({ tr_prompt: _tp.value }); }, 600);
+      });
+    }
+  }
   // 从高级设置加载语言列表，填充复选框
   fetch("/api/translate/lang-id-map").then(r=>r.json()).then(d => {
     const data = d.data || {};

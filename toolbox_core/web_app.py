@@ -5605,30 +5605,56 @@ def api_translate_run():  # noqa: C901
                 )
             return "".join(parts)
 
-        def _load_ref(tgt_lang_name):
-            refs = {}
+        def _load_terms():
+            """从参考文件构建术语表 {中文术语: {语言: 译文}}。
+            忽略 ::ID:: 列（非语言列），忽略空译文。用于整行直填 + 术语锁定。"""
+            terms = {}
             if not ref_path or not os.path.isfile(ref_path):
-                return refs
+                return terms
             ext = os.path.splitext(ref_path)[1].lower()
             try:
                 if ext in (".xlsx", ".xlsm"):
                     rwb = openpyxl.load_workbook(ref_path, read_only=True, data_only=True)
                     rws = rwb.active
                     rheaders = [str(c.value).strip() if c.value is not None else "" for c in rws[1]]
-                    src_idx, _ = _match_col(src_lang, rheaders)
-                    tgt_idx, _ = _match_col(tgt_lang_name, rheaders)
-                    if src_idx is not None and tgt_idx is not None:
+                    ref_src_idx, _ = _match_col(src_lang, rheaders)
+                    ref_tgt_cols = {}
+                    for tl in tgt_names:
+                        idx, _ = _match_col(tl, rheaders)
+                        if idx is not None:
+                            ref_tgt_cols[tl] = idx
+                    if ref_src_idx is not None:
                         for row in rws.iter_rows(min_row=2, values_only=True):
-                            if row[src_idx] and row[tgt_idx]:
-                                refs[str(row[src_idx]).strip()] = str(row[tgt_idx]).strip()
+                            if not row:
+                                continue
+                            src_val = row[ref_src_idx - 1]
+                            if not src_val or not str(src_val).strip():
+                                continue
+                            key = str(src_val).strip()
+                            for tl, idx in ref_tgt_cols.items():
+                                val = row[idx - 1] if (idx - 1) < len(row) else None
+                                if val is not None and str(val).strip():
+                                    terms.setdefault(key, {})[tl] = str(val).strip()
                     rwb.close()
-                    q.put(f"参考 ({tgt_lang_name}): {len(refs)} 条\n")
-                else:
+                    q.put(f"参考术语: {len(terms)} 条\n")
+                elif ext in (".csv", ".txt"):
+                    # 约定：每行 tab 分隔，第一列中文术语，后续按 tgt_names 顺序对应译文
                     with open(ref_path, "r", encoding="utf-8") as f:
-                        refs["__raw_text__"] = f.read()
+                        for line in f:
+                            line = line.rstrip("\n").rstrip("\r")
+                            if not line.strip():
+                                continue
+                            parts = line.split("\t")
+                            key = parts[0].strip()
+                            if not key:
+                                continue
+                            for j, tl in enumerate(tgt_names):
+                                if j + 1 < len(parts) and parts[j + 1].strip():
+                                    terms.setdefault(key, {})[tl] = parts[j + 1].strip()
+                    q.put(f"参考术语: {len(terms)} 条\n")
             except Exception as e:
                 q.put(f"读取参考文件失败: {e}\n")
-            return refs
+            return terms
 
         # 语言名 -> ISO 语言代码（JSON 输出的键）
         _LANG_CODE_MAP = {
@@ -5637,20 +5663,35 @@ def api_translate_run():  # noqa: C901
             "英文": "en", "葡萄牙文": "pt", "西班牙文": "es", "韩文": "ko",
         }
 
-        def _call_api(texts, tgt_names, refs_by_target, retries=5):
+        def _call_api(texts, tgt_names, terms, term_scan, retries=5):
             user_parts = []
-            raw_ref = refs_by_target.get("__raw__")
-            if raw_ref:
-                user_parts.append(f"参考翻译表（原文件内容，可直接参考对应条目）：\n{raw_ref}")
-            else:
-                ref_parts = []
-                for tgt in tgt_names:
-                    r = refs_by_target.get(tgt, {})
-                    if r:
-                        sample = list(r.items())[:30]
-                        ref_parts.append(f"【{_clean(tgt)}】参考:\n" + "\n".join(f"{k} -> {v}" for k, v in sample))
-                if ref_parts:
-                    user_parts.append("\n".join(ref_parts))
+
+            # 参考模式：收集本批文本中出现的参考术语（2~30 字），作为"参考对照"给 AI，
+            # 由 AI 自行识别其中的专有名词并保持与参考译文一致（无预判定、不强替占位符）
+            ref_terms = {}
+            for t in texts:
+                i = 0
+                n = len(t)
+                while i < n:
+                    matched = None
+                    for term in term_scan:  # 已按长度降序，最长优先，避免子串嵌套
+                        if t.startswith(term, i):
+                            matched = term
+                            break
+                    if matched:
+                        ref_terms[matched] = terms.get(matched, {})
+                        i += len(matched)
+                    else:
+                        i += 1
+
+            if ref_terms:
+                lines = ["以下为已翻译的术语/短语。翻译时请识别其中出现的专有名词并保持与参考译文一致；"
+                         "若为完整句子且语义一致可直接复用；非专有名词部分按目标语言语义翻译："]
+                for term, lang_trans in ref_terms.items():
+                    parts = [f"{_clean(tg)}: {lang_trans[tg]}" for tg in tgt_names if lang_trans.get(tg)]
+                    if parts:
+                        lines.append(f"  {term}：" + "；".join(parts))
+                user_parts.append("\n".join(lines))
 
             # 目标语言 -> 代码，生成 JSON 键说明（如 tr(土耳其文), de(德文)...）
             tgt_codes = {}
@@ -5661,15 +5702,16 @@ def api_translate_run():  # noqa: C901
 
             protected_items = [_protect_translate_text(t) for t in texts]
             placeholder_maps = [item[1] for item in protected_items]
+            protected_texts = [item[0] for item in protected_items]
 
             user_parts.append(
                 f"请将以下文本从 {clean_src} 翻译为以下语言（键用指定代码）：{code_desc}。"
                 f"\n以 JSON 对象返回，外层键为待翻译文本的编号（1、2、3...），"
                 f"内层键为语言代码，值为该条该语言的完整翻译文本。不要有任何额外内容。"
                 f"\n示例：{{\"1\": {{\"tr\": \"翻译\", \"de\": \"翻译\"}}, \"2\": {{...}}}}"
-                f"\n文本中的 <color> 标签、{{R}}、{{N}}、{{T}}、{{S}}、{{P数字}} 等格式占位符必须原样保留，"
+                f"\n文本中的 <color> 标签、{{R}}、{{N}}、{{T}}、{{S}}、{{P数字}}、{{TERM数字}} 等占位符必须原样保留，"
                 f"翻译文本开头不要带编号。"
-                f"\n\n待翻译文本：\n" + "\n".join(f"{i+1}. {t}" for i, t in enumerate(texts))
+                f"\n\n待翻译文本：\n" + "\n".join(f"{i+1}. {t}" for i, t in enumerate(protected_texts))
             )
 
             messages = [
@@ -5786,31 +5828,10 @@ def api_translate_run():  # noqa: C901
             q.put(f"源列: {src_col} | 目标列: {cols_str}\n")
 
             q.put("加载参考文件...\n")
-            all_refs = {}
-            has_raw = False
-            # 参考文件整体作为表格原文给 AI（xlsx 转 tab 分隔文本，其他格式原文）
-            if ref_path and os.path.isfile(ref_path):
-                _ref_ext = os.path.splitext(ref_path)[1].lower()
-                try:
-                    if _ref_ext in (".xlsx", ".xlsm"):
-                        _twb = openpyxl.load_workbook(ref_path, read_only=True, data_only=True)
-                        _tws = _twb.active
-                        _trows = list(_tws.iter_rows(values_only=True))
-                        _twb.close()
-                        if _trows:
-                            _clean_cell = lambda c: "" if c is None else str(c).replace("\t", " ").replace("\r", " ").replace("\n", "\\n")
-                            all_refs["__raw__"] = "\n".join(
-                                "\t".join(_clean_cell(c) for c in row) for row in _trows[:300]
-                            )
-                    else:
-                        with open(ref_path, "r", encoding="utf-8") as _rf:
-                            all_refs["__raw__"] = _rf.read()
-                except Exception:
-                    all_refs.pop("__raw__", None)
-                if all_refs.get("__raw__"):
-                    has_raw = True
-            for tgt in tgt_names:
-                all_refs[tgt] = _load_ref(tgt)
+            terms = _load_terms()
+            # 术语子串匹配列表：2~30 字的术语按长度降序，用于锁定（≥2 字避免单字误伤；
+            # >30 字的长整句靠整行直填复用，不进子串锁避免误锁长句）
+            term_scan = sorted([t for t in terms if 2 <= len(t) <= 30], key=lambda x: -len(x))
 
             batch_items = []
             ref_matched = 0
@@ -5828,12 +5849,12 @@ def api_translate_run():  # noqa: C901
                     tgt_val = vals[tgt_col - 1]
                     if tgt_val and str(tgt_val).strip():
                         continue
-                    if not has_raw:
-                        ref_val = all_refs.get(tgt_name, {}).get(src_key)
-                        if ref_val:
-                            ws.cell(row=ri, column=tgt_col, value=ref_val)
-                            ref_matched += 1
-                            continue
+                    # 整行精确匹配：该行中文在参考表有完整条目，直接复用译文
+                    ref_val = terms.get(src_key, {}).get(tgt_name)
+                    if ref_val:
+                        ws.cell(row=ri, column=tgt_col, value=ref_val)
+                        ref_matched += 1
+                        continue
                     missing_targets.add(tgt_name)
 
                 if missing_targets:
@@ -5862,7 +5883,7 @@ def api_translate_run():  # noqa: C901
                 batch_num = batch_start // batch_size + 1
                 q.put(f"批次 {batch_num}/{total_batches} ({len(texts)} 条 x {len(tgt_names)} 语言)\n")
 
-                results = _call_api(texts, tgt_names, all_refs)
+                results = _call_api(texts, tgt_names, terms, term_scan)
                 if results is None:
                     q.put(f"  批次 {batch_num} 全部失败\n")
                     for row_num, missing in zip(rows, missing_sets):

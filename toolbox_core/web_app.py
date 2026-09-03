@@ -2064,6 +2064,14 @@ def api_workflow_open_update_wc():
                     "cleaned": cleaned, "skipped_updating": skipped_updating})
 
 
+@app.route("/api/workflow/resolve-svn-dirs", methods=["GET"])
+def api_workflow_resolve_svn_dirs():
+    """按主路径自动匹配 gameData 与 Client\\Assets\\StreamingAssets（供前端只读展示）。"""
+    p = request.args.get("path", "").strip()
+    gd, st = _resolve_game_and_streaming(p)
+    return jsonify({"gamedata": gd or "", "streaming": st or ""})
+
+
 @app.route("/api/workflow/update-wc", methods=["POST"])
 def api_workflow_update_wc():
     data = request.get_json(force=True)
@@ -2179,9 +2187,10 @@ def _exec_export_text(step, put, task_id=None):
         return True
 
     svn = _get_svn_path()
-    upload_svn_dirs = step.get("upload_svn_dir", [])
-    if isinstance(upload_svn_dirs, str):
-        upload_svn_dirs = [d.strip() for d in upload_svn_dirs.split(",") if d.strip()]
+    # 强制按主文件路径自动匹配 gameData + Client\\Assets\\StreamingAssets
+    _gd, _st = _resolve_game_and_streaming(input_file)
+    upload_svn_dirs = [d for d in (_gd, _st) if d and os.path.isdir(d)]
+    put(f"自动匹配上传目录: {', '.join(upload_svn_dirs) if upload_svn_dirs else '（未识别）'}\n")
     for d in upload_svn_dirs:
         d = d.strip()
         if d and os.path.isdir(d):
@@ -2273,19 +2282,13 @@ def _exec_export_text(step, put, task_id=None):
 
 def _exec_export_modified_config(step, put, task_id=None):
     source_path = step.get("source_path", "").strip()
-    upload_svn_dirs = step.get("upload_svn_dir", [])
-    if isinstance(upload_svn_dirs, str):
-        upload_svn_dirs = [d.strip() for d in upload_svn_dirs.split(",") if d.strip()]
     if not source_path:
         put("未指定本地 SVN 副本路径\n")
         return False
-    if not upload_svn_dirs:
-        put("未指定上传 SVN 路径\n")
-        return False
-    invalid_dirs = [d for d in upload_svn_dirs if not os.path.isdir(d)]
-    if invalid_dirs:
-        put("上传 SVN 路径无效: " + "、".join(invalid_dirs) + "\n")
-        return False
+    # 强制按主路径自动匹配 gameData + Client\\Assets\\StreamingAssets
+    _gd, _st = _resolve_game_and_streaming(source_path)
+    upload_svn_dirs = [d for d in (_gd, _st) if d and os.path.isdir(d)]
+    put(f"自动匹配上传目录: {', '.join(upload_svn_dirs) if upload_svn_dirs else '（未识别）'}\n")
 
     proc = None
 
@@ -2816,6 +2819,27 @@ def _get_svn_cached_user():
     except Exception:
         pass
     return None
+
+
+def _resolve_game_and_streaming(master_path):
+    """从主路径（文件或目录）向上定位 gameData 目录，返回 (gameData, StreamingAssets)。
+    项目结构假设 <项目根>/gameData 与 <项目根>/Client/Assets/StreamingAssets 同级。
+    找不到 gameData 或目录不存在返回 (None, None)。"""
+    if not master_path:
+        return None, None
+    d = os.path.dirname(os.path.abspath(master_path)) if os.path.isfile(master_path) else os.path.abspath(master_path)
+    gamedata = None
+    while d and len(d) > 3:
+        if os.path.basename(d).lower() == "gamedata" or os.path.isdir(os.path.join(d, "Language")):
+            gamedata = d
+            break
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    if not gamedata:
+        return None, None
+    return gamedata, os.path.join(os.path.dirname(gamedata), "Client", "Assets", "StreamingAssets")
 
 
 def _merge_error_code_resolve_lang(path):
@@ -3617,11 +3641,9 @@ def _exec_merge_config(step, put, task_id=None):
             days = max(1, int(raw_days))
         except ValueError:
             days = 3
-    raw_commit = step.get("commit_dir", "")
-    if isinstance(raw_commit, list):
-        commit_dirs = [s.strip() for s in raw_commit if s.strip()]
-    else:
-        commit_dirs = [s.strip() for s in str(raw_commit).split(",") if s.strip()]
+    # 强制按主路径自动匹配 gameData + Client\\Assets\\StreamingAssets 作为提交路径
+    _gd, _st = _resolve_game_and_streaming(tgt_dir)
+    commit_dirs = [d for d in (_gd, _st) if d and os.path.isdir(d)]
 
     if not src_dir or not os.path.isdir(src_dir):
         put(f"来源文件夹无效: {src_dir}\n")
@@ -3630,7 +3652,7 @@ def _exec_merge_config(step, put, task_id=None):
         put(f"目标文件夹无效: {tgt_dir}\n")
         return False
     if not commit_dirs:
-        put("未指定提交路径\n")
+        put("未识别自动提交路径（请检查目标配置表文件夹）\n")
         return False
 
     # 表头行数/ID 列取全局高级设置
@@ -4093,11 +4115,9 @@ def _exec_error_code_entry(step, put, task_id=None):
 
     # 自动导出错误码（完全复用导出错误码步骤流程）
     raw_codes = step.get("lang_codes", "").strip()
-    raw_upload = step.get("upload_svn_dir", "")
-    if isinstance(raw_upload, list):
-        upload_dirs = [s.strip() for s in raw_upload if s.strip()]
-    else:
-        upload_dirs = [s.strip() for s in str(raw_upload).split(",") if s.strip()]
+    # 强制按主路径自动匹配 gameData + Client\\Assets\\StreamingAssets
+    _gd_ece, _st_ece = _resolve_game_and_streaming(target_path)
+    upload_dirs = [d for d in (_gd_ece, _st_ece) if d and os.path.isdir(d)]
 
     if raw_codes and upload_dirs:
         put("\n开始导出错误码...\n")
@@ -4523,10 +4543,9 @@ def _exec_export_error_code(step, put, task_id=None):
     put("Language 目录: " + lang_dir + "\n")
     put("处理语言: " + ", ".join(codes) + "\n")
 
-    # ── 导出前更新配置的上传SVN目录 ──
-    upload_svn_dirs = step.get("upload_svn_dir", [])
-    if isinstance(upload_svn_dirs, str):
-        upload_svn_dirs = [d.strip() for d in upload_svn_dirs.split(",") if d.strip()]
+    # ── 强制按主路径自动匹配 gameData + Client\\Assets\\StreamingAssets ──
+    upload_svn_dirs = [d for d in _resolve_game_and_streaming(root_dir) if d and os.path.isdir(d)]
+    put(f"自动匹配上传目录: {', '.join(upload_svn_dirs) if upload_svn_dirs else '（未识别）'}\n")
     if upload_svn_dirs:
         svn = _get_svn_path()
         for d in upload_svn_dirs:
@@ -4699,10 +4718,7 @@ def _exec_export_error_code(step, put, task_id=None):
     if ok_count == len(codes):
         put("全部语言导出成功\n")
 
-    # 导出成功后执行上传
-    upload_svn_dirs = step.get("upload_svn_dir", [])
-    if isinstance(upload_svn_dirs, str):
-        upload_svn_dirs = [d.strip() for d in upload_svn_dirs.split(",") if d.strip()]
+    # 导出成功后执行上传（用前面自动匹配出的 upload_svn_dirs）
     if ok_count > 0 and upload_svn_dirs:
         put("\n导出完成，执行上传\n")
         _exec_upload_svn({"dirs": upload_svn_dirs}, put, task_id)

@@ -1,6 +1,7 @@
 // 点击更新后锁定按钮：直到后端确认「所有 SVN 更新弹窗都已弹出」才返回（不再用固定时间冷却），
 // 真正的「正在更新」由后端锁检测兜底
 let _wfUpdateBusy = new Set();
+let _wfSvnPollTimer = null;
 
 function buildWorkflowTab(panel) {
   const wfs = config.workflows || [];
@@ -27,7 +28,7 @@ function buildWorkflowTab(panel) {
                 ${(wf.steps||[]).filter(Boolean).map((s, j) => `
                   <div class="wf-child" data-step="${j}">
                     <span class="wf-child-type ${s.type}">${typeIcon[s.type]||''} ${typeCn[s.type]||s.type}</span>
-                    <span class="wf-child-name" title="双击修改名称">${escapeHtml(!s.custom_name && _wfAutoName(s) || s.name)}</span>
+                    <span class="wf-child-name" title="双击修改名称">${escapeHtml(s.type === "unlock_svn" ? (_wfAutoName(s) || s.name) : (!s.custom_name && _wfAutoName(s) || s.name))}</span>
                     ${s.type === 'open_tables' ? '<button class="wf-step-open-btn" title="打开（不锁定SVN）">' + _WF_ICONS.open + '</button>' : ''}
                     <button class="wf-step-play-btn" title="执行本步骤">${_WF_ICONS.play}</button>
                     <button class="wf-settings-btn" title="步骤设置">${_WF_ICONS.settings}</button>
@@ -378,7 +379,7 @@ function buildWorkflowTab(panel) {
       stepIdx = ctx.stepIdx;
     }
     const autoName = _wfAutoName(step);
-    const _forceAutoName = step.type === "export_error_code" || step.type === "error_code_entry";
+    const _forceAutoName = ["export_error_code", "error_code_entry", "unlock_svn"].includes(step.type);
     if (autoName && (!step.custom_name || _forceAutoName)) step.name = autoName;
     saveConfig({workflows:config.workflows});
     overlay.classList.remove("show");
@@ -422,7 +423,7 @@ function buildWorkflowTab(panel) {
       step[inp.dataset.key] = inp.checked;
     });
     const autoName = _wfAutoName(step);
-    const _forceAutoName = step.type === "export_error_code" || step.type === "error_code_entry";
+    const _forceAutoName = ["export_error_code", "error_code_entry", "unlock_svn"].includes(step.type);
     if (autoName && (!step.custom_name || _forceAutoName)) step.name = autoName;
     saveConfig({workflows:config.workflows});
     _wfSaving = false;
@@ -794,10 +795,22 @@ function buildWorkflowTab(panel) {
       _wfLoadLangList(cfg.list, cfg.base, cfg.hidden);
       if (baseEl) baseEl.addEventListener("blur", () => _wfLoadLangList(cfg.list, cfg.base, cfg.hidden));
     }
+    // 浏览/历史赋值不触发 input/change：轮询兜底检测主路径变化以刷新上传路径
+    clearInterval(_wfSvnPollTimer);
+    if (step) {
+      const _mtype = step.type;
+      const _m = _WF_SVN_MATCH[_mtype];
+      const _src = _m ? document.getElementById(_m.src) : null;
+      let _lastV = _src ? _src.value : "";
+      _wfSvnPollTimer = setInterval(() => {
+        if (!_src || !document.getElementById(_m.out)) { clearInterval(_wfSvnPollTimer); _wfSvnPollTimer = null; return; }
+        if (_src.value !== _lastV) { _lastV = _src.value; _wfUpdateSvnMatch(_mtype); }
+      }, 500);
+    }
   }
 
-  document.getElementById("wf_modal_close").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } });
-  document.getElementById("wf_modal_cancel").addEventListener("click", () => { overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } });
+  document.getElementById("wf_modal_close").addEventListener("click", () => { clearInterval(_wfSvnPollTimer); _wfSvnPollTimer = null; overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } });
+  document.getElementById("wf_modal_cancel").addEventListener("click", () => { clearInterval(_wfSvnPollTimer); _wfSvnPollTimer = null; overlay.classList.remove("show"); _modalCtx = null; delete overlay.dataset.modalCtx; if (_wfHistoryDd) { _wfHistoryDd.remove(); _wfHistoryDd = null; } });
   document.getElementById("wf_modal_save").addEventListener("click", _wfModalDoSave);
 
   panel.querySelectorAll("button,input").forEach(el => {
@@ -862,8 +875,15 @@ function buildWorkflowTab(panel) {
         const val = input.value.trim();
         if (save && !val) _showToast("步骤名称不能为空");
         if (save && val && config.workflows[wfIdx]?.steps?.[stepIdx]) {
-          config.workflows[wfIdx].steps[stepIdx].name = val;
-          config.workflows[wfIdx].steps[stepIdx].custom_name = true;
+          const _st = config.workflows[wfIdx].steps[stepIdx];
+          // unlock_svn 强制自动命名：改名输入无效，回退为自动名
+          if (_st.type === "unlock_svn") {
+            _st.name = _wfAutoName(_st) || val;
+            _st.custom_name = false;
+          } else {
+            _st.name = val;
+            _st.custom_name = true;
+          }
           saveConfig({workflows:config.workflows});
         }
         const nextStep = config.workflows[wfIdx]?.steps?.[stepIdx];
@@ -1232,9 +1252,18 @@ function _wfAutoName(step) {
     return i >= 0 ? p.substring(i+1) : p;
   }
   if (t === "unlock_svn") {
-    const p = step.target_path || "";
+    const targets = String(step.target_path || "").split(",").map(s => s.trim()).filter(Boolean);
+    const p = (targets[0] || "").replace(/[\/\\]$/, "");
+    if (!p) return "";
     const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
-    return i >= 0 ? p.substring(i+1) : p;
+    const last = i >= 0 ? p.substring(i+1) : p;
+    // 目标为文件（最后段含 .）→ 取所在文件夹名；否则取该文件夹名（最后段）
+    if (last.includes(".")) {
+      const dir = i >= 0 ? p.substring(0, i) : "";
+      const j = Math.max(dir.lastIndexOf("\\"), dir.lastIndexOf("/"));
+      return j >= 0 ? dir.substring(j+1) : dir;
+    }
+    return last;
   }
   if (t === "export_text") {
     const p = step.input_file || "";

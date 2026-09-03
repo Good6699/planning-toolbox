@@ -76,6 +76,7 @@ DATA_DIRS = [
     ("templates", "templates"),
     ("assets", "assets"),
     ("splash", "splash"),
+    ("resources", "resources"),
     ("py_modules/_tcl_data", "_tcl_data"),
     ("py_modules/_tk_data", "_tk_data"),
 ]

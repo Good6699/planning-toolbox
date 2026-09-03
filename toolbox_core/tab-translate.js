@@ -63,10 +63,9 @@ function buildTranslateTab(panel) {
         <div class="card">
           <div class="section-label">输出设置</div>
           <div class="form-group">
-            <label>输出目录</label>
+            <label>输出目录（跟随翻译模版位置）</label>
             <div class="flex-row">
-              <input type="text" id="tr_out" value="${escapeHtml(out)}" placeholder="输入翻译结果的保存目录，不存在会自动创建" style="flex:1">
-              <button class="btn btn-normal" data-action="browse-tr-out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg></button>
+              <input type="text" id="tr_out" value="${escapeHtml(out)}" readonly placeholder="自动 = 翻译模版文件所在目录" style="flex:1">
               <button class="btn btn-normal" data-action="open-tr-out" title="打开输出目录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M2 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v1"/><path d="M2 12l3 7A2 2 0 006.3 19h12.4a2 2 0 001.8-1.5L24 12H2z"/></svg></button>
             </div>
           </div>
@@ -92,6 +91,31 @@ function buildTranslateTab(panel) {
   `;
   if (config.tr_src_history?.length) document.getElementById("tr_src").value = config.tr_src_history[0];
   if (config.tr_ref_history?.length) document.getElementById("tr_ref").value = config.tr_ref_history[0];
+  // 默认指向内置的翻译模版 / 翻译参考（无历史记录时兜底）
+  const _setTrOut = () => {
+    const _s = document.getElementById("tr_src");
+    const _o = document.getElementById("tr_out");
+    if (!_s || !_o) return;
+    const p = _s.value.trim();
+    if (!p) return;
+    const idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+    _o.value = idx >= 0 ? p.substring(0, idx) : p;
+  };
+  fetch("/api/translate/default-resources").then(r=>r.json()).then(d=>{
+    if (d.template && !config.tr_src_history?.length) {
+      const _s = document.getElementById("tr_src");
+      if (_s && !_s.value.trim()) _s.value = d.template;
+    }
+    if (d.reference && !config.tr_ref_history?.length) {
+      const _r = document.getElementById("tr_ref");
+      if (_r && !_r.value.trim()) _r.value = d.reference;
+    }
+    _setTrOut();
+  }).catch(()=>{});
+  {
+    const _s = document.getElementById("tr_src");
+    if (_s) _s.addEventListener("input", _setTrOut);
+  }
   if (config.tr_api_key) document.getElementById("tr_api_key").value = config.tr_api_key;
   initSuggest("tr_src", config.tr_src_history||[]);
   initSuggest("tr_ref", config.tr_ref_history||[]);
@@ -137,7 +161,7 @@ function runTranslate() {
     model:document.getElementById("tr_model").value.trim(),
     src_lang:document.getElementById("tr_src_lang").value.trim(),
     tgt_langs:tgtLangs,
-    out_dir:document.getElementById("tr_out").value.trim(),
+    out_dir:"",
     prompt:document.getElementById("tr_prompt").value.trim(),
     batch_size:batchValue
   };
@@ -155,7 +179,6 @@ function runTranslate() {
   }
   if (!body.api_key) { _showToast("请输入 API Key"); document.getElementById("tr_api_key").focus(); return; }
   if (!body.model) { _showToast("请输入模型名称"); document.getElementById("tr_model").focus(); return; }
-  if (!body.out_dir) { _showToast("请选择输出目录"); document.getElementById("tr_out").focus(); return; }
   if (!body.prompt) { _showToast("请输入翻译 Prompt"); document.getElementById("tr_prompt").focus(); return; }
   if (!Number.isInteger(body.batch_size) || body.batch_size < 1) {
     _showToast("批处理量必须是大于等于 1 的整数");

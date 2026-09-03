@@ -5365,6 +5365,28 @@ def _import_lang_map_txt_to_json():
     return result
 
 
+def _get_resource_dir():
+    """返回随工具分发的内置资源目录（打包版在 _MEIPASS/resources，开发版在 toolbox_core/resources）。"""
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        p = os.path.join(base, "resources")
+        if os.path.isdir(p):
+            return p
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources")
+
+
+@app.route("/api/translate/default-resources", methods=["GET"])
+def api_translate_default_resources():
+    """返回内置的翻译模版 / 翻译参考默认路径。"""
+    rdir = _get_resource_dir()
+    tpl = os.path.join(rdir, "翻译模版.xlsx")
+    ref = os.path.join(rdir, "翻译参考.xlsx")
+    return jsonify({
+        "template": tpl if os.path.isfile(tpl) else "",
+        "reference": ref if os.path.isfile(ref) else "",
+    })
+
+
 @app.route("/api/translate/lang-id-map", methods=["GET", "POST"])
 def api_translate_lang_id_map():
     if request.method == "GET":
@@ -5400,7 +5422,8 @@ def api_translate_run():  # noqa: C901
     model = data.get("model", "gpt-4o-mini").strip()
     src_lang = data.get("src_lang", "").strip()
     tgt_langs = data.get("tgt_langs", [])
-    out_dir = data.get("out_dir", DEFAULT_OUTPUT_DIR).strip()
+    # 输出目录强制为「翻译模版文件（待翻译源文件）所在位置」，不再由用户设置
+    out_dir = os.path.dirname(os.path.abspath(src_path))
     prompt_template = data.get("prompt", "").strip()
     batch_size = int(data.get("batch_size", 20))
 
@@ -5663,6 +5686,21 @@ def api_translate_run():  # noqa: C901
             "英文": "en", "葡萄牙文": "pt", "西班牙文": "es", "韩文": "ko",
         }
 
+        def _cleanup_template():
+            """翻译完成后清空源文件（翻译模版）表头以下的数据行，保留表头。"""
+            if not src_path or not os.path.isfile(src_path):
+                return
+            try:
+                _ct = openpyxl.load_workbook(src_path)
+                _cws = _ct.active
+                if _cws.max_row and _cws.max_row > 1:
+                    _cws.delete_rows(2, _cws.max_row - 1)
+                _ct.save(src_path)
+                _ct.close()
+                q.put("已清空翻译模版内容（保留表头）\n")
+            except Exception as _ce:
+                q.put(f"清空翻译模版失败（可能被 Excel 占用）: {_ce}\n")
+
         def _call_api(texts, tgt_names, terms, term_scan, retries=5):
             user_parts = []
 
@@ -5867,6 +5905,7 @@ def api_translate_run():  # noqa: C901
                 q.put("无需 API 翻译，全部已处理\n")
                 wb.save(out_path)
                 wb.close()
+                _cleanup_template()
                 q.put(f"已保存: {out_path}\n")
                 _notify_task_done("翻译")
                 q.put(None)
@@ -5913,6 +5952,7 @@ def api_translate_run():  # noqa: C901
 
             wb.save(out_path)
             wb.close()
+            _cleanup_template()
             q.put(f"{'='*50}\n")
             q.put(f"[输出路径] {out_dir}\n")
             q.put(f"翻译完成! 输出文件: {out_path}\n")

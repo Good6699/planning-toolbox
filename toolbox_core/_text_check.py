@@ -274,20 +274,30 @@ def _check_whitespace(sc_text, lang_text):
 
 
 def _validate_color_codes(text):
-    """检查文本中的颜色代码格式是否正确"""
+    """检查 <color=...> 中的颜色值。颜色码支持 3/6/8 位十六进制（#RGB / #RRGGBB / #RRGGBBAA）。
+    返回带类型前缀的问题列表：
+    - 「颜色码标签格式错误」：<color=...> 值内含 '<'（标签缺 > 或嵌套，如 #ff6400ff<color=#ff6400ff）
+    - 「颜色码格式错误」：'#' 段十六进制长度不是 3/6/8"""
     if not text:
         return []
-    issues = []
-    # 匹配 <color=#...> 中的颜色值
+    out = []
     for m in re.finditer(r'<color=([^>]+)>', str(text)):
         val = m.group(1).strip()
         if "{" in val or "}" in val:
             continue  # 占位符颜色（如 <color=#{{{2}}}>）→ 动态值，跳过
         if val.lower() in NAMED_COLORS:
             continue  # 命名色（如 <color=yellow>）→ 引擎支持，跳过
-        if not COLOR_HEX_RE.fullmatch(val):
-            issues.append(val)
-    return issues
+        if "<" in val:
+            out.append(f"颜色码标签格式错误: {val}")
+            continue
+        bad = []
+        for hm in re.finditer(r'#([0-9a-fA-F]*)', val):
+            run = hm.group(1)
+            if len(run) not in (3, 6, 8):
+                bad.append("#" + run)
+        if bad:
+            out.append("颜色码格式错误: " + ";".join(bad))
+    return out
 
 
 def _issue_cat_rank(issue: str) -> int:
@@ -301,34 +311,36 @@ def _issue_cat_rank(issue: str) -> int:
         return 2
     if "标签闭合错误" in s:
         return 3
-    if "缺少闭标签" in s:
+    if "颜色码标签格式错误" in s:
         return 4
-    if "多余闭标签" in s:
+    if "缺少闭标签" in s:
         return 5
-    if "占位符格式错误" in s:
+    if "多余闭标签" in s:
         return 6
-    if "特殊占位符数量不一致" in s:
-        return 14
-    if "无特殊占位符" in s:
-        return 15
-    if "占位符数量不一致" in s:
+    if "占位符格式错误" in s:
         return 7
-    if "无占位符" in s:
-        return 8
-    if "缺少格式串" in s:
-        return 9
-    if "多余格式串" in s:
-        return 10
-    if "颜色码格式错误" in s:
-        return 11
-    if "空格不一致" in s:
-        return 12
-    if "疑似乱码" in s:
-        return 13
-    if "漏翻" in s:
+    if "特殊占位符数量不一致" in s:
+        return 15
+    if "无特殊占位符" in s:
         return 16
-    if "SC列为空" in s:
+    if "占位符数量不一致" in s:
+        return 8
+    if "无占位符" in s:
+        return 9
+    if "缺少格式串" in s:
+        return 10
+    if "多余格式串" in s:
+        return 11
+    if "颜色码格式错误" in s:
+        return 12
+    if "空格不一致" in s:
+        return 13
+    if "疑似乱码" in s:
+        return 14
+    if "漏翻" in s:
         return 17
+    if "SC列为空" in s:
+        return 18
     return 99
 
 
@@ -510,7 +522,7 @@ def detect(input_path, progress_callback=None, target_langs=None, lang_id_map=No
 
                 # SC 本身的颜色码格式检查
                 for bad_color in sc_color_issues:
-                    issues.append(f"SC颜色码格式错误: {bad_color}")
+                    issues.append(f"SC {bad_color}")
                 # SC 特殊占位符格式错误
                 if sc_malformed_ph:
                     issues.append(f"SC 占位符格式错误: {','.join(sorted(sc_malformed_ph))}")
@@ -566,7 +578,7 @@ def detect(input_path, progress_callback=None, target_langs=None, lang_id_map=No
                     # 翻译语言的颜色码格式检查
                     lang_color_issues = _validate_color_codes(lang_val)
                     for bad_color in lang_color_issues:
-                        issues.append(f"{lang_name}颜色码格式错误: {bad_color}")
+                        issues.append(f"{lang_name} {bad_color}")
                         cell_colors[col_idx] = FILL_PINK
 
                     # 空白字符一致性

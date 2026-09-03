@@ -450,10 +450,10 @@ function buildWorkflowTab(panel) {
     const m = {
       export_text: `
         ${_fb("主文件路径","input_file","wf_m_input_file","file",false,"输入要导出的 Excel 文件路径")}
-        <div class="form-group"><label>上传到（自动匹配 gameData + StreamingAssets）</label><div class="wf-svn-match-v" id="wf_m_svn_match_export_text">—</div></div>`,
+        <div class="form-group"><label>上传到（自动匹配 gameData + StreamingAssets）</label><div class="flex-row"><input type="text" class="wf-modal-input" readonly id="wf_m_svn_match_export_text" placeholder="输入主路径后自动匹配"></div></div>`,
       export_modified_config: `
         ${_fb("本地SVN副本路径","source_path","wf_m_source_path","dir",false,"输入本地 SVN 工作副本路径")}
-        <div class="form-group"><label>上传到（自动匹配 gameData + StreamingAssets）</label><div class="wf-svn-match-v" id="wf_m_svn_match_export_modified_config">—</div></div>`,
+        <div class="form-group"><label>上传到（自动匹配 gameData + StreamingAssets）</label><div class="flex-row"><input type="text" class="wf-modal-input" readonly id="wf_m_svn_match_export_modified_config" placeholder="输入主路径后自动匹配"></div></div>`,
       upload_svn: `
         <div class="form-group"><label>源目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_dirs" data-key="dirs" value="${v("dirs")}" placeholder="输入待上传的本地目录，多个用逗号分隔"></div>`,
       merge_table: `
@@ -468,7 +468,7 @@ function buildWorkflowTab(panel) {
         ${_fb("根目录","root_dir","wf_m_root_dir","dir",false,"输入错误码文件所在的根目录")}
         <input type="hidden" class="wf-modal-input" id="wf_m_ec_lang" data-key="lang_codes" value="${v("lang_codes")}">
         <div class="form-group"><label>语言（自动扫描根目录 Language 子目录，勾选导出）</label><div id="wf_lang_list_ec" class="wf-lang-list"></div></div>
-        <div class="form-group"><label>上传到（自动匹配 gameData + StreamingAssets）</label><div class="wf-svn-match-v" id="wf_m_svn_match_export_error_code">—</div></div>`,
+        <div class="form-group"><label>上传到（自动匹配 gameData + StreamingAssets）</label><div class="flex-row"><input type="text" class="wf-modal-input" readonly id="wf_m_svn_match_export_error_code" placeholder="输入主路径后自动匹配"></div></div>`,
       lock_svn: `
         ${_fb("目标文件路径","target_path","wf_m_target_path","file",false,"输入要锁定的文件路径")}
         <div class="form-group"><label>更新目录（逗号分隔）</label><input type="text" class="wf-modal-input" id="wf_m_update_dirs" data-key="update_dirs" value="${v("update_dirs")}" placeholder="锁定前先更新的目录，多个用逗号分隔"></div>
@@ -515,13 +515,13 @@ function buildWorkflowTab(panel) {
         <div class="form-group"><label>SVN提交备注（包含匹配）</label><input type="text" class="wf-modal-input" id="wf_m_mc_msg" data-key="commit_msg" value="${v("commit_msg")}" placeholder="输入提交信息关键词，留空不限"></div>
         <div class="form-group"><label>SVN提交作者</label><input type="text" class="wf-modal-input" id="wf_m_mc_author" data-key="commit_author" value="${v("commit_author")}" placeholder="SVN提交者账户名，多个用逗号分隔，留空不限"></div>
         <div class="form-group"><label>自然日</label><input type="number" class="wf-modal-input" id="wf_m_mc_days" data-key="days" min="1" value="${v("days") || 3}" placeholder="合并距今几天内的提交（1=当天）"></div>
-        <div class="form-group"><label>提交到（自动匹配 gameData + StreamingAssets）</label><div class="wf-svn-match-v" id="wf_m_svn_match_merge_config">—</div></div>`,
+        <div class="form-group"><label>提交到（自动匹配 gameData + StreamingAssets）</label><div class="flex-row"><input type="text" class="wf-modal-input" readonly id="wf_m_svn_match_merge_config" placeholder="输入主路径后自动匹配"></div></div>`,
       error_code_entry: `
         ${_fb("翻译文件","translation_file","wf_m_ece_input","file",false,"输入包含错误码翻译的 Excel 文件路径")}
         ${_fb("目标路径","target_path","wf_m_ece_target","dir",false,"输入 gameData 所在目录（自动找 Language 子目录）")}
         <input type="hidden" class="wf-modal-input" id="wf_m_ece_lang" data-key="lang_codes" value="${v("lang_codes")}">
         <div class="form-group"><label>语言（自动扫描目标 Language 子目录，勾选导出）</label><div id="wf_lang_list_ece" class="wf-lang-list"></div></div>
-        <div class="form-group"><label>上传到（自动匹配 gameData + StreamingAssets）</label><div class="wf-svn-match-v" id="wf_m_svn_match_error_code_entry">—</div></div>`,
+        <div class="form-group"><label>上传到（自动匹配 gameData + StreamingAssets）</label><div class="flex-row"><input type="text" class="wf-modal-input" readonly id="wf_m_svn_match_error_code_entry" placeholder="输入主路径后自动匹配"></div></div>`,
     };
     return m[type] || '<div class="form-group"><span style="color:var(--dim)">无可用设置</span></div>';
   }
@@ -766,13 +766,14 @@ function buildWorkflowTab(panel) {
       const out = document.getElementById(m.out);
       if (!inp || !out) return;
       const p = inp.value.trim();
-      if (!p) { out.innerHTML = '<span class="wf-svn-match-empty">—</span>'; return; }
+      if (!p) { out.value = ""; out.placeholder = "输入主路径后自动匹配"; return; }
       fetch("/api/workflow/resolve-svn-dirs?path=" + encodeURIComponent(p)).then(r=>r.json()).then(d=>{
-        let html = "";
-        if (d.gamedata) html += '<div>gameData: <span class="wf-svn-match-val">' + escapeHtml(d.gamedata) + '</span></div>';
-        if (d.streaming) html += '<div>StreamingAssets: <span class="wf-svn-match-val">' + escapeHtml(d.streaming) + '</span></div>';
-        out.innerHTML = html || '<span class="wf-svn-match-empty">（后端执行时按主路径匹配）</span>';
-      }).catch(()=>{ out.innerHTML = '<span class="wf-svn-match-empty">（解析失败）</span>'; });
+        const parts = [];
+        if (d.gamedata) parts.push(d.gamedata);
+        if (d.streaming) parts.push(d.streaming);
+        out.value = parts.join("；");
+        out.placeholder = parts.length ? "" : "（后端执行时按主路径匹配）";
+      }).catch(()=>{ out.value = ""; out.placeholder = "（解析失败）"; });
     };
     if (step) {
       _wfUpdateSvnMatch(step.type);

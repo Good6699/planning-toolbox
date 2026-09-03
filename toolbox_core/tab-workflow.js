@@ -27,7 +27,7 @@ function buildWorkflowTab(panel) {
               <div class="wf-children">
                 ${(wf.steps||[]).filter(Boolean).map((s, j) => `
                   <div class="wf-child" data-step="${j}">
-                    <span class="wf-child-type ${s.type}">${typeIcon[s.type]||''} ${typeCn[s.type]||s.type}</span>
+                    <span class="wf-child-type ${s.type}"><span class="wf-type-ico">${typeIcon[s.type]||''}</span>${typeCn[s.type]||s.type}</span>
                     <span class="wf-child-name" title="双击修改名称">${escapeHtml(s.type === "unlock_svn" ? (_wfAutoName(s) || s.name) : (!s.custom_name && _wfAutoName(s) || s.name))}</span>
                     ${s.type === 'open_tables' ? '<button class="wf-step-open-btn" title="打开（不锁定SVN）">' + _WF_ICONS.open + '</button>' : ''}
                     <button class="wf-step-play-btn" title="执行本步骤">${_WF_ICONS.play}</button>

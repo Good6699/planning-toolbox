@@ -14,19 +14,19 @@ const S = {};
 
 const nav = [
 
+  {key:"workflow",label:"工作流"},
+
   {key:"svn",label:"SVN 记录"},
 
   {key:"merge",label:"语义合并"},
 
   {key:"textcheck",label:"文字检测"},
 
-  {key:"workflow",label:"工作流"},
-
-  {key:"translate",label:"翻译"},
-
   {key:"prefab",label:"修改预制"},
 
   {key:"assist",label:"辅助功能"},
+
+  {key:"translate",label:"翻译"},
 
 ];
 
@@ -3448,7 +3448,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   await loadConfig();
 
-  switchTab("svn");
+  switchTab(nav[0].key);
 
   fetch("/api/version").then(r => r.json()).then(d => {
     const el = document.getElementById("app_version");

@@ -1,3 +1,7 @@
+// 点击更新后锁定按钮：直到后端确认「所有 SVN 更新弹窗都已弹出」才返回（不再用固定时间冷却），
+// 真正的「正在更新」由后端锁检测兜底
+let _wfUpdateBusy = new Set();
+
 function buildWorkflowTab(panel) {
   const wfs = config.workflows || [];
   const typeCn = {export_text:"导出文字表",export_modified_config:"导出修改配置表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表",merge_error_code:"整合错误码",consolidate:"快速整合",merge_specified_text:"指定合并文字表",merge_config:"合并配置",error_code_entry:"录入错误码"};
@@ -121,8 +125,15 @@ function buildWorkflowTab(panel) {
       const wfIdx = Number(el.dataset.idx);
       const wf = config.workflows[wfIdx];
       if (!wf || !wf.steps) return;
+      // 后端确认「所有更新弹窗已弹出」前不允许再点（避免弹窗没出/更新前连点导致锁死）
+      if (_wfUpdateBusy.has(wfIdx)) {
+        _showToast("该工作流正在更新中，请勿重复点击，以免 SVN 锁死");
+        return;
+      }
       const prefixes = _wfDetectPrefixes(wf.steps);
       if (!prefixes.length) { _showToast("未检测到需更新的路径前缀"); return; }
+      _wfUpdateBusy.add(wfIdx);
+      updateBtn.classList.add("wf-updating");
       const logContainer = document.getElementById("wf_log");
       logContainer.querySelectorAll(".wf-log-section").forEach(sec => {
         const bodyEl = sec.querySelector(".wf-log-body");
@@ -147,10 +158,26 @@ function buildWorkflowTab(panel) {
       try {
         const r = await fetch("/api/workflow/open-update-wc", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prefixes, name: wf.name})});
         const d = await r.json();
-        if (d.error) { bodyEl.innerHTML = '<div class="error">❌ '+escapeHtml(d.error)+'</div>'; _showToast(d.error); return; }
+        if (d.error) {
+          bodyEl.innerHTML = '<div class="error">❌ '+escapeHtml(d.error)+'</div>';
+          _showToast(d.error);
+          _wfUpdateBusy.delete(wfIdx);
+          updateBtn.classList.remove("wf-updating");
+          return;
+        }
+        (d.cleaned || []).forEach(path => {
+          const div = document.createElement("div");
+          div.textContent = "已自动清理被锁的 SVN 工作副本: " + path;
+          _logAppend(bodyEl, div);
+        });
         d.opened.forEach(path => {
           const div = document.createElement("div");
           div.textContent = "已打开 TortoiseSVN 更新窗口: " + path;
+          _logAppend(bodyEl, div);
+        });
+        (d.skipped_updating || []).forEach(path => {
+          const div = document.createElement("div");
+          div.textContent = "该目录正在更新，已跳过: " + path;
           _logAppend(bodyEl, div);
         });
         (d.missing || []).forEach(path => {
@@ -161,6 +188,9 @@ function buildWorkflowTab(panel) {
       } catch(err) {
         bodyEl.innerHTML = '<div class="error">❌ 请求失败: '+escapeHtml(err.message)+'</div>';
         _showToast("请求失败：" + err.message);
+      } finally {
+        _wfUpdateBusy.delete(wfIdx);
+        updateBtn.classList.remove("wf-updating");
       }
     });
     const addItem = el.querySelector(".wf-add-step-item");

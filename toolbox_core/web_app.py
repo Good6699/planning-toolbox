@@ -1973,6 +1973,21 @@ def api_workflow_scan_langs():
     return jsonify({"langs": sorted(langs, key=lambda s: s.lower())})
 
 
+def _is_wc_locked(svn, path):
+    """判断 SVN 工作副本是否被锁（正在更新或残留锁）。svn status 遇被锁返回 E155004。"""
+    try:
+        r = subprocess.run([svn, "status", "--depth", "empty", path],
+                           capture_output=True, timeout=30, **_get_subprocess_kwargs())
+    except Exception:
+        return True  # 无法判断时保守视为忙，避免重复更新
+    err = (r.stderr or b"").decode("utf-8", errors="replace")
+    return "E155004" in err or "is locked" in err.lower() or "working copy is locked" in err.lower()
+
+
+# 记录已启动的 TortoiseSVN 更新进程（dir -> Popen），用于防止对同一工作副本重复发起更新
+_workflow_update_procs = {}
+
+
 @app.route("/api/workflow/open-update-wc", methods=["POST"])
 def api_workflow_open_update_wc():
     data = request.get_json(force=True)
@@ -1983,22 +1998,70 @@ def api_workflow_open_update_wc():
     tortoise = _get_tortoise_proc_path()
     if not tortoise:
         return jsonify({"error": "未找到 TortoiseSVN，请安装后重试"}), 400
+    svn = _get_svn_path()
 
-    opened = []
-    missing = []
+    # 确认所有 TortoiseSVN 更新进程都启动（= 弹窗已出）后再返回，前端据此锁定按钮
+    _LAUNCH_CONFIRM = 1.5  # 秒：给弹窗渲染留出时间，有界
+    opened, cleaned, skipped_updating, missing = [], [], [], []
+    procs = []
+    # 清理已结束的更新进程，避免 dict 无限增长
+    for _d, _p in list(_workflow_update_procs.items()):
+        if _p.poll() is not None:
+            _workflow_update_procs.pop(_d, None)
     for prefix in prefixes:
         for subdir in ["Client", "gameData", "tools"]:
             d = os.path.join(prefix, subdir)
-            if os.path.isdir(d):
+            if not os.path.isdir(d):
+                missing.append(d)
+                continue
+            # 该目录已有 TortoiseSVN 更新进程仍在运行（弹窗未关/更新中）→ 跳过，避免重复更新锁死
+            _prev = _workflow_update_procs.get(d)
+            if _prev is not None and _prev.poll() is None:
+                skipped_updating.append(d)
+                continue
+            if _prev is not None and _prev.poll() is not None:
+                _workflow_update_procs.pop(d, None)
+            # 空闲 → 直接打开 TortoiseSVN 更新
+            if not _is_wc_locked(svn, d):
                 # /closeonend:2 = 无错误且无冲突时自动关闭弹窗；冲突/异常时保留人工处理
-                subprocess.Popen([tortoise, "/command:update", "/path:" + d, "/closeonend:2"])
+                p = subprocess.Popen([tortoise, "/command:update", "/path:" + d, "/closeonend:2"])
+                procs.append(p)
+                _workflow_update_procs[d] = p
+                opened.append(d)
+                continue
+            # 被锁：先清理残留锁，再复检——解锁则继续更新，仍锁则视为「真正正在更新」跳过
+            try:
+                subprocess.run([svn, "cleanup", d], capture_output=True,
+                               timeout=120, **_get_subprocess_kwargs())
+            except Exception:
+                pass
+            if not _is_wc_locked(svn, d):
+                cleaned.append(d)
+                p = subprocess.Popen([tortoise, "/command:update", "/path:" + d, "/closeonend:2"])
+                procs.append(p)
+                _workflow_update_procs[d] = p
                 opened.append(d)
             else:
-                missing.append(d)
+                skipped_updating.append(d)
 
     if not opened:
-        return jsonify({"error": "未找到可更新的 Client、gameData 或 tools 目录", "missing": missing}), 400
-    return jsonify({"opened": opened, "missing": missing})
+        return jsonify({"error": "未找到可更新的 Client、gameData 或 tools 目录",
+                        "missing": missing, "cleaned": cleaned,
+                        "skipped_updating": skipped_updating}), 400
+
+    # 等待所有弹窗出现：确认进程都还活着（未立即退出=弹窗已出）；给足渲染时间后返回
+    if procs:
+        _deadline = time.time() + _LAUNCH_CONFIRM
+        while time.time() < _deadline:
+            if not all(p.poll() is None for p in procs):
+                break  # 有进程退出 → 视为存在未成功弹出的窗口
+            time.sleep(0.15)
+            if all(p.poll() is None for p in procs):
+                time.sleep(0.3)
+                if all(p.poll() is None for p in procs):
+                    break
+    return jsonify({"opened": opened, "missing": missing,
+                    "cleaned": cleaned, "skipped_updating": skipped_updating})
 
 
 @app.route("/api/workflow/update-wc", methods=["POST"])

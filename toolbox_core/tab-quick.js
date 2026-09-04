@@ -54,8 +54,8 @@ function _quickRender() {
   const list = document.getElementById("quick_list");
   if (!list) return;
   const addItem = '<div class="quick-group-add" data-action="qk-add-group" style="margin:0"><span class="qk-plus">＋</span><span>新建分组</span></div>';
-  const finish = (svnMap) => {
-    list.innerHTML = _quickData.map((g, gi) => _quickGroup(g, gi, svnMap || {})).join("") + addItem;
+  const finish = (svnMap, folderMap) => {
+    list.innerHTML = _quickData.map((g, gi) => _quickGroup(g, gi, svnMap || {}, folderMap || {})).join("") + addItem;
     _quickBind(list);
   };
   if (!_quickData.length) { list.innerHTML = addItem; _quickBind(list); return; }
@@ -64,26 +64,27 @@ function _quickRender() {
   if (paths.length) {
     fetch("/api/quick/svn-check", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({paths})})
       .then(r => r.json()).then(d => {
-        const m = {};
-        (d.results || []).forEach(x => { m[x.path] = x.is_svn; });
-        finish(m);
-      }).catch(() => finish({}));
+        const svnM = {}, folderM = {};
+        (d.results || []).forEach(x => { svnM[x.path] = x.is_svn; folderM[x.path] = x.is_folder; });
+        finish(svnM, folderM);
+      }).catch(() => finish({}, {}));
   } else {
-    finish({});
+    finish({}, {});
   }
 }
 
-function _quickGroup(g, gi, svnMap) {
+function _quickGroup(g, gi, svnMap, folderMap) {
   const items = (g.items || []).map((p, ii) => {
     const path = _itemPath(p);
     const isSvn = !!svnMap[path];
+    const isFolder = !!(folderMap && folderMap[path]);
     const svnBtns = isSvn
       ? `<button class="qk-s-btn" data-act="update" title="更新SVN">${_QK.update}</button>
          <button class="qk-s-btn" data-act="commit" title="提交SVN">${_QK.commit}</button>
          <button class="qk-s-btn" data-act="log" title="查看日志">${_QK.log}</button>`
       : "";
     return `<div class="quick-item" data-gi="${gi}" data-ii="${ii}" draggable="true" title="${escapeHtml(path)}">
-      <span class="qk-ico">${isSvn ? _QK.folder : _QK.file}</span>
+      <span class="qk-ico">${isFolder ? _QK.folder : _QK.file}</span>
       <span class="quick-item-name">${escapeHtml(_itemName(p))}</span>
       <span class="qk-acts">
         ${svnBtns}

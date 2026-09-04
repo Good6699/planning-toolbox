@@ -861,11 +861,19 @@ def api_prefab_consume_dropped():
 
 # ── 快捷列表（quicklist）──
 def _is_svn_copy(path):
-    """条目路径本身（目录）或所在目录（文件）下存在 .svn 即视为 SVN 副本，不向上递归。"""
-    base = path
+    """条目或其上级目录（向上找）存在 .svn 即视为 SVN 副本。
+    SVN 工作副本根下的子目录（自身无 .svn）也应判定为 SVN 路径。"""
+    base = os.path.abspath(path)
     if os.path.isfile(base):
         base = os.path.dirname(base)
-    return bool(base) and os.path.isdir(os.path.join(base, ".svn"))
+    while base and len(base) > 3:
+        if os.path.isdir(os.path.join(base, ".svn")):
+            return True
+        parent = os.path.dirname(base)
+        if parent == base:
+            break
+        base = parent
+    return False
 
 
 @app.route("/api/quicklist", methods=["GET"])
@@ -890,7 +898,7 @@ def api_quicklist_save():
 def api_quick_svn_check():
     data = request.get_json(force=True)
     paths = data.get("paths", [])
-    return jsonify({"results": [{"path": p, "is_svn": _is_svn_copy(p)} for p in paths]})
+    return jsonify({"results": [{"path": p, "is_svn": _is_svn_copy(p), "is_folder": os.path.isdir(p)} for p in paths]})
 
 
 @app.route("/api/quick/open", methods=["POST"])

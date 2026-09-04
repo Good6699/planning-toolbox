@@ -3,24 +3,70 @@
 let _wfUpdateBusy = new Set();
 let _wfSvnPollTimer = null;
 let _wfRenaming = false;
+let _wfGroupExpanded = new Set();
+
+// ── 工作流分组数据层：每个工作流有稳定 _id；分组 wf_groups 只存 id 列表（归类视图，不复制工作流）──
+function _wfEnsureIds() {
+  config.workflows = config.workflows || [];
+  config.wf_groups = config.wf_groups || [];
+  let n = 0;
+  config.workflows.forEach(wf => { if (!wf._id) { wf._id = "wf_" + Date.now().toString(36) + "_" + (++n); } });
+  // 清理分组中失效的 id，并保证同一工作流只属于一个分组
+  const ids = new Set(config.workflows.map(w => w._id));
+  config.wf_groups.forEach(g => { g.workflows = (g.workflows || []).filter(id => ids.has(id)); });
+  const seen = new Set();
+  config.wf_groups.forEach(g => { g.workflows = (g.workflows || []).filter(id => { if (seen.has(id)) return false; seen.add(id); return true; }); });
+}
+function _wfById(id) { return config.workflows.find(w => w._id === id) || null; }
+function _wfGroupOf(id) {
+  const gi = config.wf_groups.findIndex(g => (g.workflows || []).indexOf(id) >= 0);
+  return gi >= 0 ? config.wf_groups[gi] : null;
+}
+// 拖拽后从 DOM 重建 config.workflows（顺序）+ wf_groups（分组 id 列表），并重设各工作流 data-idx，保证功能不错位
+function _wfSyncFromDom() {
+  const byId = {}; (config.workflows || []).forEach(w => { if (w._id) byId[w._id] = w; });
+  const seen = new Set();
+  const order = [];
+  document.querySelectorAll("#wf_tree > .wf-parent").forEach(p => {
+    const id = p.dataset.wid; if (byId[id] && !seen.has(id)) { order.push(byId[id]); seen.add(id); }
+  });
+  document.querySelectorAll("#wf_tree > .wf-group").forEach(gEl => {
+    gEl.querySelectorAll(".wf-group-children > .wf-parent").forEach(p => {
+      const id = p.dataset.wid; if (byId[id] && !seen.has(id)) { order.push(byId[id]); seen.add(id); }
+    });
+  });
+  (config.workflows || []).forEach(w => { if (w._id && !seen.has(w._id)) { order.push(w); seen.add(w._id); } });
+  config.workflows = order;
+  const ng = [];
+  document.querySelectorAll("#wf_tree > .wf-group").forEach(gEl => {
+    const gidx = Number(gEl.dataset.gidx);
+    const g = (config.wf_groups && config.wf_groups[gidx]) || { name: "新分组" };
+    const wids = [...gEl.querySelectorAll(".wf-group-children > .wf-parent")].map(p => p.dataset.wid).filter(id => byId[id]);
+    ng.push({ name: g.name, workflows: wids });
+  });
+  config.wf_groups = ng;
+  document.querySelectorAll("#wf_tree .wf-parent").forEach(p => {
+    const idx = config.workflows.findIndex(w => w._id === p.dataset.wid);
+    p.dataset.idx = idx;
+    const dot = p.querySelector(".wf-status-dot"); if (dot) dot.dataset.idx = idx;
+  });
+  // 重设分组 data-gidx，保证下次拖拽时索引与 config.wf_groups 对齐
+  document.querySelectorAll("#wf_tree > .wf-group").forEach((gEl, i) => { gEl.dataset.gidx = i; });
+  saveConfig({ workflows: config.workflows, wf_groups: config.wf_groups });
+}
 
 function buildWorkflowTab(panel) {
+  _wfEnsureIds();
   const wfs = config.workflows || [];
+  const wfGroups = config.wf_groups || [];
   const typeCn = {export_text:"导出文字表",export_modified_config:"导出修改配置表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表",merge_error_code:"整合错误码",consolidate:"快速整合",merge_specified_text:"指定合并文字表",merge_config:"合并配置",error_code_entry:"录入错误码"};
   const typeIcon = {export_text:"📄",export_modified_config:"📝",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📦",merge_error_code:"🧩",consolidate:"⚡",merge_specified_text:"📑",merge_config:"🔧",error_code_entry:"📥"};
-  const isEmpty = !wfs.length;
-  panel.innerHTML = `
-    <div class="wf-layout">
-      <div class="card">
-        <div class="card-title">工作流列表</div>
-        <div class="wf-tree" id="wf_tree">
-          ${isEmpty ? '<div class="empty-state" style="padding:32px 16px;color:var(--dim)">暂无工作流，点击"新建"创建</div>'
-          : wfs.map((wf, i) => `
-            <div class="wf-parent" data-idx="${i}">
+  const _wfCard = (wf, idx) => `
+            <div class="wf-parent" data-idx="${idx}" data-wid="${wf._id}">
               <div class="wf-parent-header">
                 <span class="wf-arrow">▶</span>
                 <span class="wf-parent-name">${escapeHtml(wf.name)}<span class="wf-edit-icon"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5L10.5 3.5"/><path d="M2 10L3.5 6.5L8.5 1.5L10.5 3.5L5.5 8.5L2 10Z"/></svg></span></span>
-                <span class="wf-status-dot" data-idx="${i}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green,#4caf50);margin:0 4px"></span></span>
+                <span class="wf-status-dot" data-idx="${idx}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green,#4caf50);margin:0 4px"></span></span>
                 <button class="wf-update-btn" title="更新SVN工作副本"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7a5 5 0 019.9-1"/><path d="M12 7a5 5 0 01-9.9 1"/><path d="M12 2v4h-4"/><path d="M2 12V8h4"/></svg></button>
                 <button class="wf-copy-btn" title="复制工作流"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M10 4H11V11.5C11 12.328 10.328 13 9.5 13H3.5C2.672 13 2 12.328 2 11.5V5C2 4.172 2.672 3.5 3.5 3.5H4" stroke="currentColor" stroke-width="1.2"/></svg></button>
               </div>
@@ -41,8 +87,35 @@ function buildWorkflowTab(panel) {
                   <span>添加步骤</span>
                 </div>
               </div>
-            </div>
-          `).join('')}
+            </div>`;
+  const groupedIds = new Set();
+  const groupsHtml = wfGroups.map((g, gi) => {
+    const gIds = (g.workflows || []).filter(id => _wfById(id));
+    gIds.forEach(id => groupedIds.add(id));
+    const gWfs = gIds.map(id => { const idx = config.workflows.findIndex(w => w._id === id); return idx >= 0 ? _wfCard(config.workflows[idx], idx) : ""; }).join("");
+    return `<div class="wf-group" data-gidx="${gi}">
+      <div class="wf-group-header" data-gidx="${gi}">
+        <span class="wf-group-arrow">${_wfGroupExpanded.has(gi) ? "▼" : "▶"}</span>
+        <span class="wf-group-name" title="拖拽调整分组顺序">${escapeHtml(g.name)}</span>
+        <span class="wf-group-acts">
+          <button class="qk-s-btn" data-act="rename-group" title="重命名分组">✎</button>
+          <button class="qk-s-btn" data-act="del-group" title="删除分组">✕</button>
+        </span>
+      </div>
+      <div class="wf-group-children" ${_wfGroupExpanded.has(gi) ? "" : 'style="display:none"'}>${gWfs || '<div class="wf-group-empty">拖入工作流</div>'}</div>
+    </div>`;
+  }).join("");
+  const ungroupedHtml = config.workflows
+    .map((w, i) => ({w, i})).filter(({w}) => !groupedIds.has(w._id))
+    .map(({w, i}) => _wfCard(w, i)).join("");
+  const treeContent = groupsHtml + ungroupedHtml;
+  const isEmpty = !wfs.length && !wfGroups.length;
+  panel.innerHTML = `
+    <div class="wf-layout">
+      <div class="card">
+        <div class="card-title">工作流列表</div>
+        <div class="wf-tree" id="wf_tree">
+          ${isEmpty ? '<div class="empty-state" style="padding:32px 16px;color:var(--dim)">暂无工作流，点击"新建"创建</div>' : treeContent}
         </div>
         <div class="wf-toolbar">
           <button class="btn btn-normal" data-action="wf-create">+ 新建</button>
@@ -1083,26 +1156,24 @@ function buildWorkflowTab(panel) {
   };
 
   _wfSortables = [];
-  _wfSortables.push(Sortable.create(document.getElementById("wf_tree"), {
+  // 顶层 wf_tree：分组容器 + 未分组工作流排序；分组 children：工作流进出分组/组内排序（同 group 共享）
+  const wfTree = document.getElementById("wf_tree");
+  _wfSortables.push(Sortable.create(wfTree, {
     ...sortableOptions,
-    onStart(evt) {
-      const el = evt.item;
-      if (el.classList.contains("wf-parent") && el.classList.contains("expanded")) {
-        el.classList.remove("expanded");
-      }
-    },
-    onEnd() {
-      const newOrder = [...document.querySelectorAll("#wf_tree > .wf-parent")].map(el => Number(el.dataset.idx));
-      config.workflows = newOrder.map(i => config.workflows[i]);
-      saveConfig({workflows:config.workflows});
-      document.querySelectorAll("#wf_tree > .wf-parent").forEach((el, i) => {
-        el.dataset.idx = i;
-        const dot = el.querySelector(".wf-status-dot");
-        if (dot) dot.dataset.idx = i;
-      });
-    },
+    group: "wf-groups",
+    onEnd() { setTimeout(() => _wfSyncFromDom(), 0); },
   }));
-
+  document.querySelectorAll("#wf_tree .wf-group-children").forEach((container) => {
+    _wfSortables.push(Sortable.create(container, {
+      ...sortableOptions,
+      group: "wf-groups",
+      filter: ".wf-group-empty",
+      onAdd(evt) {
+        if (evt.item.classList.contains("wf-group")) { wfTree.appendChild(evt.item); return; }  // 分组容器不能嵌套进分组
+      },
+      onEnd() { setTimeout(() => _wfSyncFromDom(), 0); },
+    }));
+  });
   document.querySelectorAll("#wf_tree .wf-children").forEach((container) => {
     _wfSortables.push(Sortable.create(container, {
       ...sortableOptions,
@@ -1121,6 +1192,54 @@ function buildWorkflowTab(panel) {
         },
     }));
   });
+
+  // ── 分组管理：收缩 / 重命名 / 删除 ──
+  const _wfGroupRename = (header, gi) => {
+    const el = header.querySelector(".wf-group-name");
+    const old = (config.wf_groups[gi] && config.wf_groups[gi].name) || "";
+    _wfSetDragDisabled(true);
+    const input = document.createElement("input");
+    input.className = "wf-name-input";
+    input.setAttribute("draggable", "false");
+    input.addEventListener("dragstart", e => e.preventDefault());
+    input.addEventListener("mousedown", e => e.stopPropagation());
+    input.value = old;
+    el.textContent = ""; el.appendChild(input); input.focus(); input.select();
+    const finish = (save) => {
+      _wfSetDragDisabled(false);
+      const v = input.value.trim();
+      if (save && v && config.wf_groups[gi]) { config.wf_groups[gi].name = v; saveConfig({workflows:config.workflows, wf_groups:config.wf_groups}); }
+      _wfRebuild();
+    };
+    input.addEventListener("blur", () => finish(true));
+    input.addEventListener("keydown", ke => { if (ke.key === "Enter") { ke.preventDefault(); input.blur(); } else if (ke.key === "Escape") input.blur(); });
+  };
+  panel.querySelectorAll(".wf-group-header").forEach(h => {
+    if (h.querySelector(".wf-group-arrow")) h.querySelector(".wf-group-arrow").addEventListener("click", e => e.stopPropagation());
+    h.addEventListener("click", e => {
+      if (e.target.closest("[data-act]")) return;
+      if (e.target.closest("input")) return;
+      const gi = Number(h.dataset.gidx);
+      const ch = h.nextElementSibling;
+      if (!ch) return;
+      const hidden = ch.style.display === "none";
+      if (hidden) { ch.style.display = ""; _wfGroupExpanded.add(gi); h.querySelector(".wf-group-arrow").textContent = "▼"; }
+      else { ch.style.display = "none"; _wfGroupExpanded.delete(gi); h.querySelector(".wf-group-arrow").textContent = "▶"; }
+    });
+  });
+  panel.querySelectorAll("[data-act=rename-group]").forEach(btn => btn.addEventListener("click", e => {
+    e.stopPropagation();
+    const gi = Number(btn.closest(".wf-group-header").dataset.gidx);
+    _wfGroupRename(btn.closest(".wf-group-header"), gi);
+  }));
+  panel.querySelectorAll("[data-act=del-group]").forEach(btn => btn.addEventListener("click", e => {
+    e.stopPropagation();
+    const gi = Number(btn.closest(".wf-group-header").dataset.gidx);
+    const name = (config.wf_groups[gi] && config.wf_groups[gi].name) || "";
+    showConfirm({title:"删除分组", message:`确定删除分组「${name}」？组内工作流将移回未分组。`, confirmText:"删除", danger:true}).then(ok => {
+      if (ok) { config.wf_groups.splice(gi, 1); saveConfig({workflows:config.workflows, wf_groups:config.wf_groups}); _wfRebuild(); }
+    });
+  }));
 
   S.workflow.logEl = document.getElementById("wf_log");
 }
@@ -1248,9 +1367,41 @@ function _wfRebuild() {
   buildWorkflowTab(S.workflow.panel);
 }
 function wfCreate() {
+  const btn = document.querySelector('[data-action="wf-create"]');
+  if (!btn) return;
+  const pop = document.createElement("div");
+  pop.className = "wf-create-menu";
+  pop.innerHTML = `<div class="wf-create-opt" data-wfcreate="workflow">新建工作流</div><div class="wf-create-opt" data-wfcreate="group">新建分组</div>`;
+  const r = btn.getBoundingClientRect();
+  const pw = Math.max(120, r.width - 8);
+  pop.style.position = "fixed";
+  pop.style.top = (r.bottom + 4) + "px";
+  pop.style.left = (r.left + (r.width - pw) / 2) + "px";
+  pop.style.width = pw + "px";
+  document.body.appendChild(pop);
+  const close = () => pop.remove();
+  const onDocClick = () => { close(); document.removeEventListener("click", onDocClick, true); };
+  setTimeout(() => document.addEventListener("click", onDocClick, true), 0);
+  pop.addEventListener("click", e => {
+    e.stopPropagation();
+    const b = e.target.closest("[data-wfcreate]");
+    if (!b) return;
+    close();
+    document.removeEventListener("click", onDocClick, true);
+    if (b.dataset.wfcreate === "workflow") _wfNewWorkflow();
+    else _wfNewGroup();
+  });
+}
+function _wfNewWorkflow() {
   config.workflows = config.workflows || [];
   config.workflows.push({name:"新工作流",steps:[]});
   saveConfig({workflows:config.workflows});
+  _wfRebuild();
+}
+function _wfNewGroup() {
+  config.wf_groups = config.wf_groups || [];
+  config.wf_groups.push({name:"新分组", workflows:[]});
+  saveConfig({workflows:config.workflows, wf_groups:config.wf_groups});
   _wfRebuild();
 }
 function _wfAutoName(step) {

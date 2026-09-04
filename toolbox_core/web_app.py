@@ -274,6 +274,7 @@ def api_get_config():
         "cmp_global_id_col": cfg.get("cmp_global_id_col", ""),
         "cmp_output_cols": cfg.get("cmp_output_cols", ""),
         "workflows": cfg.get("workflows", []),
+        "wf_groups": cfg.get("wf_groups", []),
         "tc_path": cfg.get("tc_path", ""),
         "tr_api_key": cfg.get("tr_api_key", ""),
         "_wf_history_paths": cfg.get("_wf_history_paths", []),

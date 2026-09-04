@@ -62,7 +62,7 @@ function _wfSyncFromDom() {
     const gidx = Number(gEl.dataset.gidx);
     const g = (config.wf_groups && config.wf_groups[gidx]) || { name: "新分组" };
     const wids = [...gEl.querySelectorAll(".wf-group-children > .wf-parent")].map(p => p.dataset.wid).filter(id => byId[id]);
-    ng.push({ name: g.name, workflows: wids });
+    ng.push({ _id: g._id, name: g.name, workflows: wids });
   });
   // 防误清空：仅当 DOM 确实渲染出分组（或原本就没有分组）时才用 DOM 重建；
   // 若 DOM 无分组但 config 已有分组（渲染异常），保留原有分组，避免拖拽后把分组清空

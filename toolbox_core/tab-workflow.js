@@ -9,13 +9,28 @@ let _wfGroupExpanded = new Set();
 function _wfEnsureIds() {
   config.workflows = config.workflows || [];
   config.wf_groups = config.wf_groups || [];
-  let n = 0;
+  config.wf_top_order = config.wf_top_order || [];
+  let n = 0, gn = 0;
   config.workflows.forEach(wf => { if (!wf._id) { wf._id = "wf_" + Date.now().toString(36) + "_" + (++n); } });
-  // 清理分组中失效的 id，并保证同一工作流只属于一个分组
+  config.wf_groups.forEach(g => { if (!g._id) { g._id = "wg_" + Date.now().toString(36) + "_" + (++gn); } });
+  // 清理分组中失效/重复的 id，并保证同一工作流只属于一个分组
   const ids = new Set(config.workflows.map(w => w._id));
   config.wf_groups.forEach(g => { g.workflows = (g.workflows || []).filter(id => ids.has(id)); });
   const seen = new Set();
   config.wf_groups.forEach(g => { g.workflows = (g.workflows || []).filter(id => { if (seen.has(id)) return false; seen.add(id); return true; }); });
+  // wf_top_order：缺失时按「分组顺序 + 未分组工作流」推导；否则清理失效项
+  if (!config.wf_top_order.length) {
+    const inGroup = new Set();
+    config.wf_groups.forEach(g => (g.workflows || []).forEach(id => inGroup.add(id)));
+    const to = [];
+    config.wf_groups.forEach(g => to.push({t:"g", id:g._id}));
+    config.workflows.forEach(w => { if (!inGroup.has(w._id)) to.push({t:"w", id:w._id}); });
+    config.wf_top_order = to;
+  } else {
+    const gids = new Set(config.wf_groups.map(g => g._id));
+    const wids = new Set(config.workflows.map(w => w._id));
+    config.wf_top_order = config.wf_top_order.filter(it => (it.t === "g" ? gids.has(it.id) : wids.has(it.id)));
+  }
 }
 function _wfById(id) { return config.workflows.find(w => w._id === id) || null; }
 function _wfGroupOf(id) {
@@ -52,7 +67,18 @@ function _wfSyncFromDom() {
   });
   // 重设分组 data-gidx，保证下次拖拽时索引与 config.wf_groups 对齐
   document.querySelectorAll("#wf_tree > .wf-group").forEach((gEl, i) => { gEl.dataset.gidx = i; });
-  saveConfig({ workflows: config.workflows, wf_groups: config.wf_groups });
+  // 顶层混合顺序（分组 + 未分组工作流交错）
+  const topOrder = [];
+  document.querySelectorAll("#wf_tree > .wf-group, #wf_tree > .wf-parent").forEach(el => {
+    if (el.classList.contains("wf-group")) {
+      const gid = el.getAttribute("data-gid");
+      if (gid) topOrder.push({t:"g", id:gid});
+    } else {
+      topOrder.push({t:"w", id:el.dataset.wid});
+    }
+  });
+  if (topOrder.length) config.wf_top_order = topOrder;
+  saveConfig({ workflows: config.workflows, wf_groups: config.wf_groups, wf_top_order: config.wf_top_order });
 }
 
 function buildWorkflowTab(panel) {
@@ -88,12 +114,10 @@ function buildWorkflowTab(panel) {
                 </div>
               </div>
             </div>`;
-  const groupedIds = new Set();
-  const groupsHtml = wfGroups.map((g, gi) => {
+  const renderGroup = (g, gi) => {
     const gIds = (g.workflows || []).filter(id => _wfById(id));
-    gIds.forEach(id => groupedIds.add(id));
     const gWfs = gIds.map(id => { const idx = config.workflows.findIndex(w => w._id === id); return idx >= 0 ? _wfCard(config.workflows[idx], idx) : ""; }).join("");
-    return `<div class="wf-group" data-gidx="${gi}">
+    return `<div class="wf-group" data-gidx="${gi}" data-gid="${g._id}">
       <div class="wf-group-header" data-gidx="${gi}">
         <span class="wf-group-arrow">${_wfGroupExpanded.has(gi) ? "▼" : "▶"}</span>
         <span class="wf-group-name" title="拖拽调整分组顺序">${escapeHtml(g.name)}</span>
@@ -104,11 +128,20 @@ function buildWorkflowTab(panel) {
       </div>
       <div class="wf-group-children" ${_wfGroupExpanded.has(gi) ? "" : 'style="display:none"'}>${gWfs || '<div class="wf-group-empty">拖入工作流</div>'}</div>
     </div>`;
-  }).join("");
-  const ungroupedHtml = config.workflows
-    .map((w, i) => ({w, i})).filter(({w}) => !groupedIds.has(w._id))
-    .map(({w, i}) => _wfCard(w, i)).join("");
-  const treeContent = groupsHtml + ungroupedHtml;
+  };
+  const inWfGroups = new Set();
+  wfGroups.forEach(g => (g.workflows || []).forEach(id => inWfGroups.add(id)));
+  let treeContent = "";
+  if (config.wf_top_order && config.wf_top_order.length) {
+    treeContent = config.wf_top_order.map(it => {
+      if (it.t === "g") { const gi = wfGroups.findIndex(g => g._id === it.id); return gi >= 0 ? renderGroup(wfGroups[gi], gi) : ""; }
+      const idx = config.workflows.findIndex(w => w._id === it.id);
+      return idx >= 0 ? _wfCard(config.workflows[idx], idx) : "";
+    }).join("");
+  } else {
+    treeContent = wfGroups.map((g, gi) => renderGroup(g, gi)).join("") +
+      config.workflows.map((w, i) => ({w, i})).filter(({w}) => !inWfGroups.has(w._id)).map(({w, i}) => _wfCard(w, i)).join("");
+  }
   const isEmpty = !wfs.length && !wfGroups.length;
   panel.innerHTML = `
     <div class="wf-layout">

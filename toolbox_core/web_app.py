@@ -275,6 +275,7 @@ def api_get_config():
         "cmp_output_cols": cfg.get("cmp_output_cols", ""),
         "workflows": cfg.get("workflows", []),
         "wf_groups": cfg.get("wf_groups", []),
+        "wf_top_order": cfg.get("wf_top_order", []),
         "tc_path": cfg.get("tc_path", ""),
         "tr_api_key": cfg.get("tr_api_key", ""),
         "_wf_history_paths": cfg.get("_wf_history_paths", []),

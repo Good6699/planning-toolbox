@@ -505,6 +505,11 @@ input::placeholder,textarea::placeholder{
 .wf-parent-header:hover{
   background:rgba(255,255,255,.03);
 }
+/* 操作按钮靠右（指示灯/更新按钮紧跟名称） */
+.wf-parent-acts{margin-left:auto;}
+/* 父工作流右侧操作按钮（改名/复制/删除）：与分组一致，hover 才显示 */
+.wf-parent-acts{display:inline-flex;align-items:center;gap:2px;flex-shrink:0;opacity:0;transition:opacity .12s;}
+.wf-parent-header:hover .wf-parent-acts{opacity:1;}
 /* 分组内的父工作流（header 图标+名称）稍向内缩进，体现其在分组里；未分组工作流不缩进 */
 .wf-group-children .wf-parent-header{padding-left:34px;}
 .wf-arrow{

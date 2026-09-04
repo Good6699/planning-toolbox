@@ -92,18 +92,24 @@ function buildWorkflowTab(panel) {
   _wfEnsureIds();
   const wfs = config.workflows || [];
   const wfGroups = config.wf_groups || [];
+  // 每次打开：分组默认全展开；父工作流默认不展开
+  _wfGroupExpanded = new Set(wfGroups.map((_, gi) => gi));
+  _wfExpandedIdx = -1;
   const typeCn = {export_text:"导出文字表",export_modified_config:"导出修改配置表",merge_table:"合并文字表",merge_translation:"合并翻译",export_error_code:"导出错误码",unlock_svn:"解锁SVN",open_tables:"打开表格",revert_svn:"SVN回退",copy_files:"整合文字表",merge_error_code:"整合错误码",consolidate:"快速整合",merge_specified_text:"指定合并文字表",merge_config:"合并配置",error_code_entry:"录入错误码"};
   const typeIcon = {export_text:"📄",export_modified_config:"📝",merge_table:"🔗",merge_translation:"🌐",export_error_code:"⚠",unlock_svn:"🔓",open_tables:"📂",revert_svn:"↩",copy_files:"📦",merge_error_code:"🧩",consolidate:"⚡",merge_specified_text:"📑",merge_config:"🔧",error_code_entry:"📥"};
   const _wfCard = (wf, idx) => `
             <div class="wf-parent" data-idx="${idx}" data-wid="${wf._id}">
               <div class="wf-parent-header">
                 <span class="wf-arrow">▶</span>
-                <span class="wf-parent-name">${escapeHtml(wf.name)}<span class="wf-edit-icon"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5L10.5 3.5"/><path d="M2 10L3.5 6.5L8.5 1.5L10.5 3.5L5.5 8.5L2 10Z"/></svg></span></span>
+                <span class="wf-parent-name">${escapeHtml(wf.name)}</span>
                 <span class="wf-status-dot" data-idx="${idx}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green,#4caf50);margin:0 4px"></span></span>
                 <button class="wf-update-btn" title="更新SVN工作副本"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7a5 5 0 019.9-1"/><path d="M12 7a5 5 0 01-9.9 1"/><path d="M12 2v4h-4"/><path d="M2 12V8h4"/></svg></button>
-                <button class="wf-copy-btn" title="复制工作流"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M10 4H11V11.5C11 12.328 10.328 13 9.5 13H3.5C2.672 13 2 12.328 2 11.5V5C2 4.172 2.672 3.5 3.5 3.5H4" stroke="currentColor" stroke-width="1.2"/></svg></button>
+                <span class="wf-parent-acts">
+                  <button class="qk-s-btn" data-act="copy-wf" title="复制工作流"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="3.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M10 4H11V11.5C11 12.328 10.328 13 9.5 13H3.5C2.672 13 2 12.328 2 11.5V5C2 4.172 2.672 3.5 3.5 3.5H4" stroke="currentColor" stroke-width="1.2"/></svg></button>
+                  <button class="qk-s-btn" data-act="rename-wf" title="重命名">✎</button>
+                  <button class="qk-s-btn" data-act="del-wf" title="删除工作流">✕</button>
+                </span>
               </div>
-              <button class="wf-del-btn" title="删除工作流">✕</button>
               <div class="wf-children">
                 ${(wf.steps||[]).filter(Boolean).map((s, j) => `
                   <div class="wf-child" data-step="${j}">
@@ -192,7 +198,7 @@ function buildWorkflowTab(panel) {
   parents.forEach((el, i) => {
     const header = el.querySelector(".wf-parent-header");
     header.addEventListener("click", (e) => {
-      if (e.target.closest(".wf-copy-btn,.wf-update-btn")) return;
+      if (e.target.closest(".wf-update-btn,.wf-parent-acts,input")) return;
       if (expandedIdx === i) {
         el.classList.remove("expanded");
         expandedIdx = -1;
@@ -208,7 +214,7 @@ function buildWorkflowTab(panel) {
       }
     });
     // 父级批量执行已移除，请使用每个步骤独立的 ▶ 按钮
-    const copyBtn = el.querySelector(".wf-copy-btn");
+    const copyBtn = el.querySelector("[data-act=copy-wf]");
     copyBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const wfIdx = Number(el.dataset.idx);
@@ -362,7 +368,7 @@ function buildWorkflowTab(panel) {
       });
       document.body.appendChild(menu);
     });
-    const delBtn = el.querySelector(".wf-del-btn");
+    const delBtn = el.querySelector("[data-act=del-wf]");
     delBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
       const wfIdx = Number(el.dataset.idx);
@@ -374,43 +380,44 @@ function buildWorkflowTab(panel) {
       _wfRebuild();
     });
     const nameSpan = el.querySelector(".wf-parent-name");
-    nameSpan.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (nameSpan.querySelector("input")) return;
-      const wfIdx = Number(el.dataset.idx);
-      const currentName = config.workflows[wfIdx]?.name || "";
-      _wfRenaming = true;
-      _wfSetDragDisabled(true);
-      const input = document.createElement("input");
-      input.className = "wf-name-input";
-      input.placeholder = "输入工作流名称";
-      input.value = currentName;
-      nameSpan.textContent = "";
-      nameSpan.appendChild(input);
-      input.focus();
-      input.select();
-      let finished = false;
-      const finish = (save) => {
-        if (finished) return;
-        finished = true;
-        _wfRenaming = false;
-        _wfSetDragDisabled(false);
-        const val = input.value.trim();
-        if (save && !val) _showToast("工作流名称不能为空");
-        if (save && val && config.workflows[wfIdx]) {
-          config.workflows[wfIdx].name = val;
-          saveConfig({workflows:config.workflows});
-        }
-        if (config.workflows[wfIdx]) {
-          nameSpan.innerHTML = `${escapeHtml(config.workflows[wfIdx].name)}<span class="wf-edit-icon"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5L10.5 3.5"/><path d="M2 10L3.5 6.5L8.5 1.5L10.5 3.5L5.5 8.5L2 10Z"/></svg></span>`;
-        }
-      };
-      input.addEventListener("blur", () => finish(true));
-      input.addEventListener("keydown", (ke) => {
-        if (ke.key === "Enter") { ke.preventDefault(); input.blur(); }
-        if (ke.key === "Escape") { ke.preventDefault(); finish(false); }
+    const renameWfBtn = el.querySelector("[data-act=rename-wf]");
+    if (renameWfBtn) {
+      renameWfBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (nameSpan.querySelector("input")) return;
+        const wfIdx = Number(el.dataset.idx);
+        const currentName = config.workflows[wfIdx]?.name || "";
+        _wfRenaming = true;
+        _wfSetDragDisabled(true);
+        const input = document.createElement("input");
+        input.className = "wf-name-input";
+        input.placeholder = "输入工作流名称";
+        input.value = currentName;
+        nameSpan.textContent = "";
+        nameSpan.appendChild(input);
+        input.focus();
+        input.select();
+        let finished = false;
+        const finish = (save) => {
+          if (finished) return;
+          finished = true;
+          _wfRenaming = false;
+          _wfSetDragDisabled(false);
+          const val = input.value.trim();
+          if (save && !val) _showToast("工作流名称不能为空");
+          if (save && val && config.workflows[wfIdx]) {
+            config.workflows[wfIdx].name = val;
+            saveConfig({workflows:config.workflows});
+          }
+          if (config.workflows[wfIdx]) nameSpan.textContent = config.workflows[wfIdx].name;
+        };
+        input.addEventListener("blur", () => finish(true));
+        input.addEventListener("keydown", (ke) => {
+          if (ke.key === "Enter") { ke.preventDefault(); input.blur(); }
+          if (ke.key === "Escape") { ke.preventDefault(); finish(false); }
+        });
       });
-    });
+    }
   });
 
   const overlay = document.getElementById("wf_modal_overlay");

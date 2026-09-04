@@ -16,6 +16,8 @@ const nav = [
 
   {key:"workflow",label:"工作流"},
 
+  {key:"quick",label:"快捷列表"},
+
   {key:"svn",label:"SVN 记录"},
 
   {key:"merge",label:"语义合并"},
@@ -100,6 +102,8 @@ const tabMeta = {
 
   assist:{title:"辅助功能",sub:"一键生成meta等辅助工具"},
 
+  quick:{title:"快捷列表",sub:"文件/文件夹快捷入口 — 拖入即用"},
+
 };
 
 // 切换页签时，SVN 记录 / 语义合并的时间范围自动重置为当天
@@ -172,9 +176,10 @@ function buildTab(key) {
     textcheck: "tab-textcheck.js",
     prefab: "tab-prefab.js",
     assist: "tab-assist.js",
+    quick: "tab-quick.js",
   };
 
-  var tabBuildFn = {svn:"buildSvnTab", merge:"buildMergeTab", workflow:"buildWorkflowTab", translate:"buildTranslateTab", textcheck:"buildTextCheckTab", prefab:"buildPrefabTab", assist:"buildAssistTab"};
+  var tabBuildFn = {svn:"buildSvnTab", merge:"buildMergeTab", workflow:"buildWorkflowTab", translate:"buildTranslateTab", textcheck:"buildTextCheckTab", prefab:"buildPrefabTab", assist:"buildAssistTab", quick:"buildQuickTab"};
   var buildFn = tabBuildFn[key];
   if (typeof window[buildFn] === "function") {
     window[buildFn](panel);

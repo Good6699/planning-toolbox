@@ -91,6 +91,7 @@ DATA_FILES = [
     "tab-textcheck.js",
     "tab-prefab.js",
     "tab-assist.js",
+    "tab-quick.js",
 ]
 
 # ── 更新器辅助脚本 ──

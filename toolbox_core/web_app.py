@@ -859,6 +859,95 @@ def api_prefab_consume_dropped():
     return jsonify({"paths": paths, "count": len(paths)})
 
 
+# ── 快捷列表（quicklist）──
+def _is_svn_copy(path):
+    """条目路径本身（目录）或所在目录（文件）下存在 .svn 即视为 SVN 副本，不向上递归。"""
+    base = path
+    if os.path.isfile(base):
+        base = os.path.dirname(base)
+    return bool(base) and os.path.isdir(os.path.join(base, ".svn"))
+
+
+@app.route("/api/quicklist", methods=["GET"])
+def api_quicklist_get():
+    with config_lock:
+        cfg = load_config()
+        return jsonify({"quicklist": cfg.get("quicklist", [])})
+
+
+@app.route("/api/quicklist", methods=["POST"])
+def api_quicklist_save():
+    data = request.get_json(force=True)
+    quicklist = data.get("quicklist", [])
+    with config_lock:
+        cfg = load_config()
+        cfg["quicklist"] = quicklist
+        save_config(cfg)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/quick/svn-check", methods=["POST"])
+def api_quick_svn_check():
+    data = request.get_json(force=True)
+    paths = data.get("paths", [])
+    return jsonify({"results": [{"path": p, "is_svn": _is_svn_copy(p)} for p in paths]})
+
+
+@app.route("/api/quick/open", methods=["POST"])
+def api_quick_open():
+    data = request.get_json(force=True)
+    path = os.path.normpath(data.get("path", "").strip())
+    if not path:
+        return jsonify({"error": "路径为空"}), 400
+    if os.path.isfile(path):
+        try:
+            os.startfile(path)
+            return jsonify({"ok": True})
+        except Exception as e:
+            # 回退：用 shell start（默认关联），处理个别文件类型被拒绝的情况
+            try:
+                subprocess.Popen(["cmd", "/c", "start", "", path], shell=False)
+                return jsonify({"ok": True})
+            except Exception as e2:
+                return jsonify({"error": str(e)}), 500
+    if os.path.isdir(path):
+        subprocess.Popen(f'explorer "{path}"', shell=True)
+        return jsonify({"ok": True})
+    return jsonify({"error": "路径不存在"}), 400
+
+
+@app.route("/api/quick/update", methods=["POST"])
+def api_quick_update():
+    data = request.get_json(force=True)
+    path = data.get("path", "").strip()
+    tortoise = _get_tortoise_proc_path()
+    if not path or not tortoise:
+        return jsonify({"error": "TortoiseSVN 未安装或路径无效"}), 400
+    # 弹 TortoiseSVN 更新窗口；/closeonend:1 = 更新成功自动关闭，有异常/冲突保留不关
+    subprocess.Popen([tortoise, "/command:update", "/path:" + path, "/closeonend:1"])
+    return jsonify({"ok": True})
+
+
+def _quick_tortoise(path, command):
+    tortoise = _get_tortoise_proc_path()
+    if not tortoise:
+        return jsonify({"error": "TortoiseSVN 未安装"}), 400
+    subprocess.Popen([tortoise, command, "/path:" + path])
+    return jsonify({"ok": True})
+
+
+@app.route("/api/quick/commit", methods=["POST"])
+def api_quick_commit():
+    data = request.get_json(force=True)
+    return _quick_tortoise(data.get("path", "").strip(), "/command:commit")
+
+
+@app.route("/api/quick/log", methods=["POST"])
+def api_quick_log():
+    data = request.get_json(force=True)
+    return _quick_tortoise(data.get("path", "").strip(), "/command:log")
+
+
 def _exec_gen_meta(template, folder, q):
     succeeded = 0
     failed = 0

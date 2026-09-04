@@ -505,9 +505,8 @@ input::placeholder,textarea::placeholder{
 .wf-parent-header:hover{
   background:rgba(255,255,255,.03);
 }
-.wf-parent.expanded .wf-parent-header{
-  border-bottom:1px solid rgba(255,255,255,.06);
-}
+/* 分组内的父工作流（header 图标+名称）稍向内缩进，体现其在分组里；未分组工作流不缩进 */
+.wf-group-children .wf-parent-header{padding-left:34px;}
 .wf-arrow{
   width:18px;
   height:18px;
@@ -612,13 +611,13 @@ input::placeholder,textarea::placeholder{
 .wf-child:hover .wf-settings-btn{opacity:1;}
 /* 工作流分组 */
 .wf-group{background:transparent;border:none;border-radius:0;overflow:hidden;}
-.wf-group-header{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;font-weight:600;color:var(--text);}
+.wf-group-header{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;font-weight:600;color:var(--text);min-height:50px;}
 .wf-group-header:hover{background:rgba(255,255,255,.03);}
 .wf-group-arrow{color:var(--dim);font-size:11px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;}
-.wf-group-name{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.wf-group-name{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:14px;}
 .wf-group-acts{display:inline-flex;align-items:center;gap:2px;flex-shrink:0;opacity:0;transition:opacity .12s;}
 .wf-group-header:hover .wf-group-acts{opacity:1;}
-.wf-group-children{display:flex;flex-direction:column;border-top:1px solid rgba(255,255,255,.04);}
+.wf-group-children{display:flex;flex-direction:column;}
 .wf-group-empty{padding:10px 12px;color:var(--dim);font-size:12px;}
 .wf-create-menu{background:var(--panel2);border:1px solid rgba(255,255,255,.08);border-radius:8px;overflow:hidden;box-shadow:0 8px 28px rgba(0,0,0,.45);z-index:1200;min-width:160px;}
 .wf-create-opt{padding:10px 14px;font-size:12px;color:var(--sub);cursor:pointer;transition:.12s;text-align:center;}
@@ -626,6 +625,7 @@ input::placeholder,textarea::placeholder{
 .wf-create-opt:hover{background:rgba(94,162,255,.12);color:var(--text);}
 .wf-children{
   display:none;
+  margin-left:34px;
   padding:8px 14px 12px;
   gap:6px;
 }

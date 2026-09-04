@@ -212,26 +212,35 @@ function buildWorkflowTab(panel) {
     copyBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const wfIdx = Number(el.dataset.idx);
-      const orig = JSON.parse(JSON.stringify(config.workflows[wfIdx]));
-      orig.name = (orig.name||"工作流") + " (副本)";
-      const steps = orig.steps || [];
+      const orig = config.workflows[wfIdx];
+      if (!orig) return;
+      const inGroup = _wfGroupOf(orig._id);
+      const copy = JSON.parse(JSON.stringify(orig));
+      copy._id = "wf_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+      copy.name = (orig.name||"工作流") + " (副本)";
+      const steps = copy.steps || [];
       const prefixes = _wfDetectPrefixes(steps);
-      if (!prefixes.length) {
-        config.workflows.splice(wfIdx+1, 0, orig);
-        saveConfig({workflows:config.workflows});
+      const doCopy = () => {
+        // 副本归属：原在分组 → 加入同分组；否则复制到未分组（原工作流之后）
+        if (inGroup) {
+          config.workflows.push(copy);
+          inGroup.workflows = inGroup.workflows || [];
+          inGroup.workflows.push(copy._id);
+        } else {
+          config.workflows.splice(wfIdx+1, 0, copy);
+        }
+        saveConfig({workflows:config.workflows, wf_groups:config.wf_groups});
         _wfRebuild();
-        return;
-      }
+      };
+      if (!prefixes.length) { doCopy(); return; }
       _wfShowPrefixModal(prefixes, (map) => {
         if (!map) return;
         if (Object.keys(map).length) {
           Object.entries(map).forEach(([oldP, newP]) => {
-            orig.steps = _wfReplacePrefixes(orig.steps, oldP, newP);
+            copy.steps = _wfReplacePrefixes(copy.steps, oldP, newP);
           });
         }
-        config.workflows.splice(wfIdx+1, 0, orig);
-        saveConfig({workflows:config.workflows});
-        _wfRebuild();
+        doCopy();
       });
     });
     const updateBtn = el.querySelector(".wf-update-btn");

@@ -480,17 +480,18 @@ input::placeholder,textarea::placeholder{
   flex-direction:column;
   gap:6px;
 }
+.wf-tree > * + *{border-top:1px dashed rgba(255,255,255,.14) !important;}
 .wf-parent{
-  background:rgba(255,255,255,.02);
-  border:1px solid rgba(255,255,255,.06);
-  border-radius:10px;
+  background:transparent;
+  border:none;
+  border-radius:0;
   overflow:hidden;
   transition:.2s;
   position:relative;
 }
 .wf-parent.expanded{
-  background:rgba(94,162,255,.04);
-  border-color:rgba(94,162,255,.2);
+  background:transparent;
+  border-color:transparent;
 }
 .wf-parent-header{
   display:flex;
@@ -610,10 +611,10 @@ input::placeholder,textarea::placeholder{
 .wf-child:hover .wf-child-del-btn,
 .wf-child:hover .wf-settings-btn{opacity:1;}
 /* 工作流分组 */
-.wf-group{background:var(--panel);border:1px solid rgba(255,255,255,.05);border-radius:12px;overflow:hidden;}
-.wf-group-header{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text);}
+.wf-group{background:transparent;border:none;border-radius:0;overflow:hidden;}
+.wf-group-header{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;font-weight:600;color:var(--text);}
 .wf-group-header:hover{background:rgba(255,255,255,.03);}
-.wf-group-arrow{color:var(--dim);font-size:11px;width:14px;flex-shrink:0;cursor:pointer;}
+.wf-group-arrow{color:var(--dim);font-size:11px;width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;}
 .wf-group-name{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
 .wf-group-acts{display:inline-flex;align-items:center;gap:2px;flex-shrink:0;opacity:0;transition:opacity .12s;}
 .wf-group-header:hover .wf-group-acts{opacity:1;}

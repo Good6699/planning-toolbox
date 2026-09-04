@@ -27,9 +27,14 @@ function _wfEnsureIds() {
     config.workflows.forEach(w => { if (!inGroup.has(w._id)) to.push({t:"w", id:w._id}); });
     config.wf_top_order = to;
   } else {
+    // 补全：保留现有有效顺序，并补齐缺失的分组/未分组工作流（否则分组会因 top_order 缺项而不渲染）
     const gids = new Set(config.wf_groups.map(g => g._id));
     const wids = new Set(config.workflows.map(w => w._id));
-    config.wf_top_order = config.wf_top_order.filter(it => (it.t === "g" ? gids.has(it.id) : wids.has(it.id)));
+    const to = config.wf_top_order.filter(it => (it.t === "g" ? gids.has(it.id) : wids.has(it.id)));
+    const seen = new Set(to.map(it => it.t + ":" + it.id));
+    config.wf_groups.forEach(g => { if (!seen.has("g:" + g._id)) { to.push({t:"g", id:g._id}); seen.add("g:" + g._id); } });
+    config.workflows.forEach(w => { if (!_wfGroupOf(w._id) && !seen.has("w:" + w._id)) { to.push({t:"w", id:w._id}); seen.add("w:" + w._id); } });
+    config.wf_top_order = to;
   }
 }
 function _wfById(id) { return config.workflows.find(w => w._id === id) || null; }
@@ -59,7 +64,9 @@ function _wfSyncFromDom() {
     const wids = [...gEl.querySelectorAll(".wf-group-children > .wf-parent")].map(p => p.dataset.wid).filter(id => byId[id]);
     ng.push({ name: g.name, workflows: wids });
   });
-  config.wf_groups = ng;
+  // 防误清空：仅当 DOM 确实渲染出分组（或原本就没有分组）时才用 DOM 重建；
+  // 若 DOM 无分组但 config 已有分组（渲染异常），保留原有分组，避免拖拽后把分组清空
+  if (ng.length || !config.wf_groups.length) config.wf_groups = ng;
   document.querySelectorAll("#wf_tree .wf-parent").forEach(p => {
     const idx = config.workflows.findIndex(w => w._id === p.dataset.wid);
     p.dataset.idx = idx;

@@ -185,7 +185,7 @@ function buildTab(key) {
     window[buildFn](panel);
   } else if (tabScripts[key]) {
     var s = document.createElement("script");
-    s.src = "/api/static/" + tabScripts[key];
+    s.src = "/api/static/" + tabScripts[key] + "?v=" + (window.__tabScriptV || (window.__tabScriptV = Date.now()));  // 会话级缓存破坏，避免浏览器缓存旧 tab js
     s.onload = function() {
       if (typeof window[buildFn] === "function") {
         window[buildFn](panel);

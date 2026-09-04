@@ -1208,6 +1208,9 @@ function buildWorkflowTab(panel) {
     ghostClass: "wf-dragging",
     chosenClass: "wf-drag-ghost",
     direction: "vertical",
+    // WebView2 里原生 HTML5 拖放很卡，改用指针/触摸事件（fallback）绕开
+    forceFallback: true,
+    fallbackOnBody: true,
     onMove() { return !_wfRenaming; },  // 修改名称期间禁止拖拽
   };
 

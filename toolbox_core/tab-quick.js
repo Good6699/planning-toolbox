@@ -1,5 +1,6 @@
 let _quickData = [];
 let _quickExpanded = new Set();
+let _quickRenaming = false;
 
 const _QK = {
   update: '<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7a5 5 0 019.9-1"/><path d="M12 7a5 5 0 01-9.9 1"/><path d="M12 2v4h-4"/><path d="M2 12V8h4"/></svg>',
@@ -27,6 +28,11 @@ function buildQuickTab(panel) {
     <div class="quick-layout">
       <div class="quick-list" id="quick_list"></div>
     </div>`;
+  // 改名期间（_quickRenaming）在 document 捕获阶段阻断 dragstart / dragover / drop，
+  // 防止在输入框里选文本或拖动被当作拖拽（元素拖拽由 dragstart 启动，必须一并拦）
+  document.addEventListener("dragstart", e => { if (_quickRenaming) { e.preventDefault(); e.stopPropagation(); } }, true);
+  document.addEventListener("dragover", e => { if (_quickRenaming) { e.preventDefault(); e.stopPropagation(); } }, true);
+  document.addEventListener("drop", e => { if (_quickRenaming) { e.preventDefault(); e.stopPropagation(); } }, true);
   _quickLoad();
 }
 
@@ -90,7 +96,7 @@ function _quickGroup(g, gi, svnMap) {
   return `<div class="quick-group" data-gi="${gi}" draggable="true">
     <div class="quick-group-header" data-gi="${gi}">
       <span class="qk-arrow">${expanded ? "▼" : "▶"}</span>
-      <span class="quick-group-name" title="双击重命名">${escapeHtml(g.name)}</span>
+      <span class="quick-group-name" title="拖拽调整分组顺序">${escapeHtml(g.name)}</span>
       <span class="qk-acts">
         <button class="qk-s-btn" data-act="rename-group" title="重命名分组">✎</button>
         <button class="qk-s-btn" data-act="del-group" title="删除分组">✕</button>
@@ -118,6 +124,7 @@ function _quickBind(list) {
   }));
   list.querySelectorAll(".quick-group-header").forEach(h => h.addEventListener("click", e => {
     if (e.target.closest("[data-act]")) return;
+    if (e.target.closest("input")) return;  // 改名输入框内点击不触发展开收起
     const gi = Number(h.dataset.gi);
     if (!h.nextElementSibling) return;
     const hidden = h.nextElementSibling.style.display === "none";
@@ -154,13 +161,20 @@ function _quickBind(list) {
 function _quickInlineRename(header, gi) {
   const nameEl = header.querySelector(".quick-group-name");
   const old = _quickData[gi].name || "";
+  const card = header.closest(".quick-group");
+  if (card) card.setAttribute("draggable", "false");  // 改名期间禁用卡片拖拽
+  _quickRenaming = true;
   const input = document.createElement("input");
   input.className = "quick-name-input";
+  input.setAttribute("draggable", "false");
+  input.addEventListener("dragstart", e => e.preventDefault());
+  input.addEventListener("mousedown", e => e.stopPropagation());
   input.value = old;
   nameEl.textContent = "";
   nameEl.appendChild(input);
   input.focus(); input.select();
   const finish = (save) => {
+    _quickRenaming = false;
     const v = input.value.trim();
     if (save && v) { _quickData[gi].name = v; _quickSave(); }
     _quickRender();
@@ -173,13 +187,21 @@ function _quickInlineItemNameRename(itemEl, gi, ii) {
   const cur = _quickData[gi].items[ii];
   const nameEl = itemEl.querySelector(".quick-item-name");
   const old = _itemName(cur);
+  itemEl.setAttribute("draggable", "false");  // 改名期间禁用条目拖拽，避免选文本被当作拖拽
+  const card = itemEl.closest(".quick-group");
+  if (card) card.setAttribute("draggable", "false");  // 条目在分组卡片内，同时禁用卡片拖拽
+  _quickRenaming = true;
   const input = document.createElement("input");
   input.className = "quick-name-input";
+  input.setAttribute("draggable", "false");
+  input.addEventListener("dragstart", e => e.preventDefault());
+  input.addEventListener("mousedown", e => e.stopPropagation());
   input.value = old;
   nameEl.textContent = "";
   nameEl.appendChild(input);
   input.focus(); input.select();
   const finish = (save) => {
+    _quickRenaming = false;
     const v = input.value.trim();
     if (save && v) {
       const path = _itemPath(cur);
@@ -269,14 +291,25 @@ function _quickBindDrop(list) {
         list.querySelectorAll(".quick-group").forEach(c => c.classList.remove("drag-over"));
       });
     }
-    card.addEventListener("dragover", e => { e.preventDefault(); card.classList.add("drag-over"); });
+    card.addEventListener("dragover", e => {
+      const hasFiles = e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.indexOf("Files") >= 0;
+      // 条目拖拽只在同分组内响应；拖到其它分组不响应（禁止落下）
+      const sameGroupItem = _itemDrag && _itemDrag.gi === Number(card.dataset.gi);
+      if (_dragGi != null || sameGroupItem || hasFiles) { e.preventDefault(); card.classList.add("drag-over"); }
+    });
     card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
     card.addEventListener("drop", e => {
+      const hasFiles = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0;
+      if (_dragGi == null && _itemDrag == null && !hasFiles) return;  // 文本/空拖不处理，避免弹提示
       e.preventDefault();
       card.classList.remove("drag-over");
       const targetGi = Number(card.dataset.gi);
-      // 条目拖到分组卡片空白 → 移到该分组末尾
-      if (_itemDrag) { _quickReorderItem(_itemDrag, targetGi, (_quickData[targetGi]?.items || []).length); _itemDrag = null; return; }
+      // 条目拖到分组卡片：仅同分组才移动，跨组忽略（不能拖到其它分组）
+      if (_itemDrag) {
+        if (_itemDrag.gi === targetGi) _quickReorderItem(_itemDrag, targetGi, (_quickData[targetGi]?.items || []).length);
+        _itemDrag = null;
+        return;
+      }
       if (_dragGi != null && _dragGi !== targetGi) {
         _quickReorderGroup(_dragGi, targetGi);
         _dragGi = null;

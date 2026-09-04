@@ -1,4 +1,5 @@
 let _quickData = [];
+let _quickExpanded = new Set();
 
 const _QK = {
   update: '<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7a5 5 0 019.9-1"/><path d="M12 7a5 5 0 01-9.9 1"/><path d="M12 2v4h-4"/><path d="M2 12V8h4"/></svg>',
@@ -11,6 +12,14 @@ const _QK = {
 function _quickBase(p) {
   const i = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
   return i >= 0 ? p.substring(i + 1) : p;
+}
+
+// 条目 item 可为 string（路径）或 {p, n}（路径 + 自定义显示名）
+function _itemPath(it) { return typeof it === "string" ? it : (it && it.p ? it.p : ""); }
+function _itemName(it) {
+  if (typeof it === "string") return _quickBase(it);
+  if (it && it.n) return it.n;
+  return _quickBase(_itemPath(it));
 }
 
 function buildQuickTab(panel) {
@@ -45,7 +54,7 @@ function _quickRender() {
   };
   if (!_quickData.length) { list.innerHTML = addItem; _quickBind(list); return; }
   const paths = [];
-  _quickData.forEach(g => (g.items || []).forEach(p => { if (p) paths.push(p); }));
+  _quickData.forEach(g => (g.items || []).forEach(it => { const p = _itemPath(it); if (p) paths.push(p); }));
   if (paths.length) {
     fetch("/api/quick/svn-check", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({paths})})
       .then(r => r.json()).then(d => {
@@ -60,31 +69,34 @@ function _quickRender() {
 
 function _quickGroup(g, gi, svnMap) {
   const items = (g.items || []).map((p, ii) => {
-    const isSvn = !!svnMap[p];
+    const path = _itemPath(p);
+    const isSvn = !!svnMap[path];
     const svnBtns = isSvn
       ? `<button class="qk-s-btn" data-act="update" title="更新SVN">${_QK.update}</button>
          <button class="qk-s-btn" data-act="commit" title="提交SVN">${_QK.commit}</button>
          <button class="qk-s-btn" data-act="log" title="查看日志">${_QK.log}</button>`
       : "";
-    return `<div class="quick-item" data-gi="${gi}" data-ii="${ii}" title="${escapeHtml(p)}">
+    return `<div class="quick-item" data-gi="${gi}" data-ii="${ii}" draggable="true" title="${escapeHtml(path)}">
       <span class="qk-ico">${isSvn ? _QK.folder : _QK.file}</span>
-      <span class="quick-item-name">${escapeHtml(_quickBase(p))}</span>
+      <span class="quick-item-name">${escapeHtml(_itemName(p))}</span>
       <span class="qk-acts">
         ${svnBtns}
+        <button class="qk-s-btn" data-act="rename-item-name" title="修改名称">✎</button>
         <button class="qk-s-btn" data-act="del-item" title="移除">✕</button>
       </span>
     </div>`;
   }).join("");
+  const expanded = _quickExpanded.has(gi);
   return `<div class="quick-group" data-gi="${gi}" draggable="true">
     <div class="quick-group-header" data-gi="${gi}">
-      <span class="qk-arrow">▼</span>
+      <span class="qk-arrow">${expanded ? "▼" : "▶"}</span>
       <span class="quick-group-name" title="双击重命名">${escapeHtml(g.name)}</span>
       <span class="qk-acts">
         <button class="qk-s-btn" data-act="rename-group" title="重命名分组">✎</button>
         <button class="qk-s-btn" data-act="del-group" title="删除分组">✕</button>
       </span>
     </div>
-    <div class="quick-items" data-gi="${gi}">${items || '<div class="quick-empty">拖入文件或文件夹</div>'}</div>
+    <div class="quick-items" data-gi="${gi}" ${expanded ? "" : 'style="display:none"'}>${items || '<div class="quick-empty">拖入文件或文件夹</div>'}</div>
   </div>`;
 }
 
@@ -107,16 +119,16 @@ function _quickBind(list) {
   list.querySelectorAll(".quick-group-header").forEach(h => h.addEventListener("click", e => {
     if (e.target.closest("[data-act]")) return;
     const gi = Number(h.dataset.gi);
-    const items = h.nextElementSibling;
-    if (!items) return;
-    const hidden = items.style.display === "none";
-    items.style.display = hidden ? "" : "none";
-    h.querySelector(".qk-arrow").textContent = hidden ? "▼" : "▶";
+    if (!h.nextElementSibling) return;
+    const hidden = h.nextElementSibling.style.display === "none";
+    if (hidden) { _quickExpanded.clear(); _quickExpanded.add(gi); }  // 手风琴：同时只展开一个
+    else { _quickExpanded.delete(gi); }
+    _quickRender();
   }));
   // 条目双击打开
   list.querySelectorAll(".quick-item").forEach(item => item.addEventListener("dblclick", () => {
     const {gi, ii} = item.dataset;
-    const p = _quickData[Number(gi)]?.items?.[Number(ii)];
+    const p = _itemPath(_quickData[Number(gi)]?.items?.[Number(ii)]);
     if (p) fetch("/api/quick/open", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({path:p})}).catch(()=>{});
   }));
   // 条目管理 + svn 按钮
@@ -125,14 +137,15 @@ function _quickBind(list) {
     const item = btn.closest(".quick-item");
     const {gi, ii} = item.dataset;
     const g = _quickData[Number(gi)];
-    const p = g?.items?.[Number(ii)];
+    const itemRaw = g?.items?.[Number(ii)];
+    const p = _itemPath(itemRaw);
     if (!p) return;
     const act = btn.dataset.act;
     if (act === "update") { fetch("/api/quick/update", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({path:p})}).then(r=>r.json()).then(d=>_showToast(d.ok?("SVN 更新完成"):("更新失败: "+(d.msg||d.error||"")))).catch(()=>_showToast("更新请求失败")); }
     else if (act === "commit") fetch("/api/quick/commit", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({path:p})}).catch(()=>{});
     else if (act === "log") fetch("/api/quick/log", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({path:p})}).catch(()=>{});
-    else if (act === "del-item") { showConfirm({title:"移除条目", message:`从分组移除「${_quickBase(p)}」？`, confirmText:"移除", danger:true}).then(ok => { if (ok) { g.items.splice(Number(ii),1); _quickSave(); _quickRender(); } }); }
-    else if (act === "rename-item") { _quickInlinePathRename(item, Number(gi), Number(ii)); }
+    else if (act === "del-item") { showConfirm({title:"移除条目", message:`从分组移除「${_itemName(itemRaw)}」？`, confirmText:"移除", danger:true}).then(ok => { if (ok) { g.items.splice(Number(ii),1); _quickSave(); _quickRender(); } }); }
+    else if (act === "rename-item-name") { _quickInlineItemNameRename(item, Number(gi), Number(ii)); }
   }));
   // 拖放：分组区域接收文件/文件夹
   _quickBindDrop(list);
@@ -156,10 +169,28 @@ function _quickInlineRename(header, gi) {
   input.addEventListener("keydown", ke => { if (ke.key === "Enter") { ke.preventDefault(); input.blur(); } else if (ke.key === "Escape") input.blur(); });
 }
 
-function _quickInlinePathRename(item, gi, ii) {
-  const old = _quickData[gi].items[ii] || "";
-  const v = prompt("输入新的文件/文件夹路径：", old);
-  if (v && v.trim()) { _quickData[gi].items[ii] = v.trim(); _quickSave(); _quickRender(); }
+function _quickInlineItemNameRename(itemEl, gi, ii) {
+  const cur = _quickData[gi].items[ii];
+  const nameEl = itemEl.querySelector(".quick-item-name");
+  const old = _itemName(cur);
+  const input = document.createElement("input");
+  input.className = "quick-name-input";
+  input.value = old;
+  nameEl.textContent = "";
+  nameEl.appendChild(input);
+  input.focus(); input.select();
+  const finish = (save) => {
+    const v = input.value.trim();
+    if (save && v) {
+      const path = _itemPath(cur);
+      if (typeof cur === "string") { _quickData[gi].items[ii] = {p:path, n:v}; }
+      else if (cur) { cur.n = v; }
+      _quickSave();
+    }
+    _quickRender();
+  };
+  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("keydown", ke => { if (ke.key === "Enter") { ke.preventDefault(); input.blur(); } else if (ke.key === "Escape") input.blur(); });
 }
 
 function _quickAddGroup(list) {
@@ -185,17 +216,48 @@ function _quickAddGroup(list) {
 }
 
 function _quickReorderGroup(fromGi, toGi) {
+  if (fromGi === toGi) return;
   const moved = _quickData.splice(fromGi, 1)[0];
   if (!moved) return;
-  let insertIdx = toGi;
-  if (fromGi < toGi) insertIdx = toGi - 1;
-  _quickData.splice(insertIdx, 0, moved);
+  // 落到目标卡片位置（不补偿）：从左往右 / 从右往左都能正常移动
+  _quickData.splice(Math.min(toGi, _quickData.length), 0, moved);
+  _quickSave();
+  _quickRender();
+}
+
+function _quickReorderItem(from, toGi, toIi) {
+  const {gi, ii} = from;
+  if (gi !== toGi) return; // 条目排序限同分组内
+  const g = _quickData[gi];
+  if (!g || ii === toIi) return;
+  const it = g.items.splice(ii, 1)[0];
+  g.items.splice(Math.min(toIi, g.items.length), 0, it);
   _quickSave();
   _quickRender();
 }
 
 function _quickBindDrop(list) {
   let _dragGi = null;
+  let _itemDrag = null;
+  // 条目拖拽排序（组内）
+  list.querySelectorAll(".quick-item").forEach(item => {
+    item.addEventListener("dragstart", e => {
+      _itemDrag = {gi:Number(item.dataset.gi), ii:Number(item.dataset.ii)};
+      e.dataTransfer.effectAllowed = "move";
+      e.stopPropagation(); // 防止同时触发分组卡片的 dragstart
+    });
+    item.addEventListener("dragend", () => { _itemDrag = null; list.querySelectorAll(".quick-item").forEach(i => i.classList.remove("drag-over")); });
+    item.addEventListener("dragover", e => { if (_itemDrag) { e.preventDefault(); item.classList.add("drag-over"); } });
+    item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
+    item.addEventListener("drop", e => {
+      if (_itemDrag) {
+        e.preventDefault(); e.stopPropagation();
+        item.classList.remove("drag-over");
+        _quickReorderItem(_itemDrag, Number(item.dataset.gi), Number(item.dataset.ii));
+        _itemDrag = null;
+      }
+    });
+  });
   list.querySelectorAll(".quick-group").forEach(card => {
     if (card.getAttribute("draggable") === "true") {
       card.addEventListener("dragstart", e => {
@@ -213,6 +275,8 @@ function _quickBindDrop(list) {
       e.preventDefault();
       card.classList.remove("drag-over");
       const targetGi = Number(card.dataset.gi);
+      // 条目拖到分组卡片空白 → 移到该分组末尾
+      if (_itemDrag) { _quickReorderItem(_itemDrag, targetGi, (_quickData[targetGi]?.items || []).length); _itemDrag = null; return; }
       if (_dragGi != null && _dragGi !== targetGi) {
         _quickReorderGroup(_dragGi, targetGi);
         _dragGi = null;
@@ -223,6 +287,7 @@ function _quickBindDrop(list) {
         if (!paths || !paths.length) { _showToast("拖拽路径获取失败"); return; }
         _quickData[targetGi].items = _quickData[targetGi].items || [];
         paths.forEach(p => { if (p && !_quickData[targetGi].items.includes(p)) _quickData[targetGi].items.push(p); });
+        _quickExpanded.clear(); _quickExpanded.add(targetGi);  // 拖入后自动展开该分组
         _quickSave();
         _quickRender();
       };

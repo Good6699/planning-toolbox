@@ -899,20 +899,14 @@ def api_quick_open():
     path = os.path.normpath(data.get("path", "").strip())
     if not path:
         return jsonify({"error": "路径为空"}), 400
-    if os.path.isfile(path):
+    if os.path.isfile(path) or os.path.isdir(path):
         try:
-            os.startfile(path)
+            # 用 explorer 打开（等同手动双击）：bat 显示 CMD 运行、exe 运行 GUI、文件夹开资源管理器窗口。
+            # 由 explorer 拉起、不挂到工具进程树，杀旧实例时不会连带（避免 bat 闪退）。
+            subprocess.Popen(["explorer.exe", path], shell=False)
             return jsonify({"ok": True})
         except Exception as e:
-            # 回退：用 shell start（默认关联），处理个别文件类型被拒绝的情况
-            try:
-                subprocess.Popen(["cmd", "/c", "start", "", path], shell=False)
-                return jsonify({"ok": True})
-            except Exception as e2:
-                return jsonify({"error": str(e)}), 500
-    if os.path.isdir(path):
-        subprocess.Popen(f'explorer "{path}"', shell=True)
-        return jsonify({"ok": True})
+            return jsonify({"error": str(e)}), 500
     return jsonify({"error": "路径不存在"}), 400
 
 

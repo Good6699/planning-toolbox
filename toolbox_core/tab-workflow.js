@@ -2,6 +2,7 @@
 // 真正的「正在更新」由后端锁检测兜底
 let _wfUpdateBusy = new Set();
 let _wfSvnPollTimer = null;
+let _wfRenaming = false;
 
 function buildWorkflowTab(panel) {
   const wfs = config.workflows || [];
@@ -256,6 +257,8 @@ function buildWorkflowTab(panel) {
       if (nameSpan.querySelector("input")) return;
       const wfIdx = Number(el.dataset.idx);
       const currentName = config.workflows[wfIdx]?.name || "";
+      _wfRenaming = true;
+      _wfSetDragDisabled(true);
       const input = document.createElement("input");
       input.className = "wf-name-input";
       input.placeholder = "输入工作流名称";
@@ -268,6 +271,8 @@ function buildWorkflowTab(panel) {
       const finish = (save) => {
         if (finished) return;
         finished = true;
+        _wfRenaming = false;
+        _wfSetDragDisabled(false);
         const val = input.value.trim();
         if (save && !val) _showToast("工作流名称不能为空");
         if (save && val && config.workflows[wfIdx]) {
@@ -860,6 +865,8 @@ function buildWorkflowTab(panel) {
       const step = config.workflows[wfIdx]?.steps?.[stepIdx];
       if (!step) return;
       const currentName = step.name || "";
+      _wfRenaming = true;
+      _wfSetDragDisabled(true);
       const input = document.createElement("input");
       input.className = "wf-name-input";
       input.placeholder = "输入步骤名称";
@@ -872,6 +879,8 @@ function buildWorkflowTab(panel) {
       const finish = (save) => {
         if (finished) return;
         finished = true;
+        _wfRenaming = false;
+        _wfSetDragDisabled(false);
         const val = input.value.trim();
         if (save && !val) _showToast("步骤名称不能为空");
         if (save && val && config.workflows[wfIdx]?.steps?.[stepIdx]) {
@@ -1058,14 +1067,19 @@ function buildWorkflowTab(panel) {
     });
   });
 
+  const _wfSetDragDisabled = (v) => {
+    (_wfSortables || []).forEach(s => { try { s.option("disabled", v); } catch(e){} });
+  };
+
   const sortableOptions = {
     animation: 150,
-    delay: 300,
+    delay: 0,
     delayOnTouchOnly: false,
     touchStartThreshold: 5,
     ghostClass: "wf-dragging",
     chosenClass: "wf-drag-ghost",
     direction: "vertical",
+    onMove() { return !_wfRenaming; },  // 修改名称期间禁止拖拽
   };
 
   _wfSortables = [];

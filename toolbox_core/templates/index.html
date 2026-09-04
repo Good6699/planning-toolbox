@@ -595,6 +595,20 @@ input::placeholder,textarea::placeholder{
   z-index:2;
 }
 .wf-del-btn:hover{background:rgba(244,71,71,.15);color:var(--danger);}
+/* 父工作流：复制/删除按钮 鼠标移到父工作流上才显示 */
+.wf-parent .wf-copy-btn,
+.wf-parent .wf-del-btn{opacity:0;transition:opacity .12s;}
+.wf-parent:hover .wf-copy-btn,
+.wf-parent:hover .wf-del-btn{opacity:1;}
+/* 子工作流：打开/运行/删除/设置按钮 鼠标移到子工作流上才显示 */
+.wf-child .wf-step-open-btn,
+.wf-child .wf-step-play-btn,
+.wf-child .wf-child-del-btn,
+.wf-child .wf-settings-btn{opacity:0;transition:opacity .12s;}
+.wf-child:hover .wf-step-open-btn,
+.wf-child:hover .wf-step-play-btn,
+.wf-child:hover .wf-child-del-btn,
+.wf-child:hover .wf-settings-btn{opacity:1;}
 .wf-children{
   display:none;
   padding:8px 14px 12px;
